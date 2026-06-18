@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
+
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -9,6 +11,8 @@ use Illuminate\Support\Facades\Storage;
 
 class TrackingScreenshot extends Model
 {
+    use BelongsToOrganization;
+
     use HasFactory, SoftDeletes;
 
     protected $fillable = [

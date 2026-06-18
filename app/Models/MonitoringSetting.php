@@ -2,11 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
+use App\Tenancy\CurrentOrganization;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 
 class MonitoringSetting extends Model
 {
+    use BelongsToOrganization;
+
     protected $fillable = [
         'ai_suggested_questions',
         'screenshots_per_hour',
@@ -82,11 +86,15 @@ class MonitoringSetting extends Model
 
     public static function current(): self
     {
-        // Memoized per request: weekStartDay()/weekEndDay() are called inside
-        // loops all over the dashboard/report code, and each current() call
-        // was a separate firstOrCreate query.
-        return once(fn () => static::firstOrCreate(
-            ['id' => 1],
+        // One settings row per organization. Cached per org for the lifetime
+        // of the process/request: weekStartDay()/weekEndDay() are called inside
+        // loops all over the dashboard/report code, and each current() call was
+        // otherwise a separate firstOrCreate query.
+        $orgId = app(CurrentOrganization::class)->id();
+        static $cache = [];
+
+        return $cache[$orgId ?? 0] ??= static::firstOrCreate(
+            ['organization_id' => $orgId],
             [
                 'screenshots_per_hour' => 6,
                 'screenshot_interval_min_seconds' => 300,
@@ -113,7 +121,7 @@ class MonitoringSetting extends Model
                 'slack_clockout_enabled' => false,
                 'slack_attendance_channel' => null,
             ]
-        ));
+        );
     }
 
     /**

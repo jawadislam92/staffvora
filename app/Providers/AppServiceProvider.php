@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\User;
+use App\Tenancy\CurrentOrganization;
+use Illuminate\Auth\Events\Authenticated;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -11,7 +15,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // One tenant context shared across the request/command.
+        $this->app->singleton(CurrentOrganization::class);
     }
 
     /**
@@ -19,6 +24,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Bind the active tenant whenever a user is authenticated — guard
+        // agnostic, so it covers web sessions, Sanctum API tokens, and
+        // actingAs() in tests without depending on middleware ordering.
+        Event::listen(Authenticated::class, function (Authenticated $event) {
+            if ($event->user instanceof User && $event->user->organization_id) {
+                app(CurrentOrganization::class)->set($event->user->organization_id);
+            }
+        });
+
         // Ensure avatars directory exists
         $avatarsPath = storage_path('app/public/avatars');
         if (! file_exists($avatarsPath)) {

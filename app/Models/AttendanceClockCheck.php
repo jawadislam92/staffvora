@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
+
 use Illuminate\Database\Eloquent\Model;
 
 class AttendanceClockCheck extends Model
 {
+    use BelongsToOrganization;
+
     protected $fillable = [
         'user_id',
         'clock_in_id',

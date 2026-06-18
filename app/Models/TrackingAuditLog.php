@@ -2,11 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
+
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TrackingAuditLog extends Model
 {
+    use BelongsToOrganization;
+
     protected $fillable = [
         'tracking_session_id',
         'tracking_screenshot_id',
