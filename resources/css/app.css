@@ -1,0 +1,284 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom animations for the modern login page */
+@layer utilities {
+    .animate-float {
+        animation: float 6s ease-in-out infinite;
+    }
+    
+    .animate-float-delayed {
+        animation: float 6s ease-in-out infinite 2s;
+    }
+    
+    .glass-effect {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .gradient-text {
+        background: linear-gradient(135deg, #282a2a, #404343);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+}
+
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0px) rotate(0deg);
+    }
+    50% {
+        transform: translateY(-20px) rotate(5deg);
+    }
+}
+
+/* Smooth transitions for form elements */
+.form-input {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.form-input:focus {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 25px rgba(40, 42, 42, 0.15);
+}
+
+/* Custom checkbox styling */
+.custom-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #d1d5db;
+    border-radius: 4px;
+    background-color: white;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    position: relative;
+}
+
+.custom-checkbox:checked {
+    background-color: #282a2a;
+    border-color: #282a2a;
+}
+
+.custom-checkbox:checked::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 6px;
+    width: 6px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+/* Enhanced button hover effects */
+.btn-primary {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-primary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+}
+
+.btn-primary:hover::before {
+    left: 100%;
+}
+
+/* React DatePicker Dark Theme Styling */
+.react-datepicker-wrapper {
+    z-index: 10000 !important;
+    position: relative !important;
+}
+
+.react-datepicker-popper {
+    z-index: 10000 !important;
+    position: fixed !important;
+}
+
+.react-datepicker {
+    background-color: rgba(30, 41, 59, 0.95) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 12px !important;
+    backdrop-filter: blur(20px) !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+    font-family: inherit !important;
+    z-index: 10000 !important;
+}
+
+.react-datepicker__header {
+    background-color: rgba(59, 130, 246, 0.8) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 12px 12px 0 0 !important;
+    padding: 12px !important;
+}
+
+.react-datepicker__current-month,
+.react-datepicker__day-name {
+    color: white !important;
+    font-weight: 600 !important;
+}
+
+.react-datepicker__day-name {
+    color: rgba(255, 255, 255, 0.8) !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+}
+
+.react-datepicker__day {
+    color: white !important;
+    border-radius: 8px !important;
+    margin: 2px !important;
+    transition: all 0.2s ease !important;
+}
+
+.react-datepicker__day:hover {
+    background-color: rgba(59, 130, 246, 0.5) !important;
+    color: white !important;
+    transform: scale(1.05) !important;
+}
+
+.react-datepicker__day--selected {
+    background-color: rgba(59, 130, 246, 0.8) !important;
+    color: white !important;
+    font-weight: 600 !important;
+}
+
+.react-datepicker__day--keyboard-selected {
+    background-color: rgba(59, 130, 246, 0.6) !important;
+    color: white !important;
+}
+
+.react-datepicker__day--outside-month {
+    color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.react-datepicker__day--disabled {
+    color: rgba(255, 255, 255, 0.3) !important;
+    cursor: not-allowed !important;
+}
+
+.react-datepicker__navigation {
+    border: none !important;
+    border-radius: 6px !important;
+    transition: all 0.2s ease !important;
+}
+
+.react-datepicker__navigation:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.react-datepicker__navigation-icon::before {
+    border-color: white !important;
+}
+
+.react-datepicker__month-container {
+    background-color: transparent !important;
+}
+
+.react-datepicker__month {
+    margin: 8px !important;
+}
+
+.react-datepicker__triangle {
+    display: none !important;
+}
+
+.react-datepicker__day--today {
+    background-color: rgba(34, 197, 94, 0.3) !important;
+    color: white !important;
+    font-weight: 600 !important;
+    border: 1px solid rgba(34, 197, 94, 0.5) !important;
+}
+
+.react-datepicker__day--in-range {
+    background-color: rgba(59, 130, 246, 0.3) !important;
+    color: white !important;
+}
+
+.react-datepicker__day--range-start,
+.react-datepicker__day--range-end {
+    background-color: rgba(59, 130, 246, 0.8) !important;
+    color: white !important;
+    font-weight: 600 !important;
+}
+
+/* Custom scrollbar for datepicker if needed */
+.react-datepicker__month-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.react-datepicker__month-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+.react-datepicker__month-container::-webkit-scrollbar-thumb {
+    background: rgba(59, 130, 246, 0.6);
+    border-radius: 3px;
+}
+
+.react-datepicker__month-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(59, 130, 246, 0.8);
+}
+
+/* Custom Scrollbar for Sidebar Navigation - Modern & Minimal */
+@layer utilities {
+    /* Webkit browsers (Chrome, Safari, Edge) */
+    .scrollbar-custom::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .scrollbar-custom::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.3);
+        border-radius: 10px;
+        margin: 4px 0;
+    }
+    
+    .scrollbar-custom::-webkit-scrollbar-thumb {
+        background: rgba(100, 116, 139, 0.4);
+        border-radius: 10px;
+        transition: all 0.3s ease;
+    }
+    
+    .scrollbar-custom::-webkit-scrollbar-thumb:hover {
+        background: rgba(100, 116, 139, 0.7);
+    }
+    
+    /* Firefox */
+    .scrollbar-custom {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(100, 116, 139, 0.4) rgba(15, 23, 42, 0.3);
+    }
+    
+    /* Smooth scrolling behavior */
+    .scroll-smooth-custom {
+        scroll-behavior: smooth;
+    }
+    
+    /* Optional: Hide scrollbar until hover */
+    .scrollbar-hide-until-hover::-webkit-scrollbar-thumb {
+        background: transparent;
+    }
+    
+    .scrollbar-hide-until-hover:hover::-webkit-scrollbar-thumb {
+        background: rgba(100, 116, 139, 0.4);
+    }
+    
+    .scrollbar-hide-until-hover:hover::-webkit-scrollbar-thumb:hover {
+        background: rgba(100, 116, 139, 0.7);
+    }
+}
