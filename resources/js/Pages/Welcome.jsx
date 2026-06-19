@@ -79,7 +79,7 @@ function AppPreview() {
                     <span className="h-3 w-3 rounded-full bg-rose-400/80" />
                     <span className="h-3 w-3 rounded-full bg-yellow-400/80" />
                     <span className="h-3 w-3 rounded-full bg-emerald-400/80" />
-                    <span className="ml-3 text-xs text-gray-500">timetracker.sparkingasia.com/dashboard</span>
+                    <span className="ml-3 text-xs text-gray-500">app.tracksuite.io/dashboard</span>
                 </div>
                 <div className="grid gap-4 p-6 sm:grid-cols-3">
                     {[
@@ -120,7 +120,7 @@ export default function Welcome({ auth }) {
 
     return (
         <>
-            <Head title="Sparking Asia TimeTracker" />
+            <Head title="Tracksuite — Time tracking for teams" />
 
             <div className="min-h-screen text-gray-100" style={{ background: "linear-gradient(135deg, #282a2a 0%, #1f2020 50%, #161717 100%)" }}>
                 {/* Nav */}
@@ -131,13 +131,13 @@ export default function Welcome({ auth }) {
                                 <img
                                     src={logoSrc}
                                     className="h-9 w-9 object-contain"
-                                    alt="Sparking Asia Logo"
+                                    alt="Tracksuite"
                                     onError={(e) => { e.target.src = BUNDLED_LOGO; }}
                                 />
                             </div>
                             <div className="leading-tight">
-                                <span className="block font-bold">Sparking Asia</span>
-                                <span className="block text-xs text-gray-400">TimeTracker</span>
+                                <span className="block font-bold">Tracksuite</span>
+                                <span className="block text-xs text-gray-400">Time tracking</span>
                             </div>
                         </div>
                         <Link
@@ -160,7 +160,7 @@ export default function Welcome({ auth }) {
                     <section className="pb-16 pt-20 text-center">
                         <span className="inline-flex items-center gap-2 rounded-full border border-orange-400/30 bg-orange-400/10 px-4 py-1.5 text-sm font-medium text-orange-300">
                             <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-                            Built for the Sparking Asia team
+                            Time tracking that respects your team
                         </span>
                         <h1 className="mx-auto mt-6 max-w-3xl text-4xl font-extrabold leading-tight sm:text-6xl">
                             Every hour, tracked.
@@ -232,7 +232,7 @@ export default function Welcome({ auth }) {
                                 alt=""
                                 onError={(e) => { e.target.src = BUNDLED_LOGO; }}
                             />
-                            <span>© 2026 Sparking Asia. Crafted with ❤️ for productivity.</span>
+                            <span>© 2026 Tracksuite. Crafted with ❤️ for productive teams.</span>
                         </div>
                     </footer>
                 </main>

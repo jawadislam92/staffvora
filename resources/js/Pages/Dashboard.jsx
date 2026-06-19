@@ -204,7 +204,7 @@ export default function Dashboard({ auth }) {
             const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/csv' }));
             const anchor = document.createElement('a');
             anchor.href = url;
-            anchor.download = `sparking-asia-timesheet-${new Date().toISOString().split('T')[0]}.csv`;
+            anchor.download = `timesheet-${new Date().toISOString().split('T')[0]}.csv`;
             document.body.appendChild(anchor);
             anchor.click();
             anchor.remove();

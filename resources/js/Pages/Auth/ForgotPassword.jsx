@@ -79,7 +79,7 @@ export default function ForgotPassword({ status }) {
                                     value={requestForm.data.email}
                                     onChange={(e) => requestForm.setData('email', e.target.value)}
                                     className={inputClasses}
-                                    placeholder="you@sparkingasia.com"
+                                    placeholder="you@company.com"
                                     autoComplete="username"
                                     autoFocus
                                     required

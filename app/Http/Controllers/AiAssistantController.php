@@ -109,7 +109,10 @@ class AiAssistantController extends Controller
     {
         $pack = Cache::remember('ai-assistant-datapack', now()->addMinutes(10), fn () => $this->dataPack());
 
-        return "You are the SA Track analytics assistant for managers at Sparking Asia, a digital agency. "
+        $orgId = app(\App\Tenancy\CurrentOrganization::class)->id();
+        $brand = ($orgId ? \App\Models\Organization::find($orgId)?->brandName() : null) ?: 'this workspace';
+
+        return "You are the analytics assistant for managers at {$brand}. "
             ."Answer questions about the team's tracked work using ONLY the data below (the last 14 days, "
             ."hours from the work diary). If asked about anything outside this window or data, say so plainly. "
             ."Times are written as decimal hours; present them as e.g. '7h 30m'. Dates are Y-m-d in Asia/Karachi. "
