@@ -92,6 +92,7 @@ class Kernel extends HttpKernel
         'precognitive' => HandlePrecognitiveRequests::class,
         'permission' => PermissionMiddleware::class,
         'tenant' => \App\Http\Middleware\SetCurrentOrganization::class,
+        'platform' => \App\Http\Middleware\EnsurePlatformAdmin::class,
         'signed' => ValidateSignature::class,
         'throttle' => ThrottleRequests::class,
         'verified' => EnsureEmailIsVerified::class,

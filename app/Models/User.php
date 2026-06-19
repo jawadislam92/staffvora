@@ -39,6 +39,7 @@ class User extends Authenticatable
         'clockout_reminder_hours',
         'allow_multiple_devices',
         'team_id',
+        'is_platform_admin',
     ];
 
     /**
@@ -78,6 +79,7 @@ class User extends Authenticatable
         'shift_hours' => 'decimal:2',
         'clockout_reminder_hours' => 'decimal:2',
         'allow_multiple_devices' => 'boolean',
+        'is_platform_admin' => 'boolean',
     ];
 
     const ROLES = [
@@ -89,6 +91,12 @@ class User extends Authenticatable
     public function isSuperAdmin(): bool
     {
         return $this->role === 'super_admin';
+    }
+
+    /** The SaaS operator who manages every tenant from the platform console. */
+    public function isPlatformAdmin(): bool
+    {
+        return (bool) $this->is_platform_admin;
     }
 
     public function hasPermission(string $permission): bool

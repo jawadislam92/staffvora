@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, usePage } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import {
     Activity,
     BarChart3,
     Briefcase,
+    Building2,
     CalendarDays,
     ChevronDown,
     Clock,
@@ -130,11 +131,14 @@ export default function Authenticated({ user, header, children }) {
     // System configuration — admins only. The Desktop App download lives in
     // the avatar menu so every employee can reach it.
     const systemItems = useMemo(() => [
+        user?.is_platform_admin && { label: 'Platform', href: route('platform.index'), icon: Building2, active: ['platform.index', 'platform.show'] },
         can('monitoring.settings') && { label: 'Settings', href: route('settings.index'), icon: SettingsIcon, active: ['settings.index'] },
         can('monitoring.settings') && { label: 'Branding', href: route('settings.branding'), icon: Palette, active: ['settings.branding'] },
         user?.is_super_admin && { label: 'Billing', href: route('billing.index'), icon: CreditCard, active: ['billing.index'] },
         user?.is_super_admin && { label: 'Developer', href: route('developer.index'), icon: Wrench, active: ['developer.index'] },
     ].filter(Boolean), [user?.is_super_admin, user?.permissions]);
+
+    const impersonating = usePage().props?.impersonating;
 
     // Apply the workspace accent colour as a CSS variable (white-label).
     const brandAccent = usePage().props?.branding?.accent_color;
@@ -146,6 +150,18 @@ export default function Authenticated({ user, header, children }) {
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-900">
+            {impersonating && (
+                <div className="flex flex-wrap items-center justify-center gap-3 bg-amber-500 px-4 py-2 text-center text-sm font-semibold text-slate-950">
+                    <span>You&apos;re viewing a customer workspace as the platform admin.</span>
+                    <button
+                        type="button"
+                        onClick={() => router.post(route('platform.stop-impersonating'))}
+                        className="rounded-md bg-slate-950/20 px-2.5 py-0.5 hover:bg-slate-950/30"
+                    >
+                        Return to platform
+                    </button>
+                </div>
+            )}
             <nav className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/95 shadow-lg shadow-slate-950/30 backdrop-blur">
                 <div className="w-full px-4 sm:px-6 lg:px-8">
                     <div className="flex h-16 items-center justify-between gap-4">

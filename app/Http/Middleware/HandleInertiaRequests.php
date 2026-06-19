@@ -52,6 +52,7 @@ class HandleInertiaRequests extends Middleware
                 'designation' => $user->designation,
                 'permissions' => $user->effectivePermissions(),
                 'is_super_admin' => $user->isSuperAdmin(),
+                'is_platform_admin' => $user->isPlatformAdmin(),
             ];
 
             try {
@@ -154,6 +155,7 @@ class HandleInertiaRequests extends Middleware
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
             ],
+            'impersonating' => $request->session()->has('impersonator_id'),
         ];
     }
 }

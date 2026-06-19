@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\BrandingController;
+use App\Http\Controllers\PlatformController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DesktopDownloadController;
@@ -233,5 +234,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('monitoring.screenshots.delete');
     });
 });
+
+// Platform (landlord) console — the SaaS operator, across every tenant.
+Route::middleware(['auth', 'verified', 'platform'])->prefix('platform')->group(function () {
+    Route::get('/', [PlatformController::class, 'index'])->name('platform.index');
+    Route::get('/{organization}', [PlatformController::class, 'show'])->name('platform.show');
+    Route::post('/{organization}/suspend', [PlatformController::class, 'suspend'])->name('platform.suspend');
+    Route::post('/{organization}/resume', [PlatformController::class, 'resume'])->name('platform.resume');
+    Route::post('/{organization}/payment', [PlatformController::class, 'recordPayment'])->name('platform.payment');
+    Route::post('/{organization}/impersonate', [PlatformController::class, 'impersonate'])->name('platform.impersonate');
+});
+
+// Return from impersonation — auth only (the impersonated user isn't a platform admin).
+Route::post('/stop-impersonating', [PlatformController::class, 'stopImpersonating'])
+    ->middleware('auth')->name('platform.stop-impersonating');
 
 require __DIR__.'/auth.php';
