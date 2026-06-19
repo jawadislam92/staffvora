@@ -525,6 +525,107 @@ class EmployeeAttendanceTest extends TestCase
         Carbon::setTestNow();
     }
 
+    public function test_admin_can_save_the_attendance_policy_and_member_cannot(): void
+    {
+        $admin = User::factory()->create(['role' => 'super_admin', 'permissions' => []]);
+        $member = User::factory()->create(['role' => 'member', 'permissions' => ['attendance.view']]);
+
+        $this->actingAs($member)
+            ->put(route('settings.attendance.update'), ['attendance_auto_absent' => false])
+            ->assertForbidden();
+
+        $this->actingAs($admin)
+            ->put(route('settings.attendance.update'), [
+                'attendance_tracking_start_date' => '2026-06-01',
+                'attendance_week_off_days' => [0, 6],
+                'attendance_holidays' => ['2026-06-12'],
+                'attendance_auto_absent' => false,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $s = \App\Models\MonitoringSetting::current()->fresh();
+        $this->assertSame('2026-06-01', $s->attendance_tracking_start_date->toDateString());
+        $this->assertSame([0, 6], $s->attendance_week_off_days);
+        $this->assertSame(['2026-06-12'], $s->attendance_holidays);
+        $this->assertFalse($s->attendance_auto_absent);
+    }
+
+    public function test_days_before_tracking_start_are_not_tracked_not_absent(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-15 10:00:00', 'Asia/Karachi'));
+        \App\Models\MonitoringSetting::current()->update(['attendance_tracking_start_date' => '2026-06-10']);
+        \App\Models\MonitoringSetting::forgetSharedCache();
+
+        $admin = User::factory()->create(['role' => 'super_admin']);
+        $employee = User::factory()->create(['name' => 'Fresh Workspace User']);
+
+        $row = collect(
+            $this->actingAs($admin)
+                ->getJson(route('employee-attendance.monthly', ['month' => '2026-06']))
+                ->assertOk()->json('employees')
+        )->firstWhere('user_id', $employee->id);
+
+        // 2026-06-02 is a working day before tracking started → neutral, not Absent.
+        $before = collect($row['days'])->firstWhere('date', '2026-06-02');
+        $this->assertNull($before['status_code']);
+        $this->assertSame('Not tracked', $before['status_label']);
+
+        // 2026-06-11 is a working day after tracking started with no clock-in → Absent.
+        $this->assertSame('A', collect($row['days'])->firstWhere('date', '2026-06-11')['status_code']);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_week_off_days_are_configurable(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-15 10:00:00', 'Asia/Karachi'));
+        \App\Models\MonitoringSetting::current()->update(['attendance_week_off_days' => [Carbon::SATURDAY]]);
+        \App\Models\MonitoringSetting::forgetSharedCache();
+
+        $admin = User::factory()->create(['role' => 'super_admin']);
+        $employee = User::factory()->create(['name' => 'Sat Off User']);
+
+        $row = collect(
+            $this->actingAs($admin)
+                ->getJson(route('employee-attendance.monthly', ['month' => '2026-06']))
+                ->assertOk()->json('employees')
+        )->firstWhere('user_id', $employee->id);
+
+        // 2026-06-06 (Saturday) is now the weekly off.
+        $sat = collect($row['days'])->firstWhere('date', '2026-06-06');
+        $this->assertSame('H', $sat['status_code']);
+        $this->assertSame('Weekly off', $sat['status_label']);
+
+        // 2026-06-07 (Sunday) is now a working day → Absent with no clock-in.
+        $this->assertSame('A', collect($row['days'])->firstWhere('date', '2026-06-07')['status_code']);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_auto_absent_off_yields_a_neutral_no_record(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-06-15 10:00:00', 'Asia/Karachi'));
+        \App\Models\MonitoringSetting::current()->update(['attendance_auto_absent' => false]);
+        \App\Models\MonitoringSetting::forgetSharedCache();
+
+        $admin = User::factory()->create(['role' => 'super_admin']);
+        $employee = User::factory()->create(['name' => 'No Blame User']);
+
+        $row = collect(
+            $this->actingAs($admin)
+                ->getJson(route('employee-attendance.monthly', ['month' => '2026-06']))
+                ->assertOk()->json('employees')
+        )->firstWhere('user_id', $employee->id);
+
+        $day = collect($row['days'])->firstWhere('date', '2026-06-02');
+        $this->assertNull($day['status_code']);
+        $this->assertSame('No record', $day['status_label']);
+        // Nobody is branded Absent when the workspace opts out.
+        $this->assertSame(0, $row['summary']['absent']);
+
+        Carbon::setTestNow();
+    }
+
     public function test_super_admin_can_send_monthly_attendance_to_slack(): void
     {
         config(['services.slack_reports.webhook_url' => 'https://hooks.slack.test/services/example']);

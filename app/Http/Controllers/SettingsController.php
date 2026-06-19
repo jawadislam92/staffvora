@@ -116,6 +116,39 @@ class SettingsController extends Controller
     }
 
     /**
+     * Save the per-org attendance policy (Phase 5F): when tracking started,
+     * which weekdays are off, holiday dates, and whether a missing working day
+     * is auto-marked Absent. Keeps a fresh workspace from branding everyone
+     * Absent for days it wasn't even tracking.
+     */
+    public function updateAttendance(Request $request): RedirectResponse|JsonResponse
+    {
+        $data = $request->validate([
+            'attendance_tracking_start_date' => ['nullable', 'date'],
+            'attendance_week_off_days' => ['nullable', 'array'],
+            'attendance_week_off_days.*' => ['integer', 'between:0,6'],
+            'attendance_holidays' => ['nullable', 'array'],
+            'attendance_holidays.*' => ['date_format:Y-m-d'],
+            'attendance_auto_absent' => ['required', 'boolean'],
+        ]);
+
+        $team = MonitoringSetting::current();
+        $team->update([
+            'attendance_tracking_start_date' => $data['attendance_tracking_start_date'] ?: null,
+            'attendance_week_off_days' => array_values(array_unique(array_map('intval', $data['attendance_week_off_days'] ?? []))),
+            'attendance_holidays' => array_values(array_unique($data['attendance_holidays'] ?? [])),
+            'attendance_auto_absent' => $data['attendance_auto_absent'],
+        ]);
+        MonitoringSetting::forgetSharedCache();
+
+        if ($request->wantsJson()) {
+            return response()->json(['ok' => true]);
+        }
+
+        return back()->with('success', 'Attendance policy updated.');
+    }
+
+    /**
      * Connect or disconnect this organization's own Slack bot token. The token
      * is write-only (never returned to the client); the UI shows only connected
      * status. Sending `disconnect` clears it; a blank token keeps the current one.

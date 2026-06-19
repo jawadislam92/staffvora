@@ -39,6 +39,10 @@ class MonitoringSetting extends Model
         'slack_attendance_channel',
         'slack_bot_token',
         'branding_logo_path',
+        'attendance_tracking_start_date',
+        'attendance_week_off_days',
+        'attendance_holidays',
+        'attendance_auto_absent',
     ];
 
     protected $casts = [
@@ -63,6 +67,10 @@ class MonitoringSetting extends Model
         'slack_clockin_enabled' => 'boolean',
         'slack_clockout_enabled' => 'boolean',
         'slack_bot_token' => 'encrypted',
+        'attendance_tracking_start_date' => 'date',
+        'attendance_week_off_days' => 'array',
+        'attendance_holidays' => 'array',
+        'attendance_auto_absent' => 'boolean',
     ];
 
     /**
@@ -223,6 +231,10 @@ class MonitoringSetting extends Model
             'slack_clockout_enabled' => (bool) $this->slack_clockout_enabled,
             'slack_attendance_channel' => $this->slack_attendance_channel,
             'slack_connected' => filled($this->slack_bot_token),
+            'attendance_tracking_start_date' => $this->attendance_tracking_start_date?->toDateString(),
+            'attendance_week_off_days' => $this->attendance_week_off_days ?? [0],
+            'attendance_holidays' => $this->attendance_holidays ?? [],
+            'attendance_auto_absent' => $this->attendance_auto_absent ?? true,
         ];
     }
 

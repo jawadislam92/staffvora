@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ManualAttendanceAudit;
 use App\Models\ManualAttendanceMark;
+use App\Models\MonitoringSetting;
 use App\Models\TimeEntry;
 use App\Models\User;
 use App\Services\AttendanceSlackReportService;
@@ -83,6 +84,9 @@ class EmployeeAttendanceController extends Controller
             ->get()
             ->keyBy(fn (ManualAttendanceMark $mark) => $mark->user_id.'|'.$mark->attendance_date->toDateString());
 
+        // Per-org attendance policy (humane defaults — see resolveMonthlyStatus).
+        $attConfig = $this->attendancePolicy();
+
         $summaryTemplate = [
             'holidays' => 0,
             'present' => 0,
@@ -99,10 +103,10 @@ class EmployeeAttendanceController extends Controller
         $employees = User::query()
             ->orderBy('name')
             ->get()
-            ->map(function (User $employee) use ($days, $carbonDays, $entriesByUserDate, $manualMarks, $now, $today, $summaryTemplate) {
+            ->map(function (User $employee) use ($days, $carbonDays, $entriesByUserDate, $manualMarks, $now, $today, $summaryTemplate, $attConfig) {
                 $summary = $summaryTemplate;
 
-                $dayCells = $days->map(function (array $day) use ($employee, $carbonDays, $entriesByUserDate, $manualMarks, $now, $today, &$summary) {
+                $dayCells = $days->map(function (array $day) use ($employee, $carbonDays, $entriesByUserDate, $manualMarks, $now, $today, &$summary, $attConfig) {
                     $date = $carbonDays[$day['date']];
                     $key = $employee->id.'|'.$day['date'];
                     $entries = $entriesByUserDate->get($key, collect());
@@ -111,13 +115,14 @@ class EmployeeAttendanceController extends Controller
 
                     $firstClockIn = $entries->where('action_type', 'clock_in')->first();
                     $lastEntry = $entries->last();
-                    $status = $this->resolveMonthlyStatus($employee, $date, $entries, $manualMark, $now, $today, $firstClockIn);
+                    $status = $this->resolveMonthlyStatus($employee, $date, $entries, $manualMark, $now, $today, $firstClockIn, $attConfig);
                     $this->addStatusToSummary($summary, $status['code'], $stats['workHours'] ?? 0);
 
                     return [
                         'date' => $day['date'],
                         'status_code' => $status['code'],
                         'status_label' => $status['label'],
+                        'status_reason' => $status['reason'] ?? null,
                         'source' => $status['source'],
                         'work_hours' => $stats['workHours'] ?? 0,
                         'break_hours' => $stats['breakHours'] ?? 0,
@@ -775,6 +780,26 @@ class EmployeeAttendanceController extends Controller
         return max(0, (int) floor($start->diffInMinutes($end, false)));
     }
 
+    /**
+     * The per-org attendance policy. Humane defaults so a fresh workspace never
+     * brands everyone Absent: Sunday off, auto-Absent on, no tracking-start cap
+     * and no holidays until the owner sets them.
+     *
+     * @return array{tracking_start: ?string, week_off_days: array<int,int>, holidays: array<int,string>, auto_absent: bool}
+     */
+    private function attendancePolicy(): array
+    {
+        $s = MonitoringSetting::current();
+        $weekOff = $s->attendance_week_off_days;
+
+        return [
+            'tracking_start' => $s->attendance_tracking_start_date?->toDateString(),
+            'week_off_days' => is_array($weekOff) && $weekOff !== [] ? array_map('intval', $weekOff) : [Carbon::SUNDAY],
+            'holidays' => is_array($s->attendance_holidays) ? $s->attendance_holidays : [],
+            'auto_absent' => $s->attendance_auto_absent ?? true,
+        ];
+    }
+
     private function resolveMonthlyStatus(
         User $employee,
         Carbon $date,
@@ -782,69 +807,64 @@ class EmployeeAttendanceController extends Controller
         ?ManualAttendanceMark $manualMark,
         Carbon $now,
         Carbon $today,
-        ?TimeEntry $firstClockIn
+        ?TimeEntry $firstClockIn,
+        array $att = []
     ): array {
         if ($manualMark) {
             return [
                 'code' => $manualMark->status_code,
                 'label' => self::ATTENDANCE_STATUSES[$manualMark->status_code] ?? $manualMark->status_code,
                 'source' => 'manual',
+                'reason' => 'Marked manually by an admin.',
             ];
         }
 
         if ($date->isFuture() && ! $date->isSameDay($today)) {
-            return [
-                'code' => null,
-                'label' => 'Not set',
-                'source' => 'future',
-            ];
+            return ['code' => null, 'label' => 'Not set', 'source' => 'future', 'reason' => "Hasn't happened yet."];
+        }
+
+        // Worked that day → present (even on a week-off or holiday).
+        if ($firstClockIn) {
+            if ($this->isLateClockIn($employee, $date, $firstClockIn)) {
+                return ['code' => 'LC', 'label' => self::ATTENDANCE_STATUSES['LC'], 'source' => 'automatic', 'reason' => 'Clocked in after the shift start + grace.'];
+            }
+
+            return ['code' => 'P', 'label' => self::ATTENDANCE_STATUSES['P'], 'source' => 'automatic', 'reason' => 'Clocked in for the day.'];
         }
 
         if ($this->isBeforeJoiningDate($employee, $date)) {
-            return [
-                'code' => 'LI',
-                'label' => self::ATTENDANCE_STATUSES['LI'],
-                'source' => 'automatic',
-            ];
+            return ['code' => 'LI', 'label' => self::ATTENDANCE_STATUSES['LI'], 'source' => 'automatic', 'reason' => 'Before this person joined.'];
         }
 
-        if ($firstClockIn) {
-            if ($this->isLateClockIn($employee, $date, $firstClockIn)) {
-                return [
-                    'code' => 'LC',
-                    'label' => self::ATTENDANCE_STATUSES['LC'],
-                    'source' => 'automatic',
-                ];
-            }
-
-            return [
-                'code' => 'P',
-                'label' => self::ATTENDANCE_STATUSES['P'],
-                'source' => 'automatic',
-            ];
+        // Before the workspace started tracking attendance → neutral, never Absent.
+        $trackingStart = $att['tracking_start'] ?? null;
+        if ($trackingStart && $date->toDateString() < $trackingStart) {
+            return ['code' => null, 'label' => 'Not tracked', 'source' => 'pre-tracking', 'reason' => 'Before this workspace started tracking attendance.'];
         }
 
-        if ($date->isSunday()) {
-            return [
-                'code' => 'H',
-                'label' => self::ATTENDANCE_STATUSES['H'],
-                'source' => 'automatic',
-            ];
+        // Explicit public holiday.
+        if (in_array($date->toDateString(), $att['holidays'] ?? [], true)) {
+            return ['code' => 'PH', 'label' => self::ATTENDANCE_STATUSES['PH'], 'source' => 'automatic', 'reason' => 'Public holiday.'];
+        }
+
+        // Configurable weekly off (defaults to Sunday).
+        $weekOff = $att['week_off_days'] ?? [Carbon::SUNDAY];
+        if (in_array($date->dayOfWeek, $weekOff, true)) {
+            return ['code' => 'H', 'label' => 'Weekly off', 'source' => 'automatic', 'reason' => 'A scheduled weekly off day.'];
         }
 
         if ($date->isSameDay($today) && ! $this->isShiftAbsenceDue($employee, $date, $now)) {
-            return [
-                'code' => null,
-                'label' => 'Shift not started',
-                'source' => 'pending',
-            ];
+            return ['code' => null, 'label' => 'Shift not started', 'source' => 'pending', 'reason' => 'The shift window is still open today.'];
         }
 
-        return [
-            'code' => 'A',
-            'label' => self::ATTENDANCE_STATUSES['A'],
-            'source' => 'automatic',
-        ];
+        // A real working day with no record. Only call it "Absent" when the org
+        // opts in; otherwise it's a neutral "No record" so the system never
+        // bluntly accuses someone.
+        if ($att['auto_absent'] ?? true) {
+            return ['code' => 'A', 'label' => self::ATTENDANCE_STATUSES['A'], 'source' => 'automatic', 'reason' => 'A working day with no clock-in after the shift ended.'];
+        }
+
+        return ['code' => null, 'label' => 'No record', 'source' => 'no-record', 'reason' => 'No clock-in. Auto-Absent is off for this workspace.'];
     }
 
     private function addStatusToSummary(array &$summary, ?string $statusCode, float|int $workHours): void

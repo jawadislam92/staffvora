@@ -207,6 +207,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::prefix('settings')->middleware('permission:monitoring.settings')->group(function () {
         Route::get('/', [SettingsController::class, 'index'])->name('settings.index');
         Route::put('/team', [SettingsController::class, 'updateTeam'])->name('settings.team.update');
+        Route::put('/attendance', [SettingsController::class, 'updateAttendance'])->name('settings.attendance.update');
         Route::put('/users/{user}', [SettingsController::class, 'updateUser'])->name('settings.user.update');
 
         // White-label branding: name + accent (saveBranding) and the logo upload

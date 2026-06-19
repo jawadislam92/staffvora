@@ -7,6 +7,7 @@ import {
     Activity,
     Bell,
     Calendar,
+    CalendarDays,
     Camera,
     Clock,
     DollarSign,
@@ -61,6 +62,7 @@ const CATEGORIES = [
     { key: 'auto_pause', label: 'Auto-pause tracking after', icon: PauseCircle, summary: (t) => `${t.auto_pause_minutes} min` },
     { key: 'offline_time', label: 'Allow adding Offline Time', icon: Clock, summary: (t) => (t.allow_offline_time ? 'Yes' : 'No') },
     { key: 'notify_screenshot', label: 'Notify when screenshot is taken', icon: Bell, summary: (t) => (t.notify_on_screenshot ? 'Yes' : 'No') },
+    { key: 'attendance_policy', label: 'Attendance policy', icon: CalendarDays, summary: (t) => (t.attendance_auto_absent ? 'Auto-absent on' : 'Auto-absent off') },
     { key: 'attendance_slack', label: 'Attendance Slack alerts', icon: MessageSquare, summary: (t) => [t.slack_clockin_enabled && 'in', t.slack_clockout_enabled && 'out'].filter(Boolean).join(' + ') || 'Off' },
     { key: 'week_starts_on', label: 'Week starts on', icon: Calendar, summary: (t) => (t.week_starts_on === 'sunday' ? 'Sun' : 'Mon') },
     { key: 'currency', label: 'Currency symbol', icon: DollarSign, summary: (t) => t.currency_symbol },
@@ -849,6 +851,112 @@ function IndividualSettings({ category, users, flagKey, defaultValues, editor })
     );
 }
 
+const WEEKDAYS = [
+    { n: 0, label: 'Sun' }, { n: 1, label: 'Mon' }, { n: 2, label: 'Tue' },
+    { n: 3, label: 'Wed' }, { n: 4, label: 'Thu' }, { n: 5, label: 'Fri' }, { n: 6, label: 'Sat' },
+];
+
+// Phase 5F — the humane attendance policy. Saves on its own endpoint so the
+// owner can stop the grid from auto-marking people Absent.
+function AttendanceSection({ team, setTeam }) {
+    const [start, setStart] = useState(team.attendance_tracking_start_date || '');
+    const [weekOff, setWeekOff] = useState(team.attendance_week_off_days || [0]);
+    const [autoAbsent, setAutoAbsent] = useState(team.attendance_auto_absent ?? true);
+    const [holidays, setHolidays] = useState(team.attendance_holidays || []);
+    const [newHoliday, setNewHoliday] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    const toggleDay = (n) => setWeekOff((prev) => (prev.includes(n) ? prev.filter((d) => d !== n) : [...prev, n].sort()));
+    const addHoliday = () => {
+        if (newHoliday && !holidays.includes(newHoliday)) {
+            setHolidays([...holidays, newHoliday].sort());
+            setNewHoliday('');
+        }
+    };
+
+    const save = () => {
+        setSaving(true);
+        const payload = {
+            attendance_tracking_start_date: start || null,
+            attendance_week_off_days: weekOff,
+            attendance_holidays: holidays,
+            attendance_auto_absent: autoAbsent,
+        };
+        router.put(route('settings.attendance.update'), payload, {
+            preserveScroll: true,
+            onSuccess: () => { setTeam({ ...team, ...payload }); toast.success('Attendance policy saved.'); },
+            onError: () => toast.error('Could not save the attendance policy.'),
+            onFinish: () => setSaving(false),
+        });
+    };
+
+    return (
+        <SectionShell
+            title="Attendance policy"
+            blurb="Controls how the monthly grid decides Present / Absent — so a new workspace never brands people Absent for days it wasn't even tracking."
+        >
+            <div className="space-y-5 text-sm">
+                <div>
+                    <label className="mb-1 block font-semibold text-slate-900">Tracking start date</label>
+                    <p className="mb-2 text-xs text-slate-500">Days before this show as “Not tracked”, never Absent. Leave blank to track the whole history.</p>
+                    <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="rounded-md border-slate-300 text-sm" />
+                </div>
+
+                <div>
+                    <label className="mb-1 block font-semibold text-slate-900">Weekly off days</label>
+                    <div className="flex flex-wrap gap-1.5">
+                        {WEEKDAYS.map(({ n, label }) => (
+                            <button
+                                key={n}
+                                type="button"
+                                onClick={() => toggleDay(n)}
+                                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${weekOff.includes(n) ? 'bg-orange-500 text-slate-950' : 'border border-slate-300 text-slate-600 hover:bg-slate-100'}`}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div>
+                    <label className="mb-1 block font-semibold text-slate-900">Public holidays</label>
+                    <div className="flex items-center gap-2">
+                        <input type="date" value={newHoliday} onChange={(e) => setNewHoliday(e.target.value)} className="rounded-md border-slate-300 text-sm" />
+                        <button type="button" onClick={addHoliday} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100">Add</button>
+                    </div>
+                    {holidays.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                            {holidays.map((d) => (
+                                <span key={d} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700">
+                                    {d}
+                                    <button type="button" onClick={() => setHolidays(holidays.filter((h) => h !== d))} className="text-slate-400 hover:text-rose-500">×</button>
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <label className="flex items-center gap-3">
+                    <Toggle checked={autoAbsent} onChange={setAutoAbsent} />
+                    <span>
+                        <span className="block font-semibold text-slate-900">Auto-mark Absent</span>
+                        <span className="block text-xs text-slate-500">When off, a working day with no clock-in shows a neutral “No record” instead of Absent.</span>
+                    </span>
+                </label>
+
+                <button
+                    type="button"
+                    onClick={save}
+                    disabled={saving}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-orange-400 disabled:opacity-50"
+                >
+                    {saving ? 'Saving…' : 'Save attendance policy'}
+                </button>
+            </div>
+        </SectionShell>
+    );
+}
+
 export default function SettingsIndex({ auth, team: initialTeam, users: initialUsers }) {
     const [team, setTeam] = useState(initialTeam);
     const [users, setUsers] = useState(initialUsers);
@@ -971,6 +1079,7 @@ export default function SettingsIndex({ auth, team: initialTeam, users: initialU
                                     offLabel="Do not notify"
                                 />
                             )}
+                            {active === 'attendance_policy' && <AttendanceSection team={team} setTeam={setTeam} />}
                             {active === 'attendance_slack' && <AttendanceSlackSection team={team} setTeam={setTeam} />}
                             {active === 'display' && <DisplaySection team={team} users={users} setTeam={setTeam} />}
                             {active === 'week_starts_on' && <WeekStartsSection team={team} setTeam={setTeam} />}
