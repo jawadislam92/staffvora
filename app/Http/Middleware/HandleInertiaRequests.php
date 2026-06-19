@@ -126,7 +126,7 @@ class HandleInertiaRequests extends Middleware
         // The ?v= cache-buster changes with the stored path so a freshly
         // uploaded logo replaces the browser-cached one immediately.
         $orgId = app(CurrentOrganization::class)->id();
-        $branding = ['logo_url' => null, 'name' => null, 'accent_color' => null];
+        $branding = ['logo_url' => null, 'name' => null, 'accent_color' => null, 'default_theme' => 'dark'];
         try {
             $branding = Cache::remember('branding.shared.'.($orgId ?? 0), 300, function () use ($orgId) {
                 $path = MonitoringSetting::current()->branding_logo_path;
@@ -136,11 +136,16 @@ class HandleInertiaRequests extends Middleware
                     'logo_url' => $path ? route('branding.logo').'?v='.substr(md5($path), 0, 8) : null,
                     'name' => $org?->brandName(),
                     'accent_color' => $org?->accent_color,
+                    'default_theme' => $org?->default_theme ?: 'dark',
                 ];
             });
         } catch (\Throwable $e) {
             // Keep rendering with the bundled logo if the table is missing.
         }
+
+        // Resolved theme: per-user override → workspace default → dark.
+        $theme = $user?->theme ?: ($branding['default_theme'] ?? 'dark');
+        $theme = in_array($theme, ['light', 'dark', 'black'], true) ? $theme : 'dark';
 
         return [
             ...parent::share($request),
@@ -151,6 +156,7 @@ class HandleInertiaRequests extends Middleware
             'teamSettings' => $teamSettings,
             'display' => $display,
             'branding' => $branding,
+            'theme' => $theme,
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),

@@ -33,6 +33,7 @@ class Organization extends Model
         'display_name',
         'logo_path',
         'accent_color',
+        'default_theme',
         'parent_org_id',
         'trial_ends_at',
     ];

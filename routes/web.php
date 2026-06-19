@@ -15,6 +15,7 @@ use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SlackReportController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamManagementController;
+use App\Http\Controllers\ThemeController;
 use App\Http\Controllers\TimeEntryController;
 use App\Http\Controllers\TimelineController;
 use App\Http\Controllers\UpworkProfileController;
@@ -76,6 +77,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::put('/preferences/theme', [ThemeController::class, 'update'])->name('theme.update');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {

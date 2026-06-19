@@ -40,6 +40,7 @@ class User extends Authenticatable
         'allow_multiple_devices',
         'team_id',
         'is_platform_admin',
+        'theme',
     ];
 
     /**

@@ -2,6 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===================== Theme tokens (Light / Dark / Black) =====================
+   Switched by a `data-theme` attribute on <html>. Components use the semantic
+   Tailwind utilities backed by these vars (bg-app, bg-surface, text-body,
+   text-muted, border-line, etc.) so the whole UI re-themes from one place.
+   --accent comes from the workspace's brand colour (--brand-accent). */
+:root, [data-theme="dark"] {
+    --bg: #0b1120;
+    --surface: #111827;
+    --surface-2: #1e293b;
+    --border: #1f2a3b;
+    --text: #f1f5f9;
+    --text-muted: #94a3b8;
+    --text-subtle: #64748b;
+    --accent: var(--brand-accent, #f97316);
+}
+[data-theme="light"] {
+    --bg: #f6f8fb;
+    --surface: #ffffff;
+    --surface-2: #f1f5f9;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text-muted: #475569;
+    --text-subtle: #94a3b8;
+    --accent: var(--brand-accent, #f97316);
+}
+[data-theme="black"] {
+    --bg: #000000;
+    --surface: #0a0a0a;
+    --surface-2: #161616;
+    --border: #262626;
+    --text: #fafafa;
+    --text-muted: #a3a3a3;
+    --text-subtle: #6b6b6b;
+    --accent: var(--brand-accent, #f97316);
+}
+html { background-color: var(--bg); color: var(--text); }
+
 /* Custom animations for the modern login page */
 @layer utilities {
     .animate-float {

@@ -1,15 +1,13 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+@php($ttTheme = in_array(request()->cookie('tt_theme'), ['light', 'dark', 'black'], true) ? request()->cookie('tt_theme') : 'dark')
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-theme="{{ $ttTheme }}">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        {{-- Stop Chromium "auto dark mode" from force-inverting the light
-             content panels (it skips dark pages but inverts light ones,
-             producing a mixed look). Revisit when the full dark theme ships. --}}
-        <meta name="color-scheme" content="only light">
+        <meta name="color-scheme" content="light dark">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title inertia>{{ config('app.name', 'Sparking Asia TimeTracker') }}</title>
+        <title inertia>{{ config('app.name', 'Tracksuite') }}</title>
 
         <!-- Favicons -->
         <link rel="icon" type="image/x-icon" href="/favicon.ico">

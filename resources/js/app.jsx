@@ -2,12 +2,26 @@ import './bootstrap';
 import '../css/app.css';
 
 import { createRoot } from 'react-dom/client';
-import { createInertiaApp } from '@inertiajs/react';
+import { createInertiaApp, router } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { Toaster } from 'react-hot-toast';
 import ErrorBoundary from '@/Components/ErrorBoundary';
 
-const appName = import.meta.env.VITE_APP_NAME || 'SA Track';
+const appName = import.meta.env.VITE_APP_NAME || 'Tracksuite';
+
+// Apply the resolved theme + brand accent (shared by HandleInertiaRequests) to
+// <html> on first paint and after every visit, and persist the theme in a
+// cookie so the next server render (app.blade.php) sets it with no flash.
+const applyTheme = (page) => {
+    const t = page?.props?.theme;
+    if (t === 'light' || t === 'dark' || t === 'black') {
+        document.documentElement.dataset.theme = t;
+        document.cookie = `tt_theme=${t};path=/;max-age=31536000;samesite=lax`;
+    }
+    const accent = page?.props?.branding?.accent_color;
+    if (accent) document.documentElement.style.setProperty('--brand-accent', accent);
+};
+router.on('success', (event) => applyTheme(event.detail.page));
 
 // Auto-recover from stale code chunks after a deploy: when a release ships new
 // asset hashes, a browser that still holds the old page references will 404 on
@@ -26,6 +40,7 @@ createInertiaApp({
     resolve: (name) => resolvePageComponent(`./Pages/${name}.tsx`, import.meta.glob('./Pages/**/*.tsx'))
         .catch(() => resolvePageComponent(`./Pages/${name}.jsx`, import.meta.glob('./Pages/**/*.jsx'))),
     setup({ el, App, props }) {
+        applyTheme(props.initialPage);
         const root = createRoot(el);
 
         root.render(
