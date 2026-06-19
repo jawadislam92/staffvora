@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
@@ -12,11 +12,39 @@ import {
     DollarSign,
     Globe,
     Laptop,
+    Lock,
     MessageSquare,
     PauseCircle,
     Timer,
     Clock3,
 } from 'lucide-react';
+
+// Which settings sections are gated behind a plan feature flag. A section whose
+// flag is off for the tenant is shown locked with an upgrade prompt; the server
+// rejects the write independently (see SettingsController::enforceEntitlements).
+const SECTION_LOCKS = {
+    activity: 'activity_tracking',
+    app_url: 'app_url_tracking',
+    weekly_limit: 'weekly_limit',
+    attendance_slack: 'attendance_alerts',
+};
+
+function LockedNotice({ label }) {
+    return (
+        <div className="rounded-lg border border-line bg-surface p-8 text-center">
+            <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-surface-2">
+                <Lock className="h-6 w-6 text-subtle" />
+            </span>
+            <h3 className="mt-4 text-base font-semibold text-body">{label} isn&apos;t in your plan</h3>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
+                This feature is available on a higher plan. Upgrade to unlock it, or contact us if you need it added to your workspace.
+            </p>
+            <Link href={route('billing.index')} className="mt-4 inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+                View plans
+            </Link>
+        </div>
+    );
+}
 
 const TIMEZONES = [
     'Asia/Karachi', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Dhaka', 'Asia/Riyadh',
@@ -106,13 +134,18 @@ function patchUser(user, category, enabled, values) {
 // state so the UI shows the save (the axios call never refreshes props).
 const OverridesDispatchContext = createContext(() => {});
 
-function ScreenshotsSection({ team, users, setTeam }) {
+function ScreenshotsSection({ team, users, setTeam, maxShots }) {
     const captureOff = !team.capture_enabled || team.screenshots_per_hour === 0;
+    const cap = maxShots ?? 60;
+    const rateOptions = [1, 2, 3, 4, 6, 8, 10, 12, 15, 20, 30].filter((n) => n <= cap);
     return (
         <SectionShell
             title="Screenshots"
             blurb={<>How frequently screenshots will be taken.<br />This number is an average since screenshots are taken at random intervals.</>}
         >
+            {maxShots != null && (
+                <p className="mb-3 text-xs text-muted">Your plan allows up to <strong>{maxShots}</strong> screenshots per hour.</p>
+            )}
             <div className="flex flex-wrap items-center gap-6 text-sm">
                 <label className="flex items-center gap-2">
                     <input
@@ -135,7 +168,7 @@ function ScreenshotsSection({ team, users, setTeam }) {
                             patchTeam(next);
                         }}
                     >
-                        {[1, 2, 3, 4, 6, 8, 10, 12, 15, 20, 30].map((n) => (
+                        {rateOptions.map((n) => (
                             <option key={n} value={n}>{n}</option>
                         ))}
                     </select>
@@ -392,20 +425,24 @@ function WeeklyLimitSection({ team, users, setTeam }) {
     );
 }
 
-function AutoPauseSection({ team, users, setTeam }) {
+function AutoPauseSection({ team, users, setTeam, minMinutes }) {
     const enabled = team.auto_pause_minutes > 0;
+    const floor = minMinutes ?? 1;
     return (
         <SectionShell
             title="Auto-pause tracking after"
             blurb="Tracking will automatically pause after the specified period of inactivity and will automatically resume when user becomes active again."
         >
+            {minMinutes != null && minMinutes > 1 && (
+                <p className="mb-3 text-xs text-muted">Your plan&apos;s minimum auto-pause is <strong>{minMinutes}</strong> minutes. Upgrade for a tighter idle limit.</p>
+            )}
             <div className="flex flex-wrap items-center gap-6 text-sm">
                 <label className="flex items-center gap-2">
                     <input
                         type="radio"
                         checked={enabled}
                         onChange={() => {
-                            const next = { ...team, auto_pause_minutes: team.auto_pause_minutes || 1 };
+                            const next = { ...team, auto_pause_minutes: team.auto_pause_minutes || floor };
                             setTeam(next);
                             patchTeam(next);
                         }}
@@ -413,9 +450,9 @@ function AutoPauseSection({ team, users, setTeam }) {
                     <span>Pause after</span>
                     <input
                         type="number"
-                        min={1}
+                        min={floor}
                         max={120}
-                        value={enabled ? team.auto_pause_minutes : 1}
+                        value={enabled ? team.auto_pause_minutes : floor}
                         disabled={!enabled}
                         onChange={(e) => {
                             const next = { ...team, auto_pause_minutes: Number(e.target.value) };
@@ -817,6 +854,16 @@ export default function SettingsIndex({ auth, team: initialTeam, users: initialU
     const [users, setUsers] = useState(initialUsers);
     const [active, setActive] = useState('screenshots');
 
+    // Effective plan entitlements (shared globally) drive the UI locks. The
+    // server enforces them too — this just shows the locks/caps.
+    const entitlements = usePage().props?.entitlements || {};
+    const isLocked = (key) => {
+        const flag = SECTION_LOCKS[key];
+        return !!flag && entitlements[flag] === false;
+    };
+    const maxShots = entitlements.max_screenshots_per_hour ?? null;
+    const minMinutes = entitlements.min_auto_pause_minutes ?? null;
+
     const updateOverrides = useCallback((userId, patch) => {
         setUsers((prev) => prev.map((u) => (
             u.id === userId ? { ...u, overrides: { ...(u.overrides || {}), ...patch } } : u
@@ -827,6 +874,8 @@ export default function SettingsIndex({ auth, team: initialTeam, users: initialU
         ...cat,
         summary: cat.summary(team),
     })), [team]);
+
+    const activeLabel = (CATEGORIES.find((c) => c.key === active) || {}).label || 'This feature';
 
     return (
         <AuthenticatedLayout user={auth.user} header={<h2 className="text-xl font-semibold text-slate-900">Settings</h2>}>
@@ -861,14 +910,17 @@ export default function SettingsIndex({ auth, team: initialTeam, users: initialU
                                             <Icon className="h-4 w-4 text-slate-400" />
                                             {item.label}
                                         </span>
-                                        <span className="text-xs text-slate-500">{item.summary}</span>
+                                        {isLocked(item.key)
+                                            ? <Lock className="h-3.5 w-3.5 text-slate-400" />
+                                            : <span className="text-xs text-slate-500">{item.summary}</span>}
                                     </button>
                                 );
                             })}
                         </nav>
 
                         <div className="px-6 py-6">
-                            {active === 'screenshots' && <ScreenshotsSection team={team} users={users} setTeam={setTeam} />}
+                            {isLocked(active) ? <LockedNotice label={activeLabel} /> : <>
+                            {active === 'screenshots' && <ScreenshotsSection team={team} users={users} setTeam={setTeam} maxShots={maxShots} />}
                             {active === 'activity' && (
                                 <BooleanSection
                                     title="Activity Level tracking"
@@ -892,7 +944,7 @@ export default function SettingsIndex({ auth, team: initialTeam, users: initialU
                                 />
                             )}
                             {active === 'weekly_limit' && <WeeklyLimitSection team={team} users={users} setTeam={setTeam} />}
-                            {active === 'auto_pause' && <AutoPauseSection team={team} users={users} setTeam={setTeam} />}
+                            {active === 'auto_pause' && <AutoPauseSection team={team} users={users} setTeam={setTeam} minMinutes={minMinutes} />}
                             {active === 'offline_time' && (
                                 <BooleanSection
                                     title="Allow adding Offline Time"
@@ -924,6 +976,7 @@ export default function SettingsIndex({ auth, team: initialTeam, users: initialU
                             {active === 'week_starts_on' && <WeekStartsSection team={team} setTeam={setTeam} />}
                             {active === 'currency' && <CurrencySection team={team} setTeam={setTeam} />}
                             {active === 'desktop_app' && <DesktopAppSection team={team} users={users} setTeam={setTeam} />}
+                            </>}
                         </div>
                     </div>
                 </div>
