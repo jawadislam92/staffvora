@@ -66,7 +66,7 @@ class BrandingController extends Controller
 
     public function update(Request $request): RedirectResponse
     {
-        abort_unless($request->user()?->isSuperAdmin(), 403);
+        $this->authorizeBranding($request);
 
         $request->validate([
             'logo' => ['required', 'image', 'mimes:png,jpg,jpeg,webp', 'max:8192'],
@@ -87,7 +87,7 @@ class BrandingController extends Controller
         return back()->with('success', 'Logo updated. Browsers may show the old one for a moment until their cache refreshes.');
     }
 
-    /** The white-label settings page (workspace name, accent colour, logo). */
+    /** The white-label settings page (workspace name, accent, logo, default theme). */
     public function edit(): \Inertia\Response
     {
         $org = $this->currentOrg();
@@ -98,33 +98,52 @@ class BrandingController extends Controller
                 'name' => $org?->name,
                 'display_name' => $org?->display_name,
                 'accent_color' => $org?->accent_color ?: '#f97316',
+                'default_theme' => $org?->default_theme ?: 'dark',
                 'logo_url' => $logoPath ? route('branding.logo').'?v='.substr(md5($logoPath), 0, 8) : null,
             ],
+            // Editable only by a workspace admin AND only when the plan includes
+            // white-label (otherwise the page shows an upgrade prompt).
             'canManage' => (bool) request()->user()?->isSuperAdmin(),
+            'canBrand' => (bool) ($org?->can('white_label') ?? false),
         ]);
     }
 
-    /** Save the workspace display name + accent colour onto the organization. */
+    /** Save the workspace display name + accent + default theme onto the org. */
     public function saveBranding(Request $request): RedirectResponse
     {
-        abort_unless($request->user()?->isSuperAdmin(), 403);
+        $org = $this->authorizeBranding($request);
 
         $data = $request->validate([
             'display_name' => ['nullable', 'string', 'max:120'],
             'accent_color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'default_theme' => ['nullable', 'in:light,dark,black'],
         ]);
-
-        $org = $this->currentOrg();
-        abort_unless($org, 404);
 
         $org->update([
             'display_name' => $data['display_name'] ?: null,
             'accent_color' => $data['accent_color'] ?: '#f97316',
+            'default_theme' => $data['default_theme'] ?: 'dark',
         ]);
 
         MonitoringSetting::forgetSharedCache();
+        Cache::forget('branding.shared.'.$org->id);
 
         return back()->with('success', 'Branding updated.');
+    }
+
+    /**
+     * Branding edits require a workspace admin AND the white-label entitlement.
+     * White-label is a paid feature, so a Free/Starter tenant is rejected on the
+     * server even if they reach the endpoint. Returns the current org.
+     */
+    private function authorizeBranding(Request $request): Organization
+    {
+        abort_unless($request->user()?->isSuperAdmin(), 403);
+        $org = $this->currentOrg();
+        abort_unless($org, 404);
+        abort_unless($org->can('white_label'), 403, 'White-label branding requires a higher plan.');
+
+        return $org;
     }
 
     private function currentOrg(): ?Organization
