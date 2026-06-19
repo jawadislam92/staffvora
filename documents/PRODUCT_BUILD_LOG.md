@@ -180,8 +180,30 @@ Default-deny control so "no one abuses our system". Deployed; prod plans backfil
   auto-Absent toggle (off → neutral "No record"). Every state carries a reason.
   Settings → "Attendance policy". Defaults preserve old behaviour.
 
+## Phase 5G — in-app help  ✅  (cf36f1b)
+- `/help`: searchable FAQ centre (collapsible answers, client-side search), reachable
+  from the sidebar user menu. Reusable `PageHeader` (title + one-line purpose + Help
+  link) — used by Help, rolls onto other pages during 5I.
+
+## Phase 5H — voluntary data migration  ✅  (6af4564)
+- `tenant:import {org} --users= --clients= [--dry-run] [--default-password=]`: imports
+  a roster into a tenant inside the org context (stamped + scoped); idempotent on email,
+  teams matched/created by name, client tags split from a comma list. Internal SA Track
+  stays running — migration is opt-in (owner's decision).
+
+## Phase 5I — sellability sweep  ✅  (0693f88) + documents/SELLABILITY_AUDIT.md
+- Removed user-facing "Sparking Asia / SA Track" from the web app (landing, error
+  pages, CSV filename, forgot-password placeholder, AI prompt → brand-aware).
+- Tracked remaining items: bundled fallback **logo asset** (needs a neutral Tracksuite
+  mark) + **desktop installer** strings (match real artifacts until the app is
+  rebuilt/re-signed). Per-page Light/Dark/Black + mobile + contrast checklist in the doc.
+
+**Phase 5 complete (5A–5I), all deployed to satimetracker.com; 161 tests green.**
+
 ## How to operate (quick reference)
 - Create a tenant by hand: `php artisan tenant:create "Acme" owner@acme.com`
+- Import an existing roster: `php artisan tenant:import <org> --users=users.csv --clients=clients.csv` (add `--dry-run` first)
+- Edit plans / per-tenant entitlements: Platform console → `/platform/plans` and each tenant page.
 - Make yourself the platform admin: `php artisan platform:grant you@email.com`
 - Record a payment: `php artisan billing:record-payment <org> 80 --months=1`
   (or from the Platform → tenant page).
