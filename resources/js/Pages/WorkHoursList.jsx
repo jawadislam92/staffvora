@@ -20,9 +20,9 @@ function Toast({ message, type = 'success', onClose }) {
         : 'bg-gradient-to-r from-emerald-500 to-teal-500';
 
     return (
-        <div className={`fixed top-5 right-5 z-50 ${bgClass} text-white px-6 py-3 rounded-xl shadow-2xl flex items-center`}>
+        <div className={`fixed top-5 right-5 z-50 ${bgClass} text-body px-6 py-3 rounded-xl shadow-2xl flex items-center`}>
             <span className="font-medium">{message}</span>
-            <button onClick={onClose} className="ml-4 text-white hover:text-gray-200 font-bold text-lg">&times;</button>
+            <button onClick={onClose} className="ml-4 text-body hover:text-gray-200 font-bold text-lg">&times;</button>
         </div>
     );
 }
@@ -423,7 +423,7 @@ export default function WorkHoursList({
                                         </button>
                                         <button
                                             onClick={clearSelection}
-                                            className="inline-flex items-center px-4 py-2 bg-slate-500 hover:bg-slate-600 text-white rounded-xl font-medium transition-all"
+                                            className="inline-flex items-center px-4 py-2 bg-slate-500 hover:bg-slate-600 text-body rounded-xl font-medium transition-all"
                                         >
                                             Clear Selection
                                         </button>
@@ -469,7 +469,7 @@ export default function WorkHoursList({
                                                     }}
                                                     className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
                                                         dateFilter === value
-                                                            ? 'bg-slate-900 text-white'
+                                                            ? 'bg-slate-900 text-body'
                                                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                                                     }`}
                                                 >
@@ -540,7 +540,7 @@ export default function WorkHoursList({
                                         <button
                                             type="button"
                                             onClick={() => applyFilters()}
-                                            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                                            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-body transition hover:bg-slate-800"
                                         >
                                             Apply Dates
                                         </button>
@@ -600,15 +600,15 @@ export default function WorkHoursList({
                                                 className="w-4 h-4 text-emerald-600 bg-white border-emerald-300 rounded focus:ring-emerald-500"
                                             />
                                         </th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">ID</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Date</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Client</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Work Type</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Tracker</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Source</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Hours</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Description</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Actions</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase tracking-wider">ID</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase tracking-wider">Date</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase tracking-wider">Client</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase tracking-wider">Work Type</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase tracking-wider">Tracker</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase tracking-wider">Source</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase tracking-wider">Hours</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase tracking-wider">Description</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-800">
@@ -619,7 +619,7 @@ export default function WorkHoursList({
                                                     <svg className="w-12 h-12 text-slate-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                                     </svg>
-                                                    <h3 className="text-lg font-medium text-white mb-2">No work hours found</h3>
+                                                    <h3 className="text-lg font-medium text-body mb-2">No work hours found</h3>
                                                     <p className="text-slate-600 mb-4">Start tracking your work hours</p>
                                                     <Link 
                                                         href={route('work-hours.create')}

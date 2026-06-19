@@ -180,7 +180,7 @@ export default function DeveloperIndex({ auth, system, health, schedule, envGrou
                 )}
 
                 {lastOutput && (
-                    <Card title={`Output — ${lastAction || 'last action'}`} icon={Terminal} accent="bg-slate-900 text-white [&_h2]:text-white [&_svg]:text-slate-300">
+                    <Card title={`Output — ${lastAction || 'last action'}`} icon={Terminal} accent="bg-slate-900 text-body [&_h2]:text-body [&_svg]:text-slate-300">
                         <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-slate-900 p-3 font-mono text-xs leading-relaxed text-emerald-200">
                             {lastOutput}
                         </pre>
@@ -354,7 +354,7 @@ export default function DeveloperIndex({ auth, system, health, schedule, envGrou
                             type="button"
                             onClick={saveEnv}
                             disabled={savingEnv}
-                            className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                            className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-body transition hover:bg-slate-800 disabled:opacity-60"
                         >
                             <KeyRound className="h-4 w-4" />
                             {savingEnv ? 'Saving…' : 'Save credentials'}
@@ -388,7 +388,7 @@ export default function DeveloperIndex({ auth, system, health, schedule, envGrou
                                     type="button"
                                     onClick={uploadLogo}
                                     disabled={!logoFile || uploadingLogo}
-                                    className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+                                    className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-slate-800 disabled:opacity-50"
                                 >
                                     {uploadingLogo ? 'Uploading…' : 'Upload logo'}
                                 </button>

@@ -122,7 +122,7 @@ export default function TeamIndex({ auth, start, end, range, rows, totals, permi
                                 <span className="rounded-md bg-gradient-to-r from-orange-500 to-amber-500 px-3 py-1.5 text-sm font-medium text-white shadow-sm">Members</span>
                                 <Link
                                     href={route('team.apps')}
-                                    className="rounded-md px-3 py-1.5 text-sm text-slate-300 transition hover:bg-white/10 hover:text-white"
+                                    className="rounded-md px-3 py-1.5 text-sm text-slate-300 transition hover:bg-white/10 hover:text-body"
                                 >
                                     Apps &amp; URLs
                                 </Link>
@@ -284,7 +284,7 @@ export default function TeamIndex({ auth, start, end, range, rows, totals, permi
                                         <td className="px-4 py-3 text-right">
                                             <Link
                                                 href={route('timeline.index', { user_id: row.id, date: end })}
-                                                className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 hover:text-white"
+                                                className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 hover:text-body"
                                             >
                                                 <Eye className="h-3 w-3" /> Timeline
                                             </Link>

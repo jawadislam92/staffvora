@@ -96,7 +96,7 @@ function MonthStrip({ days, onPick }) {
                                 d.is_selected
                                     ? 'border-orange-500 bg-orange-500/15 text-orange-300'
                                     : d.is_today
-                                    ? 'border-slate-500 bg-slate-800 text-white'
+                                    ? 'border-slate-500 bg-slate-800 text-body'
                                     : 'border-transparent text-slate-400 hover:bg-white/10',
                             ].join(' ')}
                             title={fmtHm(d.total_seconds)}
@@ -611,11 +611,11 @@ export default function TimelineIndex({
                                     ))}
                                 </select>
                             ) : (
-                                <h1 className="text-base font-semibold text-white">{targetUser.name}</h1>
+                                <h1 className="text-base font-semibold text-body">{targetUser.name}</h1>
                             )}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-slate-400">
-                            <button type="button" onClick={() => reload(shiftDate(activeDate, -1))} className="rounded p-1 text-slate-300 hover:bg-white/10 hover:text-white" aria-label="Previous day">
+                            <button type="button" onClick={() => reload(shiftDate(activeDate, -1))} className="rounded p-1 text-slate-300 hover:bg-white/10 hover:text-body" aria-label="Previous day">
                                 <ChevronLeft className="h-4 w-4" />
                             </button>
                             <input
@@ -624,7 +624,7 @@ export default function TimelineIndex({
                                 onChange={(e) => reload(e.target.value)}
                                 className="rounded border-slate-700 bg-slate-900 text-xs text-slate-200 [color-scheme:dark]"
                             />
-                            <button type="button" onClick={() => reload(shiftDate(activeDate, 1))} className="rounded p-1 text-slate-300 hover:bg-white/10 hover:text-white" aria-label="Next day">
+                            <button type="button" onClick={() => reload(shiftDate(activeDate, 1))} className="rounded p-1 text-slate-300 hover:bg-white/10 hover:text-body" aria-label="Next day">
                                 <ChevronRight className="h-4 w-4" />
                             </button>
                             <button type="button" onClick={() => reload(new Date().toISOString().slice(0, 10))} className="ml-2 rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800">
@@ -640,7 +640,7 @@ export default function TimelineIndex({
                             <p className="text-xs uppercase tracking-wide text-slate-400">{data.day_label}</p>
                             <div className="flex items-end gap-3">
                                 <div>
-                                    <div className="text-4xl font-bold text-white">{fmtHm(data.totals?.day || 0)}</div>
+                                    <div className="text-4xl font-bold text-body">{fmtHm(data.totals?.day || 0)}</div>
                                     <div className="text-[11px] uppercase tracking-wide text-slate-500">Tracked this day</div>
                                 </div>
                                 <div className="text-xs text-slate-400">
@@ -702,7 +702,7 @@ export default function TimelineIndex({
                                 'rounded-md px-3 py-1.5 text-sm transition',
                                 view === 'tasks'
                                     ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-sm'
-                                    : 'text-slate-300 hover:bg-white/10 hover:text-white',
+                                    : 'text-slate-300 hover:bg-white/10 hover:text-body',
                             ].join(' ')}
                         >
                             Tasks
@@ -714,7 +714,7 @@ export default function TimelineIndex({
                                 'rounded-md px-3 py-1.5 text-sm transition',
                                 view === 'apps'
                                     ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-sm'
-                                    : 'text-slate-300 hover:bg-white/10 hover:text-white',
+                                    : 'text-slate-300 hover:bg-white/10 hover:text-body',
                             ].join(' ')}
                         >
                             Apps &amp; URLs
@@ -767,11 +767,11 @@ export default function TimelineIndex({
                                 Add offline time
                             </Link>
                         )}
-                        <button type="button" onClick={openHistory} className="inline-flex items-center gap-1 text-slate-300 hover:text-white">
+                        <button type="button" onClick={openHistory} className="inline-flex items-center gap-1 text-slate-300 hover:text-body">
                             <History className="h-4 w-4" />
                             History of changes
                         </button>
-                        <button type="button" onClick={openDesktopApp} className="inline-flex items-center gap-1 text-slate-300 hover:text-white">
+                        <button type="button" onClick={openDesktopApp} className="inline-flex items-center gap-1 text-slate-300 hover:text-body">
                             <MonitorPlay className="h-4 w-4" />
                             Open desktop tracker
                         </button>
@@ -793,7 +793,7 @@ export default function TimelineIndex({
                 <div className="fixed inset-0 z-[70] flex flex-col bg-black/95" onClick={() => setLightboxId(null)}>
                     <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-200" onClick={(e) => e.stopPropagation()}>
                         <div className="min-w-0">
-                            <div className="flex items-center gap-2 font-semibold text-white">
+                            <div className="flex items-center gap-2 font-semibold text-body">
                                 <span className={['inline-block h-2.5 w-2.5 rounded-full', activityDot(lightboxShot.activity_percent)].join(' ')} />
                                 {fmtTime(lightboxShot.captured_at)}
                                 <span className="font-normal text-slate-400">· activity {lightboxShot.activity_percent ?? 0}%</span>
@@ -816,7 +816,7 @@ export default function TimelineIndex({
                                     <Trash2 className="h-3.5 w-3.5" /> Delete &amp; remove time
                                 </button>
                             )}
-                            <button type="button" onClick={() => setLightboxId(null)} className="inline-flex items-center gap-1 rounded-lg border border-slate-600 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-700" aria-label="Close viewer">
+                            <button type="button" onClick={() => setLightboxId(null)} className="inline-flex items-center gap-1 rounded-lg border border-slate-600 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-body hover:bg-slate-700" aria-label="Close viewer">
                                 <X className="h-4 w-4" /> Close
                             </button>
                         </div>
@@ -828,7 +828,7 @@ export default function TimelineIndex({
                             type="button"
                             onClick={(e) => { e.stopPropagation(); stepLightbox(-1); }}
                             disabled={lightboxIndex <= 0}
-                            className="absolute left-3 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-slate-900/80 text-white hover:bg-slate-800 disabled:opacity-30"
+                            className="absolute left-3 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-slate-900/80 text-body hover:bg-slate-800 disabled:opacity-30"
                             aria-label="Previous"
                         >
                             <ChevronLeft className="h-7 w-7" />
@@ -843,7 +843,7 @@ export default function TimelineIndex({
                             type="button"
                             onClick={(e) => { e.stopPropagation(); stepLightbox(1); }}
                             disabled={lightboxIndex >= allShots.length - 1}
-                            className="absolute right-3 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-slate-900/80 text-white hover:bg-slate-800 disabled:opacity-30"
+                            className="absolute right-3 z-10 flex h-12 w-12 items-center justify-center rounded-full bg-slate-900/80 text-body hover:bg-slate-800 disabled:opacity-30"
                             aria-label="Next"
                         >
                             <ChevronRight className="h-7 w-7" />
@@ -857,7 +857,7 @@ export default function TimelineIndex({
 
             {selectedShots.size > 0 && !deleteIds && (
                 <div className="fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-full border border-slate-700 bg-slate-900 px-4 py-2.5 shadow-2xl shadow-black/50">
-                    <span className="text-sm font-semibold text-white">{selectedShots.size} screenshot{selectedShots.size === 1 ? '' : 's'} selected</span>
+                    <span className="text-sm font-semibold text-body">{selectedShots.size} screenshot{selectedShots.size === 1 ? '' : 's'} selected</span>
                     <button
                         type="button"
                         onClick={() => setDeleteIds([...selectedShots])}
@@ -878,7 +878,7 @@ export default function TimelineIndex({
             {(deleteIds || deleteSession) && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={() => !deleting && (setDeleteIds(null), setDeleteSession(null))}>
                     <div className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                        <h3 className="text-base font-bold text-white">
+                        <h3 className="text-base font-bold text-body">
                             {deleteSession
                                 ? 'Delete this whole session?'
                                 : `Delete ${deleteIds.length} screenshot${deleteIds.length === 1 ? '' : 's'}?`}
@@ -931,10 +931,10 @@ export default function TimelineIndex({
                     <div className="max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-lg border border-slate-800 bg-slate-900 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
                             <div>
-                                <h3 className="text-sm font-semibold text-white">History of changes</h3>
+                                <h3 className="text-sm font-semibold text-body">History of changes</h3>
                                 <p className="text-xs text-slate-400">{data.day_label} · {targetUser.name}</p>
                             </div>
-                            <button type="button" onClick={() => setHistoryOpen(false)} className="rounded p-1 text-slate-300 hover:bg-white/10 hover:text-white" aria-label="Close">
+                            <button type="button" onClick={() => setHistoryOpen(false)} className="rounded p-1 text-slate-300 hover:bg-white/10 hover:text-body" aria-label="Close">
                                 <X className="h-4 w-4" />
                             </button>
                         </div>

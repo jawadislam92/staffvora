@@ -39,7 +39,7 @@ function PlanCard({ plan, currentKey }) {
                 <h3 className="font-bold text-slate-100">{plan.name}</h3>
                 {isCurrent && <span className="rounded-full bg-orange-500 px-2 py-0.5 text-xs font-semibold text-slate-950">Current</span>}
             </div>
-            <p className="mt-1 text-2xl font-bold text-white">
+            <p className="mt-1 text-2xl font-bold text-body">
                 {price ? <>{price}<span className="text-sm font-normal text-slate-400">/user·mo</span></> : <span className="text-base text-slate-300">{plan.key === 'enterprise' ? 'Contact us' : 'Free'}</span>}
             </p>
             <p className="mt-1 text-xs text-slate-400">{plan.max_users ? `Up to ${plan.max_users} users` : 'Unlimited users'}</p>

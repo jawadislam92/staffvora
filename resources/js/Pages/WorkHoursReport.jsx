@@ -20,9 +20,9 @@ function Toast({ message, type = 'success', onClose }) {
         : 'bg-gradient-to-r from-emerald-500 to-teal-500';
 
     return (
-        <div className={`fixed top-5 right-5 z-50 ${bgClass} text-white px-6 py-3 rounded-xl shadow-2xl flex items-center`}>
+        <div className={`fixed top-5 right-5 z-50 ${bgClass} text-body px-6 py-3 rounded-xl shadow-2xl flex items-center`}>
             <span className="font-medium">{message}</span>
-            <button onClick={onClose} className="ml-4 text-white hover:text-gray-200 font-bold text-lg">&times;</button>
+            <button onClick={onClose} className="ml-4 text-body hover:text-gray-200 font-bold text-lg">&times;</button>
         </div>
     );
 }
@@ -485,7 +485,7 @@ export default function WorkHoursReport({
                                 {activeFilterChips.length > 0 && (
                                     <button
                                         onClick={clearFilters}
-                                        className="inline-flex items-center px-4 py-2 bg-slate-500 hover:bg-slate-600 text-white rounded-xl font-medium transition-all"
+                                        className="inline-flex items-center px-4 py-2 bg-slate-500 hover:bg-slate-600 text-body rounded-xl font-medium transition-all"
                                     >
                                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -575,7 +575,7 @@ export default function WorkHoursReport({
                                                 <button
                                                     type="button"
                                                     onClick={applyFilters}
-                                                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium transition-all"
+                                                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-body rounded-lg font-medium transition-all"
                                                 >
                                                     Apply
                                                 </button>
@@ -655,14 +655,14 @@ export default function WorkHoursReport({
                             <table className="min-w-full divide-y divide-slate-800">
                                 <thead className="bg-slate-950">
                                     <tr>
-                                        <th className="sticky left-0 z-10 whitespace-nowrap bg-slate-950 px-4 py-3 text-left text-xs font-bold uppercase text-white">Date</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase">User</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase">Client</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase">Work Type</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase">Tracker</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase">Source</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase">Hours</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase">Description</th>
+                                        <th className="sticky left-0 z-10 whitespace-nowrap bg-slate-950 px-4 py-3 text-left text-xs font-bold uppercase text-body">Date</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase">User</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase">Client</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase">Work Type</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase">Tracker</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase">Source</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase">Hours</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase">Description</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-800">
@@ -673,7 +673,7 @@ export default function WorkHoursReport({
                                                     <svg className="w-12 h-12 text-slate-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                                     </svg>
-                                                    <h3 className="text-lg font-medium text-white mb-2">No data found</h3>
+                                                    <h3 className="text-lg font-medium text-body mb-2">No data found</h3>
                                                     <p className="text-slate-400">Try adjusting your filters</p>
                                                 </div>
                                             </td>

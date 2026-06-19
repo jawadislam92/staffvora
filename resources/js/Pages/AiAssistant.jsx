@@ -52,10 +52,10 @@ export default function AiAssistant({ auth, aiEnabled = false, questions = SUGGE
                         {messages.length === 0 && (
                             <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
                                 <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 shadow-lg shadow-orange-500/30">
-                                    <Sparkles className="h-6 w-6 text-white" />
+                                    <Sparkles className="h-6 w-6 text-body" />
                                 </span>
                                 <div>
-                                    <p className="font-semibold text-white">Ask about your team&apos;s work</p>
+                                    <p className="font-semibold text-body">Ask about your team&apos;s work</p>
                                     <p className="mt-1 text-sm text-slate-400">I can see the last 14 days of tracked hours, clients, and shifts.</p>
                                 </div>
                                 <div className="flex flex-wrap justify-center gap-2">

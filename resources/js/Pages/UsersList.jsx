@@ -204,7 +204,7 @@ export default function UsersList({ auth, users, filters = {}, filterOptions = {
                     <section className="flex flex-col gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                             <p className="text-sm font-semibold text-orange-400">Team management</p>
-                            <h1 className="mt-1 text-2xl font-bold text-white">Users</h1>
+                            <h1 className="mt-1 text-2xl font-bold text-body">Users</h1>
                             <p className="mt-1 text-sm text-slate-400">Manage accounts, roles, designations, and selected access.</p>
                         </div>
                         {can('users.manage') && (
@@ -345,7 +345,7 @@ export default function UsersList({ auth, users, filters = {}, filterOptions = {
                                         ].map(({ heading, sort, help }, index) => (
                                             <th
                                                 key={heading}
-                                                className={`whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase text-white ${
+                                                className={`whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase text-body ${
                                                     index === 0 ? 'sticky left-0 z-10 bg-slate-900' : ''
                                                 }`}
                                             >

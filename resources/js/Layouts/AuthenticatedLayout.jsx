@@ -11,14 +11,14 @@ import {
     CreditCard,
     Film,
     LayoutDashboard,
-    LayoutGrid,
     LogOut,
     Menu,
     MonitorDown,
     Palette,
+    PanelLeftClose,
+    PanelLeftOpen,
     Plus,
     Settings as SettingsIcon,
-    Sparkles,
     UserCircle,
     Users,
     UsersRound,
@@ -29,12 +29,14 @@ import AiChatWidget from '@/Components/AiChatWidget';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import Avatar from '@/Components/Avatar';
 import Dropdown from '@/Components/Dropdown';
+import ThemeSwitcher from '@/Components/ThemeSwitcher';
 
 function isActiveRoute(names) {
     return names.some((name) => route().current(name));
 }
 
-function NavItem({ item, onClick }) {
+// A single sidebar link. Collapsed → icon only (label moves to a tooltip).
+function SideLink({ item, collapsed, onClick }) {
     const Icon = item.icon;
     const active = isActiveRoute(item.active);
 
@@ -44,69 +46,81 @@ function NavItem({ item, onClick }) {
             onClick={onClick}
             prefetch
             cacheFor="20s"
+            title={collapsed ? item.label : undefined}
+            aria-current={active ? 'page' : undefined}
             className={[
-                'inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-sm font-medium transition xl:px-3',
+                'group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
+                collapsed ? 'justify-center' : '',
                 active
-                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/25'
-                    : 'text-slate-300 hover:bg-white/10 hover:text-white',
+                    ? 'bg-accent text-white shadow-sm shadow-black/20'
+                    : 'text-muted hover:bg-surface-2 hover:text-body',
             ].join(' ')}
         >
-            <Icon className="h-4 w-4" />
-            <span>{item.label}</span>
+            <Icon className="h-[18px] w-[18px] shrink-0" />
+            {!collapsed && <span className="truncate">{item.label}</span>}
         </Link>
     );
 }
 
-// A top-bar grouping: a trigger button that opens a dropdown of related links.
-function NavGroup({ label, icon: Icon, items }) {
-    const active = items.some((item) => isActiveRoute(item.active));
+// A labelled group of links. When collapsed the label becomes a divider so the
+// rail stays scannable without text.
+function NavSection({ label, items, collapsed, onItemClick }) {
+    if (!items.length) {
+        return null;
+    }
 
     return (
-        <Dropdown>
-            <Dropdown.Trigger>
-                <button
-                    type="button"
-                    className={[
-                        'inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-sm font-medium transition xl:px-3',
-                        active ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/25' : 'text-slate-300 hover:bg-white/10 hover:text-white',
-                    ].join(' ')}
-                >
-                    <Icon className="h-4 w-4" />
-                    <span>{label}</span>
-                    <ChevronDown className="h-3.5 w-3.5 opacity-70" />
-                </button>
-            </Dropdown.Trigger>
-            <Dropdown.Content align="left" width="56">
-                {items.map((item) => {
-                    const ItemIcon = item.icon;
-                    const isActive = isActiveRoute(item.active);
-                    return (
-                        <Dropdown.Link
-                            key={item.label}
-                            href={item.href}
-                            prefetch
-                            cacheFor="20s"
-                            className={isActive ? 'bg-slate-100 font-semibold text-slate-900' : ''}
-                        >
-                            <span className="flex items-center gap-2">
-                                <ItemIcon className="h-4 w-4 text-slate-400" />
-                                {item.label}
-                            </span>
-                        </Dropdown.Link>
-                    );
-                })}
-            </Dropdown.Content>
-        </Dropdown>
+        <div className="space-y-0.5">
+            {label &&
+                (collapsed ? (
+                    <div className="mx-2 my-2 border-t border-line" aria-hidden="true" />
+                ) : (
+                    <div className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-subtle">
+                        {label}
+                    </div>
+                ))}
+            {items.map((item) => (
+                <SideLink key={item.label} item={item} collapsed={collapsed} onClick={onItemClick} />
+            ))}
+        </div>
+    );
+}
+
+// Token-themed entry for the bottom user menu (Dropdown.Link is hard-coded light).
+function UserMenuLink({ icon: Icon, children, ...props }) {
+    return (
+        <Link
+            {...props}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-muted transition hover:bg-surface-2 hover:text-body"
+        >
+            <Icon className="h-4 w-4" />
+            {children}
+        </Link>
     );
 }
 
 export default function Authenticated({ user, header, children }) {
-    const [showingNavigationDropdown, setShowingNavigationDropdown] = useState(false);
+    const page = usePage();
     const can = (permission) => user?.is_super_admin || user?.permissions?.includes(permission);
     const canCreateManualWorkHour = user?.can_create_manual_work_hour ?? true;
+    const brandName = page.props?.branding?.name || 'Tracksuite';
+    const impersonating = page.props?.impersonating;
 
-    // Primary, always-visible links. Attendance is its own thing — not a
-    // sub-page of reporting — so it sits top-level for those who can see it.
+    // Desktop collapse state is remembered; the mobile drawer always starts closed.
+    const [collapsed, setCollapsed] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        return window.localStorage.getItem('tt_sidebar_collapsed') === '1';
+    });
+    const [mobileOpen, setMobileOpen] = useState(false);
+
+    useEffect(() => {
+        window.localStorage.setItem('tt_sidebar_collapsed', collapsed ? '1' : '0');
+    }, [collapsed]);
+
+    // Close the mobile drawer after any navigation.
+    useEffect(() => router.on('navigate', () => setMobileOpen(false)), []);
+
+    // Primary, always-visible links.
     const primaryItems = useMemo(() => [
         { label: 'Dashboard', href: route('dashboard'), icon: LayoutDashboard, active: ['dashboard'] },
         { label: 'Timeline', href: route('timeline.index'), icon: Film, active: ['timeline.index'] },
@@ -128,28 +142,23 @@ export default function Authenticated({ user, header, children }) {
         can('profiles.view') && { label: 'Profiles', href: route('upwork-profiles.index'), icon: UserCircle, active: ['upwork-profiles.index', 'upwork-profiles.create', 'upwork-profiles.edit'] },
     ].filter(Boolean), [user?.is_super_admin, user?.permissions]);
 
-    // System configuration — admins only. The Desktop App download lives in
-    // the avatar menu so every employee can reach it.
+    // System configuration — tenant admins.
     const systemItems = useMemo(() => [
-        user?.is_platform_admin && { label: 'Platform', href: route('platform.index'), icon: Building2, active: ['platform.index', 'platform.show'] },
         can('monitoring.settings') && { label: 'Settings', href: route('settings.index'), icon: SettingsIcon, active: ['settings.index'] },
         can('monitoring.settings') && { label: 'Branding', href: route('settings.branding'), icon: Palette, active: ['settings.branding'] },
         user?.is_super_admin && { label: 'Billing', href: route('billing.index'), icon: CreditCard, active: ['billing.index'] },
         user?.is_super_admin && { label: 'Developer', href: route('developer.index'), icon: Wrench, active: ['developer.index'] },
     ].filter(Boolean), [user?.is_super_admin, user?.permissions]);
 
-    const impersonating = usePage().props?.impersonating;
+    // Platform (landlord) console — only for us.
+    const platformItems = useMemo(() => [
+        user?.is_platform_admin && { label: 'Platform', href: route('platform.index'), icon: Building2, active: ['platform.index', 'platform.show'] },
+    ].filter(Boolean), [user?.is_platform_admin]);
 
-    // Apply the workspace accent colour as a CSS variable (white-label).
-    const brandAccent = usePage().props?.branding?.accent_color;
-    useEffect(() => {
-        if (brandAccent) {
-            document.documentElement.style.setProperty('--brand-accent', brandAccent);
-        }
-    }, [brandAccent]);
+    const closeMobile = () => setMobileOpen(false);
 
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-900">
+        <div className="min-h-screen bg-app text-body">
             {impersonating && (
                 <div className="flex flex-wrap items-center justify-center gap-3 bg-amber-500 px-4 py-2 text-center text-sm font-semibold text-slate-950">
                     <span>You&apos;re viewing a customer workspace as the platform admin.</span>
@@ -162,183 +171,166 @@ export default function Authenticated({ user, header, children }) {
                     </button>
                 </div>
             )}
-            <nav className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/95 shadow-lg shadow-slate-950/30 backdrop-blur">
-                <div className="w-full px-4 sm:px-6 lg:px-8">
-                    <div className="flex h-16 items-center justify-between gap-4">
-                        <div className="flex min-w-0 items-center gap-3 xl:gap-5">
-                            <Link href={route('dashboard')} className="flex shrink-0 items-center gap-3">
-                                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 shadow-md shadow-orange-500/20 ring-1 ring-orange-500/40">
-                                    <ApplicationLogo size="9" />
-                                </span>
-                                <span className="hidden leading-tight 2xl:block">
-                                    <span className="block text-base font-bold text-white">SA Track</span>
-                                    <span className="block text-xs font-medium text-slate-400">by Sparking Asia</span>
-                                </span>
-                            </Link>
 
-                            <div className="hidden items-center gap-1 lg:flex">
-                                {primaryItems.map((item) => (
-                                    <NavItem key={item.label} item={item} />
-                                ))}
-                                {performanceItems.length > 0 && <NavGroup label="Performance" icon={BarChart3} items={performanceItems} />}
-                                {managementItems.length > 0 && <NavGroup label="Management" icon={LayoutGrid} items={managementItems} />}
-                                {systemItems.length > 0 && <NavGroup label="System" icon={SettingsIcon} items={systemItems} />}
-                            </div>
-                        </div>
-
-                        <div className="hidden shrink-0 items-center gap-3 sm:flex">
-                            {canCreateManualWorkHour && (
-                                <Link
-                                    href={route('work-hours.create')}
-                                    className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 px-3.5 py-2 text-sm font-semibold text-white shadow-lg shadow-orange-500/25 transition hover:from-orange-600 hover:to-amber-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-slate-950"
-                                >
-                                    <Plus className="h-4 w-4" />
-                                    <span className="hidden md:inline">Add Manual Time</span>
-                                </Link>
-                            )}
-
-                            <Dropdown>
-                                <Dropdown.Trigger>
-                                    <button className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-slate-950">
-                                        <Avatar user={user} size="sm" />
-                                        <span className="hidden max-w-40 truncate xl:block">{user?.name}</span>
-                                        <ChevronDown className="h-4 w-4 text-slate-400" />
-                                    </button>
-                                </Dropdown.Trigger>
-                                <Dropdown.Content>
-                                    <Dropdown.Link href={route('profile.edit')}>
-                                        <span className="flex items-center gap-2">
-                                            <UserCircle className="h-4 w-4" />
-                                            Profile
-                                        </span>
-                                    </Dropdown.Link>
-                                    <Dropdown.Link href={route('desktop-downloads.index')}>
-                                        <span className="flex items-center gap-2">
-                                            <MonitorDown className="h-4 w-4" />
-                                            Desktop App
-                                        </span>
-                                    </Dropdown.Link>
-                                    <Dropdown.Link href={route('logout')} method="post" as="button">
-                                        <span className="flex items-center gap-2">
-                                            <LogOut className="h-4 w-4" />
-                                            Log Out
-                                        </span>
-                                    </Dropdown.Link>
-                                </Dropdown.Content>
-                            </Dropdown>
-                        </div>
-
-                        <button
-                            onClick={() => setShowingNavigationDropdown((previousState) => !previousState)}
-                            className="inline-flex items-center justify-center rounded-lg p-2 text-slate-300 transition hover:bg-white/10 hover:text-white lg:hidden"
-                            aria-label="Toggle navigation"
-                        >
-                            {showingNavigationDropdown ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-                        </button>
-                    </div>
-                </div>
-
-                {showingNavigationDropdown && (
-                    <div className="border-t border-slate-800 bg-slate-950 lg:hidden">
-                        <div className="space-y-1 px-4 py-3">
-                            {primaryItems.map((item) => (
-                                <NavItem key={item.label} item={item} onClick={() => setShowingNavigationDropdown(false)} />
-                            ))}
-
-                            {performanceItems.length > 0 && (
-                                <div className="pt-3">
-                                    <div className="px-2.5 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Performance</div>
-                                    {performanceItems.map((item) => (
-                                        <NavItem key={item.label} item={item} onClick={() => setShowingNavigationDropdown(false)} />
-                                    ))}
-                                </div>
-                            )}
-
-                            {managementItems.length > 0 && (
-                                <div className="pt-3">
-                                    <div className="px-2.5 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Management</div>
-                                    {managementItems.map((item) => (
-                                        <NavItem key={item.label} item={item} onClick={() => setShowingNavigationDropdown(false)} />
-                                    ))}
-                                </div>
-                            )}
-
-                            {systemItems.length > 0 && (
-                                <div className="pt-3">
-                                    <div className="px-2.5 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">System</div>
-                                    {systemItems.map((item) => (
-                                        <NavItem key={item.label} item={item} onClick={() => setShowingNavigationDropdown(false)} />
-                                    ))}
-                                </div>
-                            )}
-
-                            {canCreateManualWorkHour && (
-                                <Link
-                                    href={route('work-hours.create')}
-                                    onClick={() => setShowingNavigationDropdown(false)}
-                                    className="mt-3 flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 px-3 py-2 text-sm font-semibold text-white shadow-lg shadow-orange-500/25"
-                                >
-                                    <Plus className="h-4 w-4" />
-                                    Add Manual Time
-                                </Link>
-                            )}
-                        </div>
-
-                        <div className="border-t border-slate-800 px-4 py-4">
-                            <div className="mb-3 flex items-center gap-3">
-                                <Avatar user={user} size="lg" />
-                                <div className="min-w-0">
-                                    <div className="truncate font-semibold text-white">{user?.name ?? ''}</div>
-                                    <div className="truncate text-sm text-slate-400">{user?.email ?? ''}</div>
-                                </div>
-                            </div>
-                            <div className="grid gap-2">
-                                <Link
-                                    href={route('profile.edit')}
-                                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white"
-                                >
-                                    <UserCircle className="h-4 w-4" />
-                                    Profile Settings
-                                </Link>
-                                <Link
-                                    href={route('desktop-downloads.index')}
-                                    onClick={() => setShowingNavigationDropdown(false)}
-                                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white"
-                                >
-                                    <MonitorDown className="h-4 w-4" />
-                                    Desktop App
-                                </Link>
-                                <Link
-                                    href={route('logout')}
-                                    method="post"
-                                    as="button"
-                                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white"
-                                >
-                                    <LogOut className="h-4 w-4" />
-                                    Log Out
-                                </Link>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </nav>
-
-            {header && (
-                <header className="relative overflow-hidden border-b border-slate-800 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950">
+            <div className="flex min-h-screen">
+                {/* Mobile overlay */}
+                {mobileOpen && (
                     <div
-                        className="pointer-events-none absolute -top-16 right-0 h-40 w-96 rounded-full bg-orange-500/10 blur-3xl"
+                        className="fixed inset-0 z-40 bg-black/60 lg:hidden"
+                        onClick={closeMobile}
                         aria-hidden="true"
                     />
-                    <div className="relative w-full px-4 py-4 sm:px-6 lg:px-8">
-                        <h1 className="flex items-center gap-3 text-xl font-semibold text-white">
-                            <span className="h-5 w-1 rounded-full bg-gradient-to-b from-orange-400 to-amber-500" aria-hidden="true" />
-                            {typeof header === 'string' ? header : (header?.props?.children || 'Page')}
-                        </h1>
-                    </div>
-                </header>
-            )}
+                )}
 
-            <main>{children}</main>
+                {/* Sidebar */}
+                <aside
+                    className={[
+                        'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-line bg-surface transition-all duration-200',
+                        'lg:sticky lg:top-0 lg:h-screen lg:translate-x-0',
+                        collapsed ? 'w-64 lg:w-[4.5rem]' : 'w-64',
+                        mobileOpen ? 'translate-x-0' : '-translate-x-full',
+                    ].join(' ')}
+                >
+                    {/* Brand */}
+                    <div className="flex h-16 shrink-0 items-center gap-3 border-b border-line px-3">
+                        <Link href={route('dashboard')} className="flex min-w-0 flex-1 items-center gap-3">
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-2 ring-1 ring-line">
+                                <ApplicationLogo size="8" />
+                            </span>
+                            {!collapsed && (
+                                <span className="min-w-0 leading-tight">
+                                    <span className="block truncate text-sm font-bold text-body">{brandName}</span>
+                                    <span className="block text-[11px] font-medium text-subtle">Workspace</span>
+                                </span>
+                            )}
+                        </Link>
+                        <button
+                            type="button"
+                            onClick={closeMobile}
+                            className="rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-body lg:hidden"
+                            aria-label="Close navigation"
+                        >
+                            <X className="h-5 w-5" />
+                        </button>
+                    </div>
+
+                    {/* Nav */}
+                    <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-3">
+                        {canCreateManualWorkHour && (
+                            <Link
+                                href={route('work-hours.create')}
+                                onClick={closeMobile}
+                                title={collapsed ? 'Add Manual Time' : undefined}
+                                className={[
+                                    'mb-1 flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white shadow-sm shadow-black/20 transition hover:opacity-90',
+                                    collapsed ? 'justify-center' : '',
+                                ].join(' ')}
+                            >
+                                <Plus className="h-[18px] w-[18px] shrink-0" />
+                                {!collapsed && <span>Add Manual Time</span>}
+                            </Link>
+                        )}
+
+                        <NavSection items={primaryItems} collapsed={collapsed} onItemClick={closeMobile} />
+                        <NavSection label="Performance" items={performanceItems} collapsed={collapsed} onItemClick={closeMobile} />
+                        <NavSection label="Management" items={managementItems} collapsed={collapsed} onItemClick={closeMobile} />
+                        <NavSection label="System" items={systemItems} collapsed={collapsed} onItemClick={closeMobile} />
+                        <NavSection label="Platform" items={platformItems} collapsed={collapsed} onItemClick={closeMobile} />
+                    </nav>
+
+                    {/* Footer: theme + user + collapse */}
+                    <div className="shrink-0 space-y-2 border-t border-line p-3">
+                        {!collapsed && <ThemeSwitcher />}
+
+                        <Dropdown>
+                            <Dropdown.Trigger>
+                                <button
+                                    type="button"
+                                    className={[
+                                        'flex w-full items-center gap-2 rounded-lg border border-line bg-surface-2 px-2 py-2 text-left text-sm transition hover:bg-surface',
+                                        collapsed ? 'justify-center' : '',
+                                    ].join(' ')}
+                                    title={collapsed ? user?.name : undefined}
+                                >
+                                    <Avatar user={user} size="sm" />
+                                    {!collapsed && (
+                                        <>
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block truncate font-medium text-body">{user?.name}</span>
+                                                <span className="block truncate text-xs text-subtle">{user?.email}</span>
+                                            </span>
+                                            <ChevronDown className="h-4 w-4 shrink-0 text-subtle" />
+                                        </>
+                                    )}
+                                </button>
+                            </Dropdown.Trigger>
+                            <Dropdown.Content
+                                direction="up"
+                                align="left"
+                                width="56"
+                                contentClasses="py-1 bg-surface border border-line"
+                            >
+                                <UserMenuLink href={route('profile.edit')} icon={UserCircle}>
+                                    Profile
+                                </UserMenuLink>
+                                <UserMenuLink href={route('desktop-downloads.index')} icon={MonitorDown}>
+                                    Desktop App
+                                </UserMenuLink>
+                                <UserMenuLink href={route('logout')} method="post" as="button" icon={LogOut}>
+                                    Log Out
+                                </UserMenuLink>
+                            </Dropdown.Content>
+                        </Dropdown>
+
+                        <button
+                            type="button"
+                            onClick={() => setCollapsed((c) => !c)}
+                            className="hidden w-full items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-subtle transition hover:bg-surface-2 hover:text-body lg:flex"
+                        >
+                            {collapsed ? (
+                                <PanelLeftOpen className="h-4 w-4" />
+                            ) : (
+                                <>
+                                    <PanelLeftClose className="h-4 w-4" />
+                                    <span>Collapse</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </aside>
+
+                {/* Main column */}
+                <div className="flex min-w-0 flex-1 flex-col">
+                    {/* Mobile top bar */}
+                    <div className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-surface px-4 lg:hidden">
+                        <button
+                            type="button"
+                            onClick={() => setMobileOpen(true)}
+                            className="rounded-lg p-2 text-muted transition hover:bg-surface-2 hover:text-body"
+                            aria-label="Open navigation"
+                        >
+                            <Menu className="h-6 w-6" />
+                        </button>
+                        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-surface-2 ring-1 ring-line">
+                            <ApplicationLogo size="6" />
+                        </span>
+                        <span className="truncate font-semibold text-body">{brandName}</span>
+                    </div>
+
+                    {header && (
+                        <header className="border-b border-line bg-surface">
+                            <div className="w-full px-4 py-4 sm:px-6 lg:px-8">
+                                <h1 className="flex items-center gap-3 text-xl font-semibold text-body">
+                                    <span className="h-5 w-1 rounded-full bg-accent" aria-hidden="true" />
+                                    {typeof header === 'string' ? header : (header?.props?.children || 'Page')}
+                                </h1>
+                            </div>
+                        </header>
+                    )}
+
+                    <main className="flex-1">{children}</main>
+                </div>
+            </div>
 
             {/* Floating AI chat — only for people granted the AI permission
                 (each question costs API credit). */}

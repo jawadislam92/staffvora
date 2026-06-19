@@ -474,7 +474,7 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
                     <section className="flex flex-col gap-4 border-b border-slate-800 pb-5 lg:flex-row lg:items-end lg:justify-between">
                         <div>
                             <p className="text-sm font-semibold text-orange-400">Team operations</p>
-                            <h1 className="mt-1 text-2xl font-bold text-white">Attendance</h1>
+                            <h1 className="mt-1 text-2xl font-bold text-body">Attendance</h1>
                             <p className="mt-1 text-sm text-slate-400">Monitor current status, work time, breaks, and daily activity.</p>
                             {lastRefreshTime && (
                                 <p className="mt-1 text-xs text-slate-400">Updated {lastRefreshTime.toLocaleTimeString()}</p>
@@ -534,7 +534,7 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
                                 <button
                                     type="button"
                                     onClick={downloadCSV}
-                                    className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                                    className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-body transition hover:bg-slate-800"
                                 >
                                     <Download className="h-4 w-4" />
                                     Export CSV
@@ -574,8 +574,8 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
                                             onClick={() => setActiveTab(tab.id)}
                                             className={`inline-flex min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold transition lg:flex-none lg:px-4 ${
                                                 activeTab === tab.id
-                                                    ? 'bg-slate-800 text-white shadow-sm'
-                                                    : 'text-slate-400 hover:text-white'
+                                                    ? 'bg-slate-800 text-body shadow-sm'
+                                                    : 'text-slate-400 hover:text-body'
                                             }`}
                                         >
                                             <Icon className="h-4 w-4" />
@@ -931,7 +931,7 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
                                     || calendarPreview.personDays === 0
                                     || (calendarScope === 'selected' && calendarUserIds.length === 0)
                                 }
-                                className={`rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300 ${
+                                className={`rounded-lg px-4 py-2 text-sm font-semibold text-body disabled:cursor-not-allowed disabled:bg-slate-300 ${
                                     calendarOperation === 'clear'
                                         ? 'bg-rose-600 hover:bg-rose-700'
                                         : 'bg-blue-600 hover:bg-blue-700'
@@ -984,7 +984,7 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
                                         <thead className="bg-slate-900">
                                             <tr>
                                                 {['Date', 'Employee', 'Change', 'Changed by', 'Changed at', 'Reason'].map((heading) => (
-                                                    <th key={heading} className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase text-white">
+                                                    <th key={heading} className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase text-body">
                                                         {heading}
                                                     </th>
                                                 ))}

@@ -254,7 +254,7 @@ export default function Dashboard({ auth }) {
                         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                             <div>
                                 <p className="text-sm font-semibold text-orange-400">{getTimeBasedGreeting()}</p>
-                                <h1 className="mt-1 text-2xl font-bold text-white">{auth.user.name}</h1>
+                                <h1 className="mt-1 text-2xl font-bold text-body">{auth.user.name}</h1>
                                 <p className="mt-1 text-sm text-slate-400">Track today&apos;s work and review current team activity.</p>
                             </div>
 
@@ -264,7 +264,7 @@ export default function Dashboard({ auth }) {
                                     {currentStatus.label}
                                 </div>
                                 <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-right backdrop-blur">
-                                    <div className="text-lg font-bold text-white">
+                                    <div className="text-lg font-bold text-body">
                                         {currentTime.toLocaleTimeString('en-US', {
                                             timeZone: 'Asia/Karachi',
                                             hour: 'numeric',
@@ -287,7 +287,7 @@ export default function Dashboard({ auth }) {
                                             <Icon className={`h-5 w-5 ${metric.color}`} />
                                         </span>
                                         <div className="min-w-0">
-                                            <div className="text-xl font-bold text-white">{metric.value}</div>
+                                            <div className="text-xl font-bold text-body">{metric.value}</div>
                                             <div className="text-sm font-medium text-slate-200">{metric.label}</div>
                                             <div className="text-[11px] text-slate-400">{metric.sub}</div>
                                         </div>
@@ -300,7 +300,7 @@ export default function Dashboard({ auth }) {
                     <section className="rounded-lg border border-slate-800 bg-slate-900 shadow-sm">
                         <div className="flex flex-col gap-3 border-b border-slate-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <h2 className="text-base font-bold text-white">Time Tracking</h2>
+                                <h2 className="text-base font-bold text-body">Time Tracking</h2>
                                 <p className="text-sm text-slate-400">Last action: {actionLabel(todayStats.lastAction)}</p>
                             </div>
                             <div className="text-sm text-slate-400">Available actions follow your current status.</div>
@@ -336,7 +336,7 @@ export default function Dashboard({ auth }) {
                     <section className="rounded-lg border border-slate-800 bg-slate-900 shadow-sm">
                         <div className="flex flex-col gap-3 border-b border-slate-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <h2 className="text-base font-bold text-white">
+                                <h2 className="text-base font-bold text-body">
                                     {canViewTeam ? 'Team Activity Today' : 'Your Activity Today'}
                                 </h2>
                                 <p className="text-sm text-slate-400">Work, break, and attendance status.</p>
@@ -345,7 +345,7 @@ export default function Dashboard({ auth }) {
                                 {can('attendance.view') && (
                                     <Link
                                         href={route('employee-attendance.index')}
-                                        className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                                        className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-body"
                                     >
                                         Open Attendance
                                     </Link>
@@ -354,7 +354,7 @@ export default function Dashboard({ auth }) {
                                     <button
                                         type="button"
                                         onClick={downloadCSV}
-                                        className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+                                        className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-semibold text-body transition hover:bg-slate-700"
                                     >
                                         <Download className="h-4 w-4" />
                                         Export
@@ -366,7 +366,7 @@ export default function Dashboard({ auth }) {
                         {employeesData.length === 0 ? (
                             <div className="px-5 py-12 text-center">
                                 <UserRound className="mx-auto h-10 w-10 text-slate-600" />
-                                <h3 className="mt-3 font-semibold text-white">No activity recorded today</h3>
+                                <h3 className="mt-3 font-semibold text-body">No activity recorded today</h3>
                                 <p className="mt-1 text-sm text-slate-400">Time tracking activity will appear here.</p>
                             </div>
                         ) : (

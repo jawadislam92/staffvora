@@ -13,9 +13,9 @@ function Toast({ message, onClose, type = 'success' }) {
         : 'from-green-500/90 to-blue-500/90';
     
     return (
-        <div className={`fixed top-5 right-5 z-50 bg-gradient-to-r ${bgColor} backdrop-blur-xl text-white px-6 py-3 rounded-xl shadow-2xl flex items-center border border-slate-200`}>
+        <div className={`fixed top-5 right-5 z-50 bg-gradient-to-r ${bgColor} backdrop-blur-xl text-body px-6 py-3 rounded-xl shadow-2xl flex items-center border border-slate-200`}>
             <span className="font-medium">{message}</span>
-            <button onClick={onClose} className="ml-4 text-white hover:text-gray-300 font-bold text-lg">&times;</button>
+            <button onClick={onClose} className="ml-4 text-body hover:text-gray-300 font-bold text-lg">&times;</button>
         </div>
     );
 }
@@ -297,7 +297,7 @@ export default function ClientsList({ auth, clients, flash, filters = {}, workTy
                                         </label>
                                         <button
                                             onClick={downloadSample}
-                                            className="inline-flex items-center rounded-lg bg-slate-700 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                                            className="inline-flex items-center rounded-lg bg-slate-700 px-3 py-2 text-sm font-semibold text-body hover:bg-slate-800"
                                             title="Download sample CSV template"
                                         >
                                             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -362,13 +362,13 @@ export default function ClientsList({ auth, clients, flash, filters = {}, workTy
                                                     className="w-4 h-4 text-purple-600 bg-white/20 border-white/30 rounded focus:ring-purple-500 focus:ring-2"
                                                 />
                                             </th>}
-                                            <th className="w-16 px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">ID</th>
-                                            <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Name</th>
-                                            <th className="w-32 px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Work Type</th>
-                                            <th className="w-40 px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Upwork Profile</th>
-                                            <th className="w-48 px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Tags</th>
-                                            <th className="w-40 px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Weekly Hours Worked</th>
-                                            {canManage && <th className="w-40 px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider sticky right-0 bg-slate-950 border-l border-slate-800">Actions</th>}
+                                            <th className="w-16 px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider">ID</th>
+                                            <th className="px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider">Name</th>
+                                            <th className="w-32 px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider">Work Type</th>
+                                            <th className="w-40 px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider">Upwork Profile</th>
+                                            <th className="w-48 px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider">Tags</th>
+                                            <th className="w-40 px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider">Weekly Hours Worked</th>
+                                            {canManage && <th className="w-40 px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider sticky right-0 bg-slate-950 border-l border-slate-800">Actions</th>}
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-800">

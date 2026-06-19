@@ -117,6 +117,29 @@ teams, white-label branding, and per-org Slack.
 - **GDPR export** command (data portability); per-org **S3 object** cleanup on
   delete; expanded **audit logging**; **CI / staging / observability**.
 
+## Phase 5A — theming engine + sidebar redesign  ✅  (1374c15, + this commit)
+Goal: stop looking like the internal tracker. Distinct identity, switchable themes.
+- **Theme engine (5A.1)**: CSS-variable token sets for **Light / Dark / Black**,
+  switched by `data-theme` on `<html>`. Resolution = per-user `users.theme`
+  → workspace `organizations.default_theme` → dark, shared via Inertia and applied
+  with no flash (cookie read in `app.blade.php`). `ThemeController` + `/preferences/theme`
+  persists the per-user choice. Semantic Tailwind utilities (`bg-app`, `bg-surface`,
+  `text-body`, `text-muted`, `border-line`, `bg-accent`).
+- **Sidebar shell (5A.2)**: replaced the top-bar nav with a collapsible left
+  **sidebar** — logo + workspace **brand name** on top, grouped nav (Main /
+  Performance / Management / System / Platform), per-user theme switcher + user
+  menu in the footer, mobile off-canvas drawer. Collapse state remembered.
+- **Re-theme all 40 pages without 2000 hand-edits**: the pages were built against
+  one dark palette using Tailwind `slate-*`/`gray-*` directly. Remapped those two
+  scales to per-theme CSS vars (channel triples, so `/opacity` still works) in
+  `tailwind.config.js` + `app.css`. **Dark = the exact stock values → renders
+  identically to before**; Light/Black remap automatically. The only thing that
+  can't (must stay white on coloured buttons) — `text-white` on surfaces — was
+  converted to `text-body` with a line-aware pass (94 converted, 55 kept on
+  coloured buttons). 138 tests green; build verified (remap + opacity forms emit).
+- Pending in this area (later batches): deeper per-page redesign of tables/cards,
+  branding propagation everywhere (5C), and the WCAG/visual audit on live (5I).
+
 ## How to operate (quick reference)
 - Create a tenant by hand: `php artisan tenant:create "Acme" owner@acme.com`
 - Make yourself the platform admin: `php artisan platform:grant you@email.com`

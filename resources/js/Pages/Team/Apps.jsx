@@ -23,7 +23,7 @@ function UsageTable({ title, icon: Icon, rows, emptyLabel }) {
         <div className="overflow-hidden rounded-lg border border-slate-800">
             <div className="flex items-center gap-2 border-b border-slate-800 bg-slate-950 px-4 py-2.5">
                 <Icon className="h-4 w-4 text-slate-500" />
-                <h2 className="text-sm font-semibold text-white">{title}</h2>
+                <h2 className="text-sm font-semibold text-body">{title}</h2>
             </div>
             {rows.length === 0 ? (
                 <p className="px-4 py-8 text-center text-sm text-slate-400">{emptyLabel}</p>
@@ -66,7 +66,7 @@ export default function TeamApps({ auth, range, start, end, userId, users, apps,
                         <div className="flex items-center gap-1">
                             <Link
                                 href={route('team.index')}
-                                className="rounded-md px-3 py-1.5 text-sm text-slate-300 transition hover:bg-white/10 hover:text-white"
+                                className="rounded-md px-3 py-1.5 text-sm text-slate-300 transition hover:bg-white/10 hover:text-body"
                             >
                                 Members
                             </Link>
