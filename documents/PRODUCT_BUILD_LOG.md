@@ -140,6 +140,27 @@ Goal: stop looking like the internal tracker. Distinct identity, switchable them
 - Pending in this area (later batches): deeper per-page redesign of tables/cards,
   branding propagation everywhere (5C), and the WCAG/visual audit on live (5I).
 
+## Phase 5B — plan entitlements + platform control  ✅  (26221d8, e6e41dc, 377ef6e)
+Default-deny control so "no one abuses our system". Deployed; prod plans backfilled.
+- **Entitlements engine** (`App\Tenancy\Entitlements`): one registry of every gated
+  capability with a kind (flag / max-cap / min-floor) + a deny default. Plans hold
+  an `entitlements` map (platform-editable); `Organization::entitlement()` resolves
+  per-tenant-override → plan → deny (override can raise OR lower; null cap = unlimited).
+- **Server enforcement** in SettingsController — rejects over-cap screenshots,
+  sub-floor auto-pause, and gated flags with an inline upgrade reason (not just UI).
+- **Platform control center**: plan editor (`/platform/plans`) + per-tenant panel
+  on `/platform/{org}` (override any entitlement, switch plan, custom price).
+- **Settings UI**: gated sections show a lock + "View plans"; screenshot options
+  capped to plan; auto-pause floor shown. Caps: Free 6/hr·10-min · Starter 12·5 ·
+  Pro 30·1 +AI/white-label · Enterprise 60·1·unlimited seats. +28 tests.
+
+## Phase 5D — Developer console = platform-only (SECURITY)  ✅  (0dbaebf)
+- Was `isSuperAdmin`-gated → every tenant owner could edit platform-wide `.env`
+  (Slack/Anthropic/S3). Now `isPlatformAdmin` + `platform` middleware; tenant owners 403.
+- Logo upload moved out of the developer prefix to `settings.branding.logo` (tenant
+  keeps it). Per-integration save buttons (Slack/bot/AI/S3 save independently).
+  Branding card removed from Developer. Developer + Plans now in the platform nav group.
+
 ## How to operate (quick reference)
 - Create a tenant by hand: `php artisan tenant:create "Acme" owner@acme.com`
 - Make yourself the platform admin: `php artisan platform:grant you@email.com`
