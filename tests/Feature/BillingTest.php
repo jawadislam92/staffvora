@@ -43,8 +43,11 @@ class BillingTest extends TestCase
 
         $org->refresh();
         $this->assertSame(3, $org->seatLimit());
-        $this->assertFalse($org->planFeature('monitoring'));
+        // Free now includes capped monitoring (6 shots/hr), but not the paid flags.
+        $this->assertTrue($org->planFeature('monitoring'));
+        $this->assertSame(6, $org->entitlement('max_screenshots_per_hour'));
         $this->assertFalse($org->planFeature('ai'));
+        $this->assertFalse($org->planFeature('activity_tracking'));
     }
 
     public function test_seat_limit_blocks_adding_users_beyond_the_plan(): void

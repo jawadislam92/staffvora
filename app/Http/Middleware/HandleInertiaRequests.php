@@ -147,6 +147,18 @@ class HandleInertiaRequests extends Middleware
         $theme = $user?->theme ?: ($branding['default_theme'] ?? 'dark');
         $theme = in_array($theme, ['light', 'dark', 'black'], true) ? $theme : 'dark';
 
+        // Effective entitlements (plan merged with platform per-tenant overrides),
+        // so the UI can lock controls/nav beyond the plan. The server enforces
+        // these independently — this is only for showing the locks.
+        $entitlements = null;
+        if ($user && $orgId) {
+            try {
+                $entitlements = Cache::remember('entitlements.shared.'.$orgId, 60, fn () => Organization::find($orgId)?->entitlements());
+            } catch (\Throwable $e) {
+                $entitlements = null;
+            }
+        }
+
         return [
             ...parent::share($request),
             'auth' => [
@@ -157,6 +169,7 @@ class HandleInertiaRequests extends Middleware
             'display' => $display,
             'branding' => $branding,
             'theme' => $theme,
+            'entitlements' => $entitlements,
             'flash' => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),

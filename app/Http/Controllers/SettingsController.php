@@ -10,6 +10,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -81,6 +82,13 @@ class SettingsController extends Controller
             'slack_attendance_channel' => ['nullable', 'string', 'max:100'],
         ]);
 
+        // Default-deny gating: a tenant can never save a setting beyond what its
+        // plan (or a platform per-tenant override) grants. Enforced here on the
+        // server, not just hidden in the UI, so the system can't be abused.
+        if ($org = $request->user()->organization) {
+            $this->enforceEntitlements($org, $data);
+        }
+
         $team = MonitoringSetting::current();
 
         // Keep the desktop's min/max seconds in sync with screenshots_per_hour
@@ -118,6 +126,16 @@ class SettingsController extends Controller
             'slack_bot_token' => ['nullable', 'string', 'max:255'],
             'disconnect' => ['nullable', 'boolean'],
         ]);
+
+        // Connecting your own Slack bot is an integrations feature — gate it.
+        if (filled($data['slack_bot_token'] ?? null) && empty($data['disconnect'])) {
+            $org = $request->user()->organization;
+            if ($org && ! $org->can('integrations')) {
+                throw ValidationException::withMessages([
+                    'slack_bot_token' => 'Connecting your own Slack bot is not included in your plan.',
+                ]);
+            }
+        }
 
         $team = MonitoringSetting::current();
 
@@ -187,6 +205,52 @@ class SettingsController extends Controller
         }
 
         return back()->with('success', 'Individual setting updated.');
+    }
+
+    /**
+     * Reject any team setting that exceeds the org's effective entitlements
+     * (plan defaults merged with platform per-tenant overrides). Throws a
+     * ValidationException keyed by field so the form shows an inline
+     * "upgrade to unlock" reason.
+     */
+    private function enforceEntitlements(\App\Models\Organization $org, array $data): void
+    {
+        $errors = [];
+
+        // Screenshot monitoring: the feature itself, then the per-hour ceiling.
+        if (! $org->can('monitoring')) {
+            if (($data['capture_enabled'] ?? false) || (int) ($data['screenshots_per_hour'] ?? 0) > 0) {
+                $errors['screenshots_per_hour'] = 'Screenshot monitoring is not included in your plan.';
+            }
+        } elseif (! $org->entitlementAllows('max_screenshots_per_hour', (int) ($data['screenshots_per_hour'] ?? 0))) {
+            $max = $org->entitlement('max_screenshots_per_hour');
+            $errors['screenshots_per_hour'] = "Your plan allows up to {$max} screenshots per hour. Upgrade to increase the rate.";
+        }
+
+        // Auto-pause floor: lower minutes = more aggressive; plans set a floor.
+        $pause = (int) ($data['auto_pause_minutes'] ?? 0);
+        if ($pause > 0 && ! $org->entitlementAllows('min_auto_pause_minutes', $pause)) {
+            $min = $org->entitlement('min_auto_pause_minutes');
+            $errors['auto_pause_minutes'] = "Your plan's minimum auto-pause is {$min} minutes. Upgrade for a tighter idle limit.";
+        }
+
+        // Feature flags.
+        if (($data['activity_tracking_enabled'] ?? false) && ! $org->can('activity_tracking')) {
+            $errors['activity_tracking_enabled'] = 'Activity tracking is not included in your plan.';
+        }
+        if (($data['app_url_tracking_enabled'] ?? false) && ! $org->can('app_url_tracking')) {
+            $errors['app_url_tracking_enabled'] = 'App & URL tracking is not included in your plan.';
+        }
+        if (! empty($data['weekly_time_limit_hours']) && ! $org->can('weekly_limit')) {
+            $errors['weekly_time_limit_hours'] = 'Weekly time limits are not included in your plan.';
+        }
+        if ((($data['slack_clockin_enabled'] ?? false) || ($data['slack_clockout_enabled'] ?? false)) && ! $org->can('attendance_alerts')) {
+            $errors['slack_clockin_enabled'] = 'Attendance Slack alerts are not included in your plan.';
+        }
+
+        if ($errors) {
+            throw ValidationException::withMessages($errors);
+        }
     }
 
     private function flagFieldFor(string $category): string

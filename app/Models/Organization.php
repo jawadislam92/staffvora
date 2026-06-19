@@ -36,10 +36,14 @@ class Organization extends Model
         'default_theme',
         'parent_org_id',
         'trial_ends_at',
+        'entitlement_overrides',
+        'custom_price_cents',
     ];
 
     protected $casts = [
         'trial_ends_at' => 'datetime',
+        'entitlement_overrides' => 'array',
+        'custom_price_cents' => 'integer',
     ];
 
     /** The "main person" who owns this account. */
@@ -86,16 +90,61 @@ class Organization extends Model
         return $this->subscription?->plan;
     }
 
-    /** Whether this org's plan includes a feature flag (defaults to false). */
-    public function planFeature(string $key): bool
+    /**
+     * The EFFECTIVE value for an entitlement: the platform's per-tenant override
+     * wins (it may raise or lower the plan value); otherwise the plan value;
+     * otherwise the registry default, which is deny. This is the one place all
+     * gating resolves through — a tenant can never exceed what's granted here.
+     */
+    public function entitlement(string $key): int|bool|null
     {
-        return (bool) ($this->activePlan()?->feature($key, false));
+        $plan = $this->activePlan();
+        $override = data_get($this->entitlement_overrides, $key);
+
+        return \App\Tenancy\Entitlements::resolve($key, $plan !== null, $plan?->entitlement($key), $override);
     }
 
-    /** Seat limit from the current plan, or null for unlimited. */
+    /** Convenience for boolean (flag) entitlements. */
+    public function can(string $key): bool
+    {
+        return (bool) $this->entitlement($key);
+    }
+
+    /** The full resolved entitlement map (for sharing to the UI / platform). */
+    public function entitlements(): array
+    {
+        $out = [];
+        foreach (\App\Tenancy\Entitlements::keys() as $key) {
+            $out[$key] = $this->entitlement($key);
+        }
+
+        return $out;
+    }
+
+    /** Whether a tenant's requested integer setting is within its entitlement. */
+    public function entitlementAllows(string $key, int $requested): bool
+    {
+        return \App\Tenancy\Entitlements::allowsValue($key, $requested, $this->entitlement($key));
+    }
+
+    /** @deprecated use can(); kept for old call sites. */
+    public function planFeature(string $key): bool
+    {
+        return $this->can($key);
+    }
+
+    /** Seat limit — effective max_users (override → plan), null = unlimited. */
     public function seatLimit(): ?int
     {
-        return $this->activePlan()?->max_users;
+        $value = $this->entitlement('max_users');
+
+        return $value === null ? null : (int) $value;
+    }
+
+    /** The price this tenant actually pays: a negotiated custom price wins. */
+    public function priceCents(): ?int
+    {
+        return $this->custom_price_cents ?? $this->activePlan()?->price_cents;
     }
 
     /** The display/white-label name, falling back to the legal name. */
