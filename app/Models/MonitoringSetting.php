@@ -100,14 +100,19 @@ class MonitoringSetting extends Model
 
     public static function current(): self
     {
-        // One settings row per organization. Cached per org for the lifetime
-        // of the process/request: weekStartDay()/weekEndDay() are called inside
-        // loops all over the dashboard/report code, and each current() call was
-        // otherwise a separate firstOrCreate query.
+        // One settings row per organization, memoized per org in the container
+        // (NOT a function `static`, which would leak across requests/tests and
+        // across orgs in a long-lived worker). The container is fresh per
+        // request/test, and persists across the tenant:run loop where each org
+        // has its own key — so this stays correct everywhere.
         $orgId = app(CurrentOrganization::class)->id();
-        static $cache = [];
+        $key = 'monitoring_settings.current.'.($orgId ?? 0);
 
-        return $cache[$orgId ?? 0] ??= static::firstOrCreate(
+        if (app()->bound($key)) {
+            return app($key);
+        }
+
+        $row = static::firstOrCreate(
             ['organization_id' => $orgId],
             [
                 'screenshots_per_hour' => 6,
@@ -136,6 +141,10 @@ class MonitoringSetting extends Model
                 'slack_attendance_channel' => null,
             ]
         );
+
+        app()->instance($key, $row);
+
+        return $row;
     }
 
     /**

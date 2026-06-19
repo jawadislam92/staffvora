@@ -178,6 +178,15 @@ class UserController extends Controller
 
         $validated = $request->validate($rules);
 
+        // Enforce the plan's seat limit (null = unlimited). Counts only this
+        // org's users via the global scope.
+        $seatLimit = $request->user()->organization?->seatLimit();
+        if ($seatLimit !== null && User::count() >= $seatLimit) {
+            throw ValidationException::withMessages([
+                'email' => "Your plan includes up to {$seatLimit} users. Upgrade your plan to add more.",
+            ]);
+        }
+
         $avatarPath = null;
         if ($request->hasFile('avatar')) {
             $avatarPath = $request->file('avatar')->store('avatars', 'avatars');

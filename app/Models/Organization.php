@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Models\Scopes\OrganizationScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * A tenant. Every customer account is one Organization; all tenant-owned
@@ -59,6 +61,40 @@ class Organization extends Model
     public function teams(): HasMany
     {
         return $this->hasMany(Team::class);
+    }
+
+    /**
+     * The org's current subscription. The child models are org-scoped, so the
+     * relation explicitly drops that scope — the FK already constrains it to
+     * this org, and this lets the platform admin read any org's subscription.
+     */
+    public function subscription(): HasOne
+    {
+        return $this->hasOne(Subscription::class)
+            ->withoutGlobalScope(OrganizationScope::class)
+            ->latestOfMany();
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class)->withoutGlobalScope(OrganizationScope::class);
+    }
+
+    public function activePlan(): ?Plan
+    {
+        return $this->subscription?->plan;
+    }
+
+    /** Whether this org's plan includes a feature flag (defaults to false). */
+    public function planFeature(string $key): bool
+    {
+        return (bool) ($this->activePlan()?->feature($key, false));
+    }
+
+    /** Seat limit from the current plan, or null for unlimited. */
+    public function seatLimit(): ?int
+    {
+        return $this->activePlan()?->max_users;
     }
 
     /** The display/white-label name, falling back to the legal name. */

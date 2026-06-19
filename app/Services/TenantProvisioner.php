@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\MonitoringSetting;
 use App\Models\Organization;
+use App\Models\Plan;
+use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\User;
 use App\Tenancy\CurrentOrganization;
@@ -55,6 +57,17 @@ class TenantProvisioner
             $org->forceFill(['owner_user_id' => $owner->id])->save();
             Team::create(['name' => 'General']);
             MonitoringSetting::current(); // materialise the org's settings row
+
+            // Start everyone on a full-featured Pro trial.
+            Plan::ensureSeeded();
+            $trialPlan = Plan::where('key', 'pro')->first() ?? Plan::orderBy('sort')->first();
+            if ($trialPlan) {
+                Subscription::create([
+                    'plan_id' => $trialPlan->id,
+                    'status' => 'trialing',
+                    'trial_ends_at' => $org->trial_ends_at,
+                ]);
+            }
 
             return $owner;
         });
