@@ -97,6 +97,15 @@ class DeveloperController extends Controller
         $this->authorizeDeveloper($request);
 
         $schema = $this->envSchema();
+
+        // Optional `group` scopes the save to one integration so each section
+        // has its own save button and can't clobber another's fields.
+        $only = (string) $request->input('group', '');
+        if ($only !== '') {
+            abort_unless(isset($schema[$only]), 422, 'Unknown integration group.');
+            $schema = [$only => $schema[$only]];
+        }
+
         $managed = [];
         $secretKeys = [];
         foreach ($schema as $group) {
@@ -323,7 +332,11 @@ class DeveloperController extends Controller
 
     private function authorizeDeveloper(Request $request): void
     {
-        abort_unless($request->user()?->isSuperAdmin(), 403, 'Developer tools are restricted to Super Admins.');
+        // PLATFORM admins only — this page edits platform-wide .env secrets
+        // (Slack / Anthropic / S3) shared across every tenant. A tenant owner
+        // (who is a super_admin of their own org) must never reach it. The route
+        // also carries the `platform` middleware; this is defence in depth.
+        abort_unless($request->user()?->isPlatformAdmin(), 403, 'Developer tools are restricted to the platform operator.');
     }
 
     /** @return array<string, mixed> */

@@ -7,7 +7,6 @@ import {
     CheckCircle2,
     Database,
     FileText,
-    Image as ImageIcon,
     KeyRound,
     Play,
     RefreshCw,
@@ -96,26 +95,12 @@ function buildEnvDraft(groups) {
 
 export default function DeveloperIndex({ auth, system, health, schedule, envGroups, lastOutput, lastAction }) {
     const flash = usePage().props.flash || {};
-    const branding = usePage().props.branding || {};
     const [busy, setBusy] = useState(false);
     const [logLines, setLogLines] = useState([]);
     const [logFile, setLogFile] = useState(null);
     const [logsLoading, setLogsLoading] = useState(false);
     const [envDraft, setEnvDraft] = useState(() => buildEnvDraft(envGroups));
-    const [savingEnv, setSavingEnv] = useState(false);
-    const [logoFile, setLogoFile] = useState(null);
-    const [uploadingLogo, setUploadingLogo] = useState(false);
-
-    const uploadLogo = () => {
-        if (!logoFile) return;
-        setUploadingLogo(true);
-        router.post(route('developer.branding.update'), { logo: logoFile }, {
-            forceFormData: true,
-            preserveScroll: true,
-            onSuccess: () => setLogoFile(null),
-            onFinish: () => setUploadingLogo(false),
-        });
-    };
+    const [savingGroup, setSavingGroup] = useState(null);
 
     const runAction = (action, confirmText) => {
         if (confirmText && !confirm(confirmText)) return;
@@ -128,19 +113,20 @@ export default function DeveloperIndex({ auth, system, health, schedule, envGrou
 
     const setEnvField = (key, value) => setEnvDraft((d) => ({ ...d, [key]: value }));
 
-    const saveEnv = () => {
-        setSavingEnv(true);
-        router.put(route('developer.env.update'), { values: envDraft }, {
+    // Each integration saves on its own, sending only its fields + a `group`
+    // marker so it can't clobber the others.
+    const saveEnvGroup = (group) => {
+        setSavingGroup(group.key);
+        const values = {};
+        group.fields.forEach((f) => { values[f.key] = envDraft[f.key]; });
+        router.put(route('developer.env.update'), { values, group: group.key }, {
             preserveScroll: true,
             onSuccess: () => setEnvDraft((d) => {
-                // clear secret fields after a successful save so they show "set"
                 const next = { ...d };
-                (envGroups || []).forEach((g) => g.fields.forEach((f) => {
-                    if (f.type === 'secret') next[f.key] = '';
-                }));
+                group.fields.forEach((f) => { if (f.type === 'secret') next[f.key] = ''; });
                 return next;
             }),
-            onFinish: () => setSavingEnv(false),
+            onFinish: () => setSavingGroup(null),
         });
     };
 
@@ -299,7 +285,7 @@ export default function DeveloperIndex({ auth, system, health, schedule, envGrou
                     </p>
                     <div className="grid gap-5 lg:grid-cols-2">
                         {(envGroups || []).map((group) => (
-                            <div key={group.key} className="rounded-lg border border-slate-200 p-4">
+                            <div key={group.key} className="flex flex-col rounded-lg border border-slate-200 p-4">
                                 <h3 className="mb-3 text-sm font-semibold text-slate-900">{group.label}</h3>
                                 <div className="space-y-3">
                                     {group.fields.map((field) => (
@@ -346,55 +332,19 @@ export default function DeveloperIndex({ auth, system, health, schedule, envGrou
                                         </div>
                                     ))}
                                 </div>
+                                <button
+                                    type="button"
+                                    onClick={() => saveEnvGroup(group)}
+                                    disabled={savingGroup === group.key}
+                                    className="mt-4 inline-flex items-center gap-2 self-start rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                                >
+                                    <KeyRound className="h-3.5 w-3.5" />
+                                    {savingGroup === group.key ? 'Saving…' : `Save ${group.label.split('(')[0].trim()}`}
+                                </button>
                             </div>
                         ))}
                     </div>
-                    <div className="mt-4 flex items-center gap-3">
-                        <button
-                            type="button"
-                            onClick={saveEnv}
-                            disabled={savingEnv}
-                            className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-body transition hover:bg-slate-800 disabled:opacity-60"
-                        >
-                            <KeyRound className="h-4 w-4" />
-                            {savingEnv ? 'Saving…' : 'Save credentials'}
-                        </button>
-                        <span className="text-xs text-slate-400">After saving, use “Test screenshot storage” / “Test Slack webhook” above to verify.</span>
-                    </div>
-                </Card>
-
-                <Card title="Branding" icon={ImageIcon}>
-                    <div className="flex flex-wrap items-center gap-5">
-                        <div className="flex h-20 w-20 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 p-2">
-                            <img
-                                src={branding?.logo_url || '/images/sparking-asia-logo.png?v=2'}
-                                alt="Current logo"
-                                className="max-h-full max-w-full object-contain"
-                            />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <p className="mb-2 text-xs text-slate-500">
-                                App logo shown in the navigation, login, and welcome pages. Stored on S3 so
-                                deploys can't wipe it. PNG/JPG/WebP, max 1&nbsp;MB — a square image works best.
-                            </p>
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="file"
-                                    accept="image/png,image/jpeg,image/webp"
-                                    onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
-                                    className="text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-200"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={uploadLogo}
-                                    disabled={!logoFile || uploadingLogo}
-                                    className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-slate-800 disabled:opacity-50"
-                                >
-                                    {uploadingLogo ? 'Uploading…' : 'Upload logo'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                    <p className="mt-4 text-xs text-slate-400">Each integration saves on its own. After saving, use “Test screenshot storage” / “Test Slack webhook” above to verify.</p>
                 </Card>
 
                 <Card title={`Logs ${logFile ? `— ${logFile}` : ''}`} icon={AlertTriangle}>

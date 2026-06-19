@@ -192,14 +192,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('permission:reports.send_slack')
         ->name('team.slack-digest');
 
-    // Developer / system panel. Authorisation is enforced inside the
-    // controller (Super Admin only); no grantable permission on purpose.
-    Route::prefix('developer')->group(function () {
+    // Developer / system panel. PLATFORM operator only — it edits platform-wide
+    // .env secrets shared across every tenant, so it's gated by the `platform`
+    // middleware (and re-checked in the controller). A tenant owner cannot reach it.
+    Route::prefix('developer')->middleware('platform')->group(function () {
         Route::get('/', [DeveloperController::class, 'index'])->name('developer.index');
         Route::post('/run', [DeveloperController::class, 'run'])->name('developer.run');
         Route::put('/env', [DeveloperController::class, 'updateEnv'])->name('developer.env.update');
         Route::get('/logs', [DeveloperController::class, 'logs'])->name('developer.logs');
-        Route::post('/branding', [BrandingController::class, 'update'])->name('developer.branding.update');
     });
 
     // Tracking / monitoring settings (scrin.io-style). Super Admin only by
@@ -209,10 +209,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/team', [SettingsController::class, 'updateTeam'])->name('settings.team.update');
         Route::put('/users/{user}', [SettingsController::class, 'updateUser'])->name('settings.user.update');
 
-        // White-label branding (workspace name + accent colour). Logo upload
-        // reuses the developer.branding.update endpoint above.
+        // White-label branding: name + accent (saveBranding) and the logo upload
+        // (update). These belong to the tenant, so they live here — gated by the
+        // tenant's monitoring.settings permission, NOT the platform gate.
         Route::get('/branding', [BrandingController::class, 'edit'])->name('settings.branding');
         Route::put('/branding', [BrandingController::class, 'saveBranding'])->name('settings.branding.save');
+        Route::post('/branding/logo', [BrandingController::class, 'update'])->name('settings.branding.logo');
 
         // Per-org Slack connection (write-only bot token).
         Route::put('/slack', [SettingsController::class, 'updateSlack'])->name('settings.slack.update');

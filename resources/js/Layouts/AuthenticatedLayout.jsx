@@ -147,12 +147,14 @@ export default function Authenticated({ user, header, children }) {
         can('monitoring.settings') && { label: 'Settings', href: route('settings.index'), icon: SettingsIcon, active: ['settings.index'] },
         can('monitoring.settings') && { label: 'Branding', href: route('settings.branding'), icon: Palette, active: ['settings.branding'] },
         user?.is_super_admin && { label: 'Billing', href: route('billing.index'), icon: CreditCard, active: ['billing.index'] },
-        user?.is_super_admin && { label: 'Developer', href: route('developer.index'), icon: Wrench, active: ['developer.index'] },
     ].filter(Boolean), [user?.is_super_admin, user?.permissions]);
 
-    // Platform (landlord) console — only for us.
+    // Platform (landlord) console — only for us. Developer lives here now: it
+    // edits platform-wide .env secrets, so it must never be a tenant tool.
     const platformItems = useMemo(() => [
         user?.is_platform_admin && { label: 'Platform', href: route('platform.index'), icon: Building2, active: ['platform.index', 'platform.show'] },
+        user?.is_platform_admin && { label: 'Plans', href: route('platform.plans'), icon: CreditCard, active: ['platform.plans'] },
+        user?.is_platform_admin && { label: 'Developer', href: route('developer.index'), icon: Wrench, active: ['developer.index'] },
     ].filter(Boolean), [user?.is_platform_admin]);
 
     const closeMobile = () => setMobileOpen(false);

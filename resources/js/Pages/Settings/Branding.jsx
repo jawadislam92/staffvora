@@ -23,7 +23,7 @@ export default function Branding({ auth, branding, canManage }) {
         if (!file) return;
         setLogoPreview(URL.createObjectURL(file));
         setUploading(true);
-        router.post(route('developer.branding.update'), { logo: file }, {
+        router.post(route('settings.branding.logo'), { logo: file }, {
             forceFormData: true,
             preserveScroll: true,
             onFinish: () => setUploading(false),

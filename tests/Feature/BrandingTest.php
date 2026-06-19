@@ -20,7 +20,7 @@ class BrandingTest extends TestCase
 
         $this->actingAs($admin)
             ->from('/developer')
-            ->post(route('developer.branding.update'), [
+            ->post(route('settings.branding.logo'), [
                 'logo' => UploadedFile::fake()->image('logo.png', 256, 256),
             ])
             ->assertRedirect('/developer')
@@ -41,7 +41,7 @@ class BrandingTest extends TestCase
         $member = User::factory()->create(['role' => 'member', 'permissions' => []]);
 
         $this->actingAs($member)
-            ->post(route('developer.branding.update'), [
+            ->post(route('settings.branding.logo'), [
                 'logo' => UploadedFile::fake()->image('logo.png'),
             ])
             ->assertForbidden();
