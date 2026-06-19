@@ -13,18 +13,20 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // \App\Models\User::factory(10)->create();
-
-        // \App\Models\User::factory()->create([
-        //     'name' => 'Test User',
-        //     'email' => 'test@example.com',
-        // ]);
+        // Product default: seed ONLY the global plan catalogue. Tenants get their
+        // own owner, settings and default team from TenantProvisioner (signup /
+        // tenant:create), so a fresh product install must not create any org-less
+        // users or internal Sparking-Asia clients/profiles.
         $this->call([
             PlanSeeder::class,
-            AdminUserSeeder::class,
-            UpworkProfileSeeder::class,
-            ClientSeeder::class,
-            MonitoringSeeder::class,
         ]);
+
+        // Internal-only seeders stay runnable on purpose, but only when asked for
+        // explicitly — never on a fresh product install:
+        //   php artisan db:seed --class=AdminUserSeeder      (env-gated admin)
+        //   php artisan db:seed --class=ClientSeeder         (Sparking Asia clients)
+        //   php artisan db:seed --class=UpworkProfileSeeder  (Sparking Asia profiles)
+        //   php artisan db:seed --class=MonitoringSeeder     (global settings row)
+        //   php artisan db:seed --class=DemoDataSeeder       (demo tenant data)
     }
 }
