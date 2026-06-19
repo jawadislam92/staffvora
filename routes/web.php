@@ -240,10 +240,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
 // Platform (landlord) console — the SaaS operator, across every tenant.
 Route::middleware(['auth', 'verified', 'platform'])->prefix('platform')->group(function () {
     Route::get('/', [PlatformController::class, 'index'])->name('platform.index');
+    // Plan editor — declared before the /{organization} wildcard so "plans"
+    // isn't treated as a tenant slug.
+    Route::get('/plans', [PlatformController::class, 'plans'])->name('platform.plans');
+    Route::put('/plans/{plan}', [PlatformController::class, 'updatePlan'])->name('platform.plans.update');
     Route::get('/{organization}', [PlatformController::class, 'show'])->name('platform.show');
     Route::post('/{organization}/suspend', [PlatformController::class, 'suspend'])->name('platform.suspend');
     Route::post('/{organization}/resume', [PlatformController::class, 'resume'])->name('platform.resume');
     Route::post('/{organization}/payment', [PlatformController::class, 'recordPayment'])->name('platform.payment');
+    Route::put('/{organization}/entitlements', [PlatformController::class, 'updateTenant'])->name('platform.tenant.update');
     Route::post('/{organization}/impersonate', [PlatformController::class, 'impersonate'])->name('platform.impersonate');
 });
 

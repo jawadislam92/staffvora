@@ -32,6 +32,12 @@ export default function PlatformIndex({ auth, organizations, stats }) {
             <Head title="Platform" />
             <div className="min-h-screen bg-slate-950">
                 <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm text-muted">Every tenant, their plan, seats and subscription. Open a tenant to grant per-customer exceptions.</p>
+                        <Link href={route('platform.plans')} className="shrink-0 rounded-md border border-line px-3 py-1.5 text-sm font-semibold text-body hover:bg-surface-2">
+                            Edit plans &amp; pricing
+                        </Link>
+                    </div>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         <Stat label="Tenants" value={stats.tenants} />
                         <Stat label="Active" value={stats.active} />

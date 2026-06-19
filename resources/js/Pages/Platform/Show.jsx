@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 
 const money = (cents, currency) => new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format((cents || 0) / 100);
 
-export default function PlatformShow({ auth, organization, subscription, plans, payments }) {
+export default function PlatformShow({ auth, organization, subscription, plans, payments, entitlements }) {
     const form = useForm({ amount: '', currency: 'USD', months: 1, plan: subscription?.plan_key || '', reference: '' });
 
     const record = (e) => {
@@ -84,6 +84,10 @@ export default function PlatformShow({ auth, organization, subscription, plans, 
                         </button>
                     </form>
 
+                    {entitlements && (
+                        <TenantControls organization={organization} plans={plans} entitlements={entitlements} />
+                    )}
+
                     {payments.length > 0 && (
                         <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900 divide-y divide-slate-800 text-sm">
                             {payments.map((p, i) => (
@@ -97,5 +101,108 @@ export default function PlatformShow({ auth, organization, subscription, plans, 
                 </div>
             </div>
         </AuthenticatedLayout>
+    );
+}
+
+// Human-readable plan default for an entitlement (the value shown as "Inherit").
+const fmtDefault = (registry, key, planDefaults) => {
+    const def = registry[key];
+    const v = planDefaults[key];
+    if (def.kind === 'flag') return v ? 'On' : 'Off';
+    if (v === null || v === undefined) return 'Unlimited';
+    return `${v}${def.unit ? ' ' + def.unit : ''}`;
+};
+
+const normOverride = (raw) =>
+    raw === undefined || raw === null ? '' : raw === true ? '1' : raw === false ? '0' : String(raw);
+
+/**
+ * Per-tenant control: override any entitlement (blank = inherit the plan),
+ * switch plan, and set a negotiated custom price — for this one customer only.
+ */
+function TenantControls({ organization, plans, entitlements }) {
+    const { registry, plan_defaults: planDefaults } = entitlements;
+
+    const initOverrides = {};
+    Object.keys(registry).forEach((k) => { initOverrides[k] = normOverride(entitlements.overrides?.[k]); });
+
+    const form = useForm({
+        overrides: initOverrides,
+        custom_price_cents: entitlements.custom_price_cents ?? '',
+        plan: '',
+    });
+
+    const setOv = (key, value) => form.setData('overrides', { ...form.data.overrides, [key]: value });
+
+    const save = (e) => {
+        e.preventDefault();
+        form
+            .transform((data) => ({ ...data, custom_price_cents: data.custom_price_cents === '' ? null : Number(data.custom_price_cents) }))
+            .put(route('platform.tenant.update', organization.id), { preserveScroll: true });
+    };
+
+    const groups = {};
+    Object.entries(registry).forEach(([k, def]) => { (groups[def.group] ||= []).push(k); });
+
+    return (
+        <form onSubmit={save} className="rounded-lg border border-line bg-surface p-5">
+            <h3 className="font-semibold text-body">Tenant controls</h3>
+            <p className="mt-1 text-xs text-muted">
+                Grant or limit this one customer beyond their plan — the &ldquo;contact us for a bit more&rdquo; case. Blank = inherit the plan. The server enforces every value.
+            </p>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="text-xs text-muted">Custom price (cents / month)
+                    <input
+                        type="number" min="0"
+                        value={form.data.custom_price_cents}
+                        onChange={(e) => form.setData('custom_price_cents', e.target.value)}
+                        placeholder="inherit plan price"
+                        className="mt-1 w-full rounded-md border-line bg-app text-sm text-body"
+                    />
+                </label>
+                <label className="text-xs text-muted">Switch plan
+                    <select value={form.data.plan} onChange={(e) => form.setData('plan', e.target.value)} className="mt-1 w-full rounded-md border-line bg-app text-sm text-body">
+                        <option value="">Keep current</option>
+                        {plans.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
+                    </select>
+                </label>
+            </div>
+
+            {Object.entries(groups).map(([group, keys]) => (
+                <div key={group} className="mt-4">
+                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-subtle">{group}</div>
+                    <div className="space-y-1.5">
+                        {keys.map((key) => {
+                            const def = registry[key];
+                            return (
+                                <div key={key} className="flex items-center justify-between gap-3">
+                                    <span className="text-sm text-body" title={def.help}>{def.label}</span>
+                                    {def.kind === 'flag' ? (
+                                        <select value={form.data.overrides[key]} onChange={(e) => setOv(key, e.target.value)} className="w-40 rounded-md border-line bg-app text-sm text-body">
+                                            <option value="">Inherit ({fmtDefault(registry, key, planDefaults)})</option>
+                                            <option value="1">On</option>
+                                            <option value="0">Off</option>
+                                        </select>
+                                    ) : (
+                                        <input
+                                            type="number" min="0"
+                                            value={form.data.overrides[key]}
+                                            onChange={(e) => setOv(key, e.target.value)}
+                                            placeholder={`Inherit (${fmtDefault(registry, key, planDefaults)})`}
+                                            className="w-40 rounded-md border-line bg-app text-right text-sm text-body"
+                                        />
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            ))}
+
+            <button type="submit" disabled={form.processing} className="mt-4 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50">
+                {form.recentlySuccessful ? 'Saved' : form.processing ? 'Saving…' : 'Save controls'}
+            </button>
+        </form>
     );
 }
