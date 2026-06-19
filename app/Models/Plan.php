@@ -39,6 +39,17 @@ class Plan extends Model
         return data_get($this->entitlements, $key, Entitlements::default($key));
     }
 
+    /** The full resolved entitlement map for this plan (every key). */
+    public function entitlementMap(): array
+    {
+        $out = [];
+        foreach (Entitlements::keys() as $key) {
+            $out[$key] = $this->entitlement($key);
+        }
+
+        return $out;
+    }
+
     public function isUnlimitedUsers(): bool
     {
         return $this->max_users === null;

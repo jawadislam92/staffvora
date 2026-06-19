@@ -94,6 +94,44 @@ class Entitlements
         return array_keys(self::REGISTRY);
     }
 
+    /**
+     * A human-readable breakdown of an entitlement map, for plan cards / billing:
+     * numeric caps as labelled lines, feature flags as on/off rows. `$map` is a
+     * full resolved entitlement map (key => value).
+     *
+     * @return array{caps: array<int, array{label:string, value:string}>, flags: array<int, array{label:string, on:bool}>}
+     */
+    public static function describe(array $map): array
+    {
+        $seats = $map['max_users'] ?? null;
+        $shots = (int) ($map['max_screenshots_per_hour'] ?? 0);
+
+        $caps = [
+            ['label' => 'Users', 'value' => $seats === null ? 'Unlimited' : 'Up to '.$seats],
+            ['label' => 'Screenshots', 'value' => $shots > 0 ? $shots.' / hour' : 'Not included'],
+            ['label' => 'Auto-pause', 'value' => 'from '.((int) ($map['min_auto_pause_minutes'] ?? 0)).' min'],
+            ['label' => 'Retention', 'value' => ((int) ($map['max_retention_days'] ?? 0)).' days'],
+        ];
+
+        $flagLabels = [
+            'activity_tracking' => 'Activity tracking',
+            'app_url_tracking' => 'App & URL tracking',
+            'weekly_limit' => 'Weekly time limits',
+            'attendance_alerts' => 'Attendance Slack alerts',
+            'ai' => 'AI assistant',
+            'integrations' => 'Slack integration',
+            'api' => 'API access',
+            'white_label' => 'White-label branding',
+        ];
+
+        $flags = [];
+        foreach ($flagLabels as $key => $label) {
+            $flags[] = ['label' => $label, 'on' => (bool) ($map[$key] ?? false)];
+        }
+
+        return ['caps' => $caps, 'flags' => $flags];
+    }
+
     public static function kind(string $key): ?string
     {
         return self::REGISTRY[$key]['kind'] ?? null;

@@ -2,16 +2,6 @@ import { Head } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Check, Minus, CreditCard } from 'lucide-react';
 
-const FEATURE_LABELS = {
-    monitoring: 'Screenshots & monitoring',
-    app_url: 'App & URL tracking',
-    ai: 'AI summaries & assistant',
-    white_label: 'White-label branding',
-    api: 'REST API access',
-    integrations: 'Integrations',
-};
-const FEATURE_ORDER = ['monitoring', 'app_url', 'ai', 'white_label', 'api', 'integrations'];
-
 const money = (cents, currency) =>
     cents === 0 ? null : new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format(cents / 100);
 
@@ -42,17 +32,25 @@ function PlanCard({ plan, currentKey }) {
             <p className="mt-1 text-2xl font-bold text-body">
                 {price ? <>{price}<span className="text-sm font-normal text-slate-400">/user·mo</span></> : <span className="text-base text-slate-300">{plan.key === 'enterprise' ? 'Contact us' : 'Free'}</span>}
             </p>
-            <p className="mt-1 text-xs text-slate-400">{plan.max_users ? `Up to ${plan.max_users} users` : 'Unlimited users'}</p>
-            <ul className="mt-4 space-y-1.5 text-sm">
-                {FEATURE_ORDER.map((f) => {
-                    const on = !!plan.features?.[f];
-                    return (
-                        <li key={f} className={`flex items-center gap-2 ${on ? 'text-slate-200' : 'text-slate-500'}`}>
-                            {on ? <Check className="h-4 w-4 text-emerald-400" /> : <Minus className="h-4 w-4 text-slate-600" />}
-                            {FEATURE_LABELS[f]}
-                        </li>
-                    );
-                })}
+
+            {/* Caps — the real numbers each plan unlocks. */}
+            <dl className="mt-4 space-y-1 border-t border-slate-800 pt-3 text-xs">
+                {(plan.caps || []).map((c) => (
+                    <div key={c.label} className="flex items-center justify-between">
+                        <dt className="text-slate-400">{c.label}</dt>
+                        <dd className="font-medium text-slate-200">{c.value}</dd>
+                    </div>
+                ))}
+            </dl>
+
+            {/* Feature flags. */}
+            <ul className="mt-3 space-y-1.5 border-t border-slate-800 pt-3 text-sm">
+                {(plan.flags || []).map((f) => (
+                    <li key={f.label} className={`flex items-center gap-2 ${f.on ? 'text-slate-200' : 'text-slate-500'}`}>
+                        {f.on ? <Check className="h-4 w-4 text-emerald-400" /> : <Minus className="h-4 w-4 text-slate-600" />}
+                        {f.label}
+                    </li>
+                ))}
             </ul>
         </div>
     );
@@ -70,6 +68,12 @@ export default function BillingIndex({ auth, subscription, seatsUsed, seatLimit,
                         <span className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-2">
                             Seats: <strong className="text-slate-100">{seatsUsed}</strong>{seatLimit ? ` / ${seatLimit}` : ' (unlimited)'}
                         </span>
+                        {subscription?.price_cents != null && (
+                            <span className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-2">
+                                Your price: <strong className="text-slate-100">{money(subscription.price_cents, 'USD') || 'Free'}</strong>
+                                {subscription.has_custom_price && <span className="ml-1 rounded-full bg-orange-500/15 px-2 py-0.5 text-xs font-medium text-orange-300">custom</span>}
+                            </span>
+                        )}
                     </div>
 
                     <div>

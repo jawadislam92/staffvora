@@ -67,6 +67,25 @@ class BillingTest extends TestCase
         $add(4)->assertSessionHasErrors('email'); // would be #4 — blocked
     }
 
+    public function test_billing_page_shows_plan_entitlements_and_the_orgs_price(): void
+    {
+        $owner = app(TenantProvisioner::class)->provision('Acme', 'Owner', 'owner@acme.test', 'super-secret-pw')['owner'];
+
+        // A negotiated custom price should be what the org sees as "your price".
+        app(CurrentOrganization::class)->runFor($owner->organization_id, fn () =>
+            \App\Models\Organization::find($owner->organization_id)->update(['custom_price_cents' => 333]));
+
+        $this->actingAs($owner)
+            ->get(route('billing.index'))
+            ->assertOk()
+            ->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page
+                ->where('subscription.price_cents', 333)
+                ->where('subscription.has_custom_price', true)
+                ->has('plans.0.caps')
+                ->has('plans.0.flags')
+            );
+    }
+
     public function test_record_payment_activates_the_org_and_extends_the_period(): void
     {
         $owner = app(TenantProvisioner::class)->provision('Acme', 'Owner', 'owner@acme.test', 'super-secret-pw')['owner'];

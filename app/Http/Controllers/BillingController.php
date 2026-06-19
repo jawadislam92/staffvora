@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Plan;
 use App\Models\User;
+use App\Tenancy\Entitlements;
 use Inertia\Inertia;
 
 /**
@@ -28,6 +29,9 @@ class BillingController extends Controller
                 'usable' => $sub->isUsable(),
                 'trial_ends_at' => $sub->trial_ends_at?->toDateString(),
                 'current_period_end' => $sub->current_period_end?->toDateString(),
+                // The price this org actually pays (a negotiated custom price wins).
+                'price_cents' => $org?->priceCents(),
+                'has_custom_price' => $org?->custom_price_cents !== null,
             ] : null,
             'seatsUsed' => User::count(),
             'seatLimit' => $org?->seatLimit(),
@@ -37,7 +41,8 @@ class BillingController extends Controller
                 'price_cents' => $p->price_cents,
                 'currency' => $p->currency,
                 'max_users' => $p->max_users,
-                'features' => $p->features,
+                // Real entitlements (caps + flags) drive the card, not feature names.
+                ...Entitlements::describe($p->entitlementMap()),
             ]),
             'payments' => $org
                 ? $org->payments()->orderByDesc('paid_at')->limit(12)->get()->map(fn ($p) => [
