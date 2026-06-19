@@ -202,6 +202,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/', [SettingsController::class, 'index'])->name('settings.index');
         Route::put('/team', [SettingsController::class, 'updateTeam'])->name('settings.team.update');
         Route::put('/users/{user}', [SettingsController::class, 'updateUser'])->name('settings.user.update');
+
+        // White-label branding (workspace name + accent colour). Logo upload
+        // reuses the developer.branding.update endpoint above.
+        Route::get('/branding', [BrandingController::class, 'edit'])->name('settings.branding');
+        Route::put('/branding', [BrandingController::class, 'saveBranding'])->name('settings.branding.save');
     });
 
     // Monitoring (screenshot tracker) routes

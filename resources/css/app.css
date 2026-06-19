@@ -282,3 +282,14 @@
         background: rgba(100, 116, 139, 0.7);
     }
 }
+
+/* White-label accent. Default is the Tracksuite ember; the AuthenticatedLayout
+   overrides --brand-accent with each workspace's colour at runtime (set on the
+   Branding settings page). Full propagation across the UI is part of the final
+   visual audit; these utilities + ::selection consume it today. */
+:root { --brand-accent: #f97316; }
+::selection { background-color: var(--brand-accent); color: #fff; }
+.bg-brand { background-color: var(--brand-accent) !important; }
+.text-brand { color: var(--brand-accent) !important; }
+.border-brand { border-color: var(--brand-accent) !important; }
+.ring-brand { --tw-ring-color: var(--brand-accent) !important; }

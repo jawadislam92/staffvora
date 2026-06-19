@@ -3,10 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\MonitoringSetting;
+use App\Models\Organization;
+use App\Tenancy\CurrentOrganization;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
 
 /**
  * Self-service app logo. Stored on the S3-backed avatars disk so the host's
@@ -82,5 +85,52 @@ class BrandingController extends Controller
         \App\Models\MonitoringSetting::forgetSharedCache();
 
         return back()->with('success', 'Logo updated. Browsers may show the old one for a moment until their cache refreshes.');
+    }
+
+    /** The white-label settings page (workspace name, accent colour, logo). */
+    public function edit(): \Inertia\Response
+    {
+        $org = $this->currentOrg();
+        $logoPath = MonitoringSetting::current()->branding_logo_path;
+
+        return Inertia::render('Settings/Branding', [
+            'branding' => [
+                'name' => $org?->name,
+                'display_name' => $org?->display_name,
+                'accent_color' => $org?->accent_color ?: '#f97316',
+                'logo_url' => $logoPath ? route('branding.logo').'?v='.substr(md5($logoPath), 0, 8) : null,
+            ],
+            'canManage' => (bool) request()->user()?->isSuperAdmin(),
+        ]);
+    }
+
+    /** Save the workspace display name + accent colour onto the organization. */
+    public function saveBranding(Request $request): RedirectResponse
+    {
+        abort_unless($request->user()?->isSuperAdmin(), 403);
+
+        $data = $request->validate([
+            'display_name' => ['nullable', 'string', 'max:120'],
+            'accent_color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+        ]);
+
+        $org = $this->currentOrg();
+        abort_unless($org, 404);
+
+        $org->update([
+            'display_name' => $data['display_name'] ?: null,
+            'accent_color' => $data['accent_color'] ?: '#f97316',
+        ]);
+
+        MonitoringSetting::forgetSharedCache();
+
+        return back()->with('success', 'Branding updated.');
+    }
+
+    private function currentOrg(): ?Organization
+    {
+        $id = app(CurrentOrganization::class)->id();
+
+        return $id ? Organization::find($id) : null;
     }
 }

@@ -48,4 +48,16 @@ repo, folder are all trivial to change). Repo: github.com/jawadislam92/tracksuit
 - HTTP isolation test: a tenant can't rename/delete another tenant's team (404).
   Suite: 128 passed.
 
+### 2.4 Branding settings + accent theming  ✅
+- `Settings/Branding.jsx` (Management → Branding): upload a workspace logo, set a
+  display name + accent colour, with a live preview. Backed by
+  `BrandingController@edit/@saveBranding` (name+accent on the Organization) and
+  the existing logo upload. Logo + name already flow through the `branding`
+  shared prop to the sidebar and login page.
+- Accent infra: layout sets `--brand-accent` from the workspace colour at
+  runtime; `.bg-brand/.text-brand/.border-brand/.ring-brand` + `::selection`
+  consume it. **NOTE for the end audit:** the app still uses hard-coded orange in
+  many spots — propagating the accent var across those is a mechanical sweep best
+  done in the final visual pass (deliberately deferred, per "no mid-build churn").
+
 <!-- New entries appended below as each piece lands. -->

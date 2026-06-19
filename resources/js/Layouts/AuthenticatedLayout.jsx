@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link } from '@inertiajs/react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, usePage } from '@inertiajs/react';
 import {
     Activity,
     BarChart3,
@@ -13,6 +13,7 @@ import {
     LogOut,
     Menu,
     MonitorDown,
+    Palette,
     Plus,
     Settings as SettingsIcon,
     Sparkles,
@@ -129,8 +130,17 @@ export default function Authenticated({ user, header, children }) {
     // the avatar menu so every employee can reach it.
     const systemItems = useMemo(() => [
         can('monitoring.settings') && { label: 'Settings', href: route('settings.index'), icon: SettingsIcon, active: ['settings.index'] },
+        can('monitoring.settings') && { label: 'Branding', href: route('settings.branding'), icon: Palette, active: ['settings.branding'] },
         user?.is_super_admin && { label: 'Developer', href: route('developer.index'), icon: Wrench, active: ['developer.index'] },
     ].filter(Boolean), [user?.is_super_admin, user?.permissions]);
+
+    // Apply the workspace accent colour as a CSS variable (white-label).
+    const brandAccent = usePage().props?.branding?.accent_color;
+    useEffect(() => {
+        if (brandAccent) {
+            document.documentElement.style.setProperty('--brand-accent', brandAccent);
+        }
+    }, [brandAccent]);
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-900">
