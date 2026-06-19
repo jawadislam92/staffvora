@@ -13,6 +13,18 @@ done and deployed; this tracks the final "is it sellable" pass.
   - AI assistant system prompt is now **brand-aware** — uses the current org's
     brand name instead of a hard-coded "Sparking Asia, a digital agency".
 
+## Done in a follow-up pass
+- **Neutral default logo + favicon + PWA name**: replaced the SA fallback logo with a
+  brand-agnostic SVG mark (`/images/default-logo.svg`), added an SVG favicon, renamed
+  the PWA manifest to Tracksuite. Last user-facing SA *asset* is gone (a final branded
+  mark still pending the locked product name).
+- **Product-clean `db:seed`**: `DatabaseSeeder` now seeds only the plan catalogue;
+  the internal Sparking-Asia seeders (admin/clients/profiles) run only on demand.
+  Prod DB verified clean (no org-less users/clients).
+- **Per-page purpose**: spot-checked — existing pages already carry a one-line purpose
+  (Users, Attendance, …). `PageHeader` (5G) is the pattern for any new/remaining pages;
+  a full consistency sweep is best done with a live login + eyes on each theme.
+
 ## Remaining (tracked)
 - **Bundled fallback logo asset**: `/images/sparking-asia-logo.png` is still the SA
   mark; it only shows when a tenant hasn't uploaded their own logo. Replace with a
