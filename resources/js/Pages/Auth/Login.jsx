@@ -221,9 +221,17 @@ export default function Login({ status, canResetPassword }) {
                     </form>
 
                     {/* Footer */}
-                    <div className="mt-8 text-center">
+                    <div className="mt-8 text-center space-y-3">
+                        {route().has('register') && (
+                            <p className="text-sm text-gray-600">
+                                New here?{' '}
+                                <Link href={route('register')} className="font-semibold hover:underline" style={{ color: '#c2410c' }}>
+                                    Create a workspace
+                                </Link>
+                            </p>
+                        )}
                         <p className="text-xs text-gray-500">
-                            © {new Date().getFullYear()} Sparking Asia. All rights reserved.
+                            © {new Date().getFullYear()} All rights reserved.
                         </p>
                     </div>
                 </div>
