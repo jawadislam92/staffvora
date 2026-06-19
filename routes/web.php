@@ -85,6 +85,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
 
+    Route::get('/help', [\App\Http\Controllers\HelpController::class, 'index'])->name('help.index');
+
     Route::get('/desktop-downloads', [DesktopDownloadController::class, 'index'])->name('desktop-downloads.index');
     Route::get('/desktop-downloads/windows', [DesktopDownloadController::class, 'windows'])->name('desktop-downloads.windows');
     Route::get('/desktop-downloads/mac', [DesktopDownloadController::class, 'mac'])->name('desktop-downloads.mac');

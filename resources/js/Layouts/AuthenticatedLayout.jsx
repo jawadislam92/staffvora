@@ -10,6 +10,7 @@ import {
     Clock,
     CreditCard,
     Film,
+    HelpCircle,
     LayoutDashboard,
     LogOut,
     Menu,
@@ -274,6 +275,9 @@ export default function Authenticated({ user, header, children }) {
                             >
                                 <UserMenuLink href={route('profile.edit')} icon={UserCircle}>
                                     Profile
+                                </UserMenuLink>
+                                <UserMenuLink href={route('help.index')} icon={HelpCircle}>
+                                    Help center
                                 </UserMenuLink>
                                 <UserMenuLink href={route('desktop-downloads.index')} icon={MonitorDown}>
                                     Desktop App
