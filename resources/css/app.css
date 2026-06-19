@@ -362,7 +362,20 @@ html { background-color: var(--bg); color: var(--text); }
    overrides --brand-accent with each workspace's colour at runtime (set on the
    Branding settings page). Full propagation across the UI is part of the final
    visual audit; these utilities + ::selection consume it today. */
-:root { --brand-accent: #f97316; }
+:root {
+    --brand-accent: #f97316;
+    /* The brand (orange) scale is remapped to per-tenant accent vars so the ~166
+       hard-coded `orange-*` utilities across the app follow the workspace accent
+       colour. Defaults are the exact Tailwind orange channels, so with the
+       default ember accent nothing changes; app.jsx overrides these from the
+       accent (deriving a light→dark ramp) only when a custom accent is set.
+       Amber is intentionally NOT remapped — it's a semantic colour (On Break,
+       warnings). */
+    --c-orange-50: 255 247 237; --c-orange-100: 255 237 213; --c-orange-200: 254 215 170;
+    --c-orange-300: 253 186 116; --c-orange-400: 251 146 60; --c-orange-500: 249 115 22;
+    --c-orange-600: 234 88 12; --c-orange-700: 194 65 12; --c-orange-800: 154 52 18;
+    --c-orange-900: 124 45 18; --c-orange-950: 67 20 7;
+}
 ::selection { background-color: var(--brand-accent); color: #fff; }
 .bg-brand { background-color: var(--brand-accent) !important; }
 .text-brand { color: var(--brand-accent) !important; }

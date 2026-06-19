@@ -47,6 +47,9 @@ export default {
                 // re-theme automatically. <alpha-value> keeps `/opacity` working.
                 slate: scaleVar('slate'),
                 gray: scaleVar('gray'),
+                // Orange is the brand colour — remapped to per-tenant accent vars
+                // so the hard-coded `orange-*` utilities follow the workspace accent.
+                orange: scaleVar('orange'),
             },
         },
     },

@@ -7,7 +7,38 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { Toaster } from 'react-hot-toast';
 import ErrorBoundary from '@/Components/ErrorBoundary';
 
-const appName = import.meta.env.VITE_APP_NAME || 'Tracksuite';
+const DEFAULT_APP_NAME = import.meta.env.VITE_APP_NAME || 'Tracksuite';
+const DEFAULT_ACCENT = '#f97316';
+// The workspace brand name, kept current by applyTheme so the document <title>
+// (resolved per page below) reflects the tenant's branding, not a constant.
+let brandName = DEFAULT_APP_NAME;
+
+// How far each orange shade is mixed from the base accent (500): negative =
+// toward white (lighter), positive = toward black (darker). Lets a single accent
+// colour produce a full, coherent ramp for the remapped `orange-*` utilities.
+const ORANGE_MIX = { 50: -0.92, 100: -0.84, 200: -0.66, 300: -0.46, 400: -0.24, 500: 0, 600: 0.16, 700: 0.32, 800: 0.46, 900: 0.58, 950: 0.72 };
+
+const hexToRgb = (hex) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec((hex || '').trim());
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+};
+
+// Re-base the brand (orange) scale on the workspace accent so the whole UI
+// recolours. Skipped for the default ember accent so it stays pixel-exact.
+const applyAccentScale = (accent) => {
+    const root = document.documentElement;
+    const rgb = hexToRgb(accent);
+    if (!rgb || (accent || '').toLowerCase() === DEFAULT_ACCENT) {
+        Object.keys(ORANGE_MIX).forEach((s) => root.style.removeProperty(`--c-orange-${s}`));
+        return;
+    }
+    const mix = (c, f) => Math.round(f < 0 ? c + (255 - c) * -f : c * (1 - f));
+    Object.entries(ORANGE_MIX).forEach(([shade, f]) => {
+        root.style.setProperty(`--c-orange-${shade}`, `${mix(rgb.r, f)} ${mix(rgb.g, f)} ${mix(rgb.b, f)}`);
+    });
+};
 
 // Apply the resolved theme + brand accent (shared by HandleInertiaRequests) to
 // <html> on first paint and after every visit, and persist the theme in a
@@ -19,7 +50,11 @@ const applyTheme = (page) => {
         document.cookie = `tt_theme=${t};path=/;max-age=31536000;samesite=lax`;
     }
     const accent = page?.props?.branding?.accent_color;
-    if (accent) document.documentElement.style.setProperty('--brand-accent', accent);
+    if (accent) {
+        document.documentElement.style.setProperty('--brand-accent', accent);
+        applyAccentScale(accent);
+    }
+    if (page?.props?.branding?.name) brandName = page.props.branding.name;
 };
 router.on('success', (event) => applyTheme(event.detail.page));
 
@@ -36,7 +71,7 @@ window.addEventListener('vite:preloadError', () => {
 });
 
 createInertiaApp({
-    title: (title) => title ? `${title} - ${appName}` : appName,
+    title: (title) => title ? `${title} - ${brandName}` : brandName,
     resolve: (name) => resolvePageComponent(`./Pages/${name}.tsx`, import.meta.glob('./Pages/**/*.tsx'))
         .catch(() => resolvePageComponent(`./Pages/${name}.jsx`, import.meta.glob('./Pages/**/*.jsx'))),
     setup({ el, App, props }) {
