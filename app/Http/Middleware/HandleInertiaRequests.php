@@ -3,8 +3,10 @@
 namespace App\Http\Middleware;
 
 use App\Models\MonitoringSetting;
+use App\Models\Organization;
 use App\Models\TimeEntry;
 use App\Models\UserMonitoringSetting;
+use App\Tenancy\CurrentOrganization;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -75,7 +77,7 @@ class HandleInertiaRequests extends Middleware
         $display = ['timezone' => 'Asia/Karachi', 'format' => '12'];
         if ($user) {
             try {
-                $teamSettings = Cache::remember('monitoring_settings.shared', 60, function () {
+                $teamSettings = Cache::remember('monitoring_settings.shared.'.(app(CurrentOrganization::class)->id() ?? 0), 60, function () {
                     $row = MonitoringSetting::current();
 
                     return [
@@ -122,13 +124,17 @@ class HandleInertiaRequests extends Middleware
         // Shared with guests too — the login/welcome pages render the logo.
         // The ?v= cache-buster changes with the stored path so a freshly
         // uploaded logo replaces the browser-cached one immediately.
-        $branding = ['logo_url' => null];
+        $orgId = app(CurrentOrganization::class)->id();
+        $branding = ['logo_url' => null, 'name' => null, 'accent_color' => null];
         try {
-            $branding = Cache::remember('branding.shared', 300, function () {
+            $branding = Cache::remember('branding.shared.'.($orgId ?? 0), 300, function () use ($orgId) {
                 $path = MonitoringSetting::current()->branding_logo_path;
+                $org = $orgId ? Organization::find($orgId) : null;
 
                 return [
                     'logo_url' => $path ? route('branding.logo').'?v='.substr(md5($path), 0, 8) : null,
+                    'name' => $org?->brandName(),
+                    'accent_color' => $org?->accent_color,
                 ];
             });
         } catch (\Throwable $e) {

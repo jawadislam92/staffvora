@@ -38,6 +38,7 @@ class User extends Authenticatable
         'shift_hours',
         'clockout_reminder_hours',
         'allow_multiple_devices',
+        'team_id',
     ];
 
     /**
@@ -170,6 +171,14 @@ class User extends Authenticatable
         // each image for a week instead of re-fetching a fresh presigned S3
         // URL on every page render.
         return route('avatar.show', ['user' => $this->id, 'v' => substr(md5($this->avatar), 0, 8)]);
+    }
+
+    /**
+     * The team this user belongs to (within their organization), if any.
+     */
+    public function team()
+    {
+        return $this->belongsTo(Team::class);
     }
 
     /**

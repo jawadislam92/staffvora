@@ -79,7 +79,7 @@ class BrandingController extends Controller
             Storage::disk('avatars')->delete($old);
         }
 
-        Cache::forget('branding.shared');
+        \App\Models\MonitoringSetting::forgetSharedCache();
 
         return back()->with('success', 'Logo updated. Browsers may show the old one for a moment until their cache refreshes.');
     }

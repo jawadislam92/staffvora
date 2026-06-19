@@ -64,6 +64,18 @@ class MonitoringSetting extends Model
     ];
 
     /**
+     * Invalidate the current organization's cached shared settings + branding
+     * payloads (see HandleInertiaRequests). Call after any settings/branding
+     * change. Keys are org-scoped so one tenant's flush never affects another.
+     */
+    public static function forgetSharedCache(): void
+    {
+        $id = app(CurrentOrganization::class)->id() ?? 0;
+        \Illuminate\Support\Facades\Cache::forget('monitoring_settings.shared.'.$id);
+        \Illuminate\Support\Facades\Cache::forget('branding.shared.'.$id);
+    }
+
+    /**
      * Carbon day-of-week constant for the configured week start, for use with
      * Carbon::startOfWeek()/endOfWeek().
      */

@@ -171,7 +171,7 @@ class DeveloperController extends Controller
                 Artisan::call('config:cache');
             }
         }
-        Cache::forget('monitoring_settings.shared');
+        \App\Models\MonitoringSetting::forgetSharedCache();
 
         $changed = array_keys($updates);
 

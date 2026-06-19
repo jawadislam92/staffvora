@@ -96,7 +96,7 @@ class SettingsController extends Controller
         }
 
         $team->update($data);
-        Cache::forget('monitoring_settings.shared');
+        \App\Models\MonitoringSetting::forgetSharedCache();
 
         // Toggles save in the background (axios) — a tiny JSON ack keeps the
         // page from re-rendering all settings props on every flip.

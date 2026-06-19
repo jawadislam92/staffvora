@@ -12,6 +12,7 @@ use App\Http\Controllers\SchedulerController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SlackReportController;
 use App\Http\Controllers\TeamController;
+use App\Http\Controllers\TeamManagementController;
 use App\Http\Controllers\TimeEntryController;
 use App\Http\Controllers\TimelineController;
 use App\Http\Controllers\UpworkProfileController;
@@ -91,6 +92,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/users/{user}/edit', [UserController::class, 'edit'])->middleware('permission:users.manage')->name('users.edit');
     Route::match(['put', 'patch'], '/users/{user}', [UserController::class, 'update'])->middleware('permission:users.manage')->name('users.update');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->middleware('permission:users.delete')->name('users.destroy');
+
+    // Customizable teams (groups). Org-scoped; mutations require user management.
+    Route::get('/teams', [TeamManagementController::class, 'index'])->middleware('permission:users.view')->name('teams.index');
+    Route::post('/teams', [TeamManagementController::class, 'store'])->middleware('permission:users.manage')->name('teams.store');
+    Route::match(['put', 'patch'], '/teams/{team}', [TeamManagementController::class, 'update'])->middleware('permission:users.manage')->name('teams.update');
+    Route::delete('/teams/{team}', [TeamManagementController::class, 'destroy'])->middleware('permission:users.manage')->name('teams.destroy');
 
     Route::get('/report', [WorkHourController::class, 'report'])
         ->middleware('permission:reports.view')

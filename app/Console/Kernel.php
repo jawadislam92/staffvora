@@ -16,7 +16,7 @@ class Kernel extends ConsoleKernel
         $timezone = config('services.slack_reports.timezone', 'Asia/Karachi');
 
         if (config('services.slack_reports.weekly_enabled')) {
-            $schedule->command('reports:send-weekly-slack')
+            $schedule->command('tenant:run reports:send-weekly-slack')
                 ->sundays()
                 ->at('10:00')
                 ->timezone($timezone)
@@ -24,21 +24,21 @@ class Kernel extends ConsoleKernel
         }
 
         if (config('services.slack_reports.daily_digest_enabled')) {
-            $schedule->command('activity:digest-slack')
+            $schedule->command('tenant:run activity:digest-slack')
                 ->dailyAt(config('services.slack_reports.daily_digest_time', '09:00'))
                 ->timezone($timezone)
                 ->withoutOverlapping();
         }
 
         // Enforce the screenshot retention period from monitoring settings.
-        $schedule->command('monitoring:prune-screenshots')
+        $schedule->command('tenant:run monitoring:prune-screenshots')
             ->dailyAt('02:30')
             ->timezone($timezone)
             ->withoutOverlapping();
 
         // Close sessions whose desktop app died without sending a stop, so
         // they don't sit "active" forever and their hours still sync.
-        $schedule->command('monitoring:close-stale-sessions')
+        $schedule->command('tenant:run monitoring:close-stale-sessions')
             ->everyTenMinutes()
             ->withoutOverlapping();
 
@@ -48,7 +48,7 @@ class Kernel extends ConsoleKernel
         // tracked) and record a clock_out with a plain-language reason.
         // Gated by a flag so it can be dry-run/reviewed before going live.
         if (config('services.attendance.auto_clockout_enabled')) {
-            $schedule->command('attendance:auto-clock-out')
+            $schedule->command('tenant:run attendance:auto-clock-out')
                 ->everyThirtyMinutes()
                 ->withoutOverlapping();
         }
@@ -57,7 +57,7 @@ class Kernel extends ConsoleKernel
         // the threshold with Yes/No buttons; clock out non-responders. The cap
         // above stays as the final backstop. Gated by its own flag.
         if (config('services.attendance.still_working_slack_enabled')) {
-            $schedule->command('attendance:still-working-check')
+            $schedule->command('tenant:run attendance:still-working-check')
                 ->everyTenMinutes()
                 ->withoutOverlapping();
         }
@@ -66,7 +66,7 @@ class Kernel extends ConsoleKernel
         // while its screenshot/sample helpers are blocked by antivirus, so the
         // person looks tracked but the report is empty. Alert in real time.
         if (config('services.attendance.tracker_health_slack_enabled')) {
-            $schedule->command('monitoring:silent-tracker-check')
+            $schedule->command('tenant:run monitoring:silent-tracker-check')
                 ->everyFifteenMinutes()
                 ->withoutOverlapping();
         }

@@ -64,7 +64,7 @@ class AiAssistantController extends Controller
 
         $settings = \App\Models\MonitoringSetting::current();
         $settings->update(['ai_suggested_questions' => $questions ?: null]);
-        Cache::forget('monitoring_settings.shared');
+        \App\Models\MonitoringSetting::forgetSharedCache();
 
         return response()->json(['questions' => $questions ?: self::DEFAULT_QUESTIONS]);
     }
