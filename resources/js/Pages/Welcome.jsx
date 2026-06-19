@@ -1,6 +1,6 @@
 import { Link, Head, usePage } from "@inertiajs/react";
 
-const BUNDLED_LOGO = "/images/sparking-asia-logo.png?v=2";
+const BUNDLED_LOGO = "/images/default-logo.svg";
 
 const FEATURES = [
     {

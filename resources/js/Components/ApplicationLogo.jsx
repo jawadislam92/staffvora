@@ -1,6 +1,6 @@
 import { usePage } from '@inertiajs/react';
 
-const BUNDLED_LOGO = '/images/sparking-asia-logo.png?v=2';
+const BUNDLED_LOGO = '/images/default-logo.svg';
 
 export default function ApplicationLogo({ size = "40" }) {
     const dimension = `${Number(size) * 0.25}rem`;

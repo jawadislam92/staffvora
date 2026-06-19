@@ -1,12 +1,18 @@
 {
-    "name": "Sparking Asia",
-    "short_name": "Sparking Asia",
-    "description": "Time tracking application for Sparking Asia",
+    "name": "Tracksuite",
+    "short_name": "Tracksuite",
+    "description": "Time tracking & team productivity",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#282a2a",
-    "theme_color": "#282a2a",
+    "background_color": "#0b1120",
+    "theme_color": "#0b1120",
     "icons": [
+        {
+            "src": "/images/default-logo.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        },
         {
             "src": "/android-chrome-192x192.png",
             "sizes": "192x192",
