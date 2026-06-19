@@ -14,7 +14,23 @@ class SlackBotService
 {
     public function configured(): bool
     {
-        return filled(config('services.slack_bot.token'));
+        return filled($this->token());
+    }
+
+    /**
+     * Resolve the bot token for the active tenant: the organization's own token
+     * when connected, otherwise the platform/env default (empty in the product,
+     * so each workspace connects its own Slack).
+     */
+    private function token(): ?string
+    {
+        try {
+            $orgToken = \App\Models\MonitoringSetting::current()->slack_bot_token;
+        } catch (\Throwable $e) {
+            $orgToken = null;
+        }
+
+        return $orgToken ?: config('services.slack_bot.token');
     }
 
     /**

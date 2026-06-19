@@ -207,6 +207,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // reuses the developer.branding.update endpoint above.
         Route::get('/branding', [BrandingController::class, 'edit'])->name('settings.branding');
         Route::put('/branding', [BrandingController::class, 'saveBranding'])->name('settings.branding.save');
+
+        // Per-org Slack connection (write-only bot token).
+        Route::put('/slack', [SettingsController::class, 'updateSlack'])->name('settings.slack.update');
     });
 
     // Monitoring (screenshot tracker) routes

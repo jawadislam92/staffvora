@@ -60,4 +60,18 @@ repo, folder are all trivial to change). Repo: github.com/jawadislam92/tracksuit
   many spots — propagating the accent var across those is a mechanical sweep best
   done in the final visual pass (deliberately deferred, per "no mid-build churn").
 
+### 2.5 Per-org Slack (connect-your-own)  ✅
+- `monitoring_settings.slack_bot_token` (encrypted, per org). `SlackBotService`
+  resolves the active tenant's token, falling back to the env default (empty in
+  the product). Each workspace connects its OWN Slack.
+- Settings → Attendance Slack alerts: a "Slack connection" block (paste bot
+  token / Replace / Disconnect, with a connected badge). Token is write-only —
+  never returned to the client; `teamPayload` exposes only `slack_connected`.
+  Endpoint `settings.slack.update`.
+- Test: token is per-org and stored encrypted (raw column ≠ plaintext).
+  Suite: 129 passed.
+
+**Phase 2 COMPLETE.** The product is sellable: self-serve signup, customizable
+teams, white-label branding, and per-org Slack.
+
 <!-- New entries appended below as each piece lands. -->

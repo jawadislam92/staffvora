@@ -37,6 +37,7 @@ class MonitoringSetting extends Model
         'slack_clockin_enabled',
         'slack_clockout_enabled',
         'slack_attendance_channel',
+        'slack_bot_token',
         'branding_logo_path',
     ];
 
@@ -61,6 +62,7 @@ class MonitoringSetting extends Model
         'desktop_force_quit_on_idle' => 'boolean',
         'slack_clockin_enabled' => 'boolean',
         'slack_clockout_enabled' => 'boolean',
+        'slack_bot_token' => 'encrypted',
     ];
 
     /**
@@ -211,6 +213,7 @@ class MonitoringSetting extends Model
             'slack_clockin_enabled' => (bool) $this->slack_clockin_enabled,
             'slack_clockout_enabled' => (bool) $this->slack_clockout_enabled,
             'slack_attendance_channel' => $this->slack_attendance_channel,
+            'slack_connected' => filled($this->slack_bot_token),
         ];
     }
 

@@ -676,11 +676,63 @@ function AttendanceSlackSection({ team, setTeam }) {
         setTeam(next);
         patchTeam(next);
     };
+    const [token, setToken] = useState('');
+    const [connected, setConnected] = useState(!!team.slack_connected);
+    const [busy, setBusy] = useState(false);
+
+    const connect = () => {
+        if (!token.trim()) return;
+        setBusy(true);
+        axios.put(route('settings.slack.update'), { slack_bot_token: token.trim() })
+            .then((r) => { setConnected(r.data?.connected ?? true); setToken(''); toast.success('Slack connected.'); })
+            .catch(() => toast.error('Could not save the Slack token.'))
+            .finally(() => setBusy(false));
+    };
+    const disconnect = () => {
+        setBusy(true);
+        axios.put(route('settings.slack.update'), { disconnect: true })
+            .then(() => { setConnected(false); toast.success('Slack disconnected.'); })
+            .catch(() => toast.error('Could not disconnect Slack.'))
+            .finally(() => setBusy(false));
+    };
+
     return (
         <SectionShell
             title="Attendance Slack alerts"
-            blurb={<>Post a short message to a Slack channel when someone clocks in or out. Turn each on independently.<br />The SA Track Slack bot must be a member of the channel you choose.</>}
+            blurb={<>Post a short message to a Slack channel when someone clocks in or out. Turn each on independently.<br />Connect your own Slack below; the bot must be a member of the channel you choose.</>}
         >
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <p className="text-sm font-semibold text-slate-900">Slack connection</p>
+                        <p className="text-xs text-slate-500">
+                            {connected ? 'Connected — your workspace bot token is saved.' : 'Not connected. Paste your Slack bot token (xoxb-…) to enable posts.'}
+                        </p>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${connected ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                        {connected ? 'Connected' : 'Not connected'}
+                    </span>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <input
+                        type="password"
+                        value={token}
+                        onChange={(e) => setToken(e.target.value)}
+                        placeholder={connected ? 'Paste a new token to replace' : 'xoxb-your-bot-token'}
+                        className="w-72 rounded border-slate-300 text-sm"
+                        autoComplete="off"
+                    />
+                    <button type="button" onClick={connect} disabled={busy || !token.trim()} className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+                        {connected ? 'Replace' : 'Connect'}
+                    </button>
+                    {connected && (
+                        <button type="button" onClick={disconnect} disabled={busy} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50">
+                            Disconnect
+                        </button>
+                    )}
+                </div>
+            </div>
+
             <div className="space-y-4 text-sm">
                 <label className="flex items-center gap-3">
                     <Toggle checked={!!team.slack_clockin_enabled} onChange={(v) => set({ slack_clockin_enabled: v })} />

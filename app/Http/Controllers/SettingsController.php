@@ -107,6 +107,36 @@ class SettingsController extends Controller
         return back()->with('success', 'Team settings updated.');
     }
 
+    /**
+     * Connect or disconnect this organization's own Slack bot token. The token
+     * is write-only (never returned to the client); the UI shows only connected
+     * status. Sending `disconnect` clears it; a blank token keeps the current one.
+     */
+    public function updateSlack(Request $request): RedirectResponse|JsonResponse
+    {
+        $data = $request->validate([
+            'slack_bot_token' => ['nullable', 'string', 'max:255'],
+            'disconnect' => ['nullable', 'boolean'],
+        ]);
+
+        $team = MonitoringSetting::current();
+
+        if (! empty($data['disconnect'])) {
+            $team->slack_bot_token = null;
+        } elseif (filled($data['slack_bot_token'] ?? null)) {
+            $team->slack_bot_token = trim($data['slack_bot_token']);
+        }
+
+        $team->save();
+        MonitoringSetting::forgetSharedCache();
+
+        if ($request->wantsJson()) {
+            return response()->json(['ok' => true, 'connected' => filled($team->slack_bot_token)]);
+        }
+
+        return back()->with('success', 'Slack connection updated.');
+    }
+
     public function updateUser(Request $request, User $user): RedirectResponse|JsonResponse
     {
         $data = $request->validate([
