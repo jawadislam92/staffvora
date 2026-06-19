@@ -97,4 +97,31 @@ teams, white-label branding, and per-org Slack.
 - Accent var (`--brand-accent`) not yet propagated across hard-coded oranges.
 - Some inherited copy/footers may still say SA Track / Sparking Asia.
 
-<!-- New entries appended below as each piece lands. -->
+## Phase 4 — platform console + hardening  ✅ (in code)  (f999912, + this)
+- Platform (landlord) console at `/platform` (platform admins only): every
+  tenant with status/plan/seats, suspend/resume, record a bank-transfer payment,
+  and impersonate an org owner (with a return banner). Guard: `is_platform_admin`
+  + `EnsurePlatformAdmin` + `platform:grant {email}`.
+- GDPR erasure: `tenant:delete {org} --force` permanently purges a tenant and all
+  its data (each model bound to the org, then the org). Isolation-tested.
+- Suite: 138 passed (557 assertions).
+
+### Genuinely deferred to a follow-up / ops (need a decision or external step)
+- **Desktop rebrand + signed release**: point `desktop/main/config.js` apiBaseUrl
+  at the product host + new name/icon, then build + sign + upload installers.
+  Needs the product domain decided (and code-signing, which the owner declined to
+  pay for — affects SmartScreen/Gatekeeper warnings). Not done here.
+- **Strip internal seeders** (AdminUserSeeder = Sparking-Asia admin, etc.).
+- **Accent propagation** across hard-coded oranges; any remaining "SA Track /
+  Sparking Asia" copy. (Fold into the end visual audit.)
+- **GDPR export** command (data portability); per-org **S3 object** cleanup on
+  delete; expanded **audit logging**; **CI / staging / observability**.
+
+## How to operate (quick reference)
+- Create a tenant by hand: `php artisan tenant:create "Acme" owner@acme.com`
+- Make yourself the platform admin: `php artisan platform:grant you@email.com`
+- Record a payment: `php artisan billing:record-payment <org> 80 --months=1`
+  (or from the Platform → tenant page).
+- Seed plans (idempotent): `php artisan db:seed --class=PlanSeeder`
+- Run a job per tenant: `php artisan tenant:run <command>`
+
