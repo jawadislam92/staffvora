@@ -2,7 +2,7 @@ import { Head } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import UserForm from '@/Components/Users/UserForm';
 
-export default function UserCreate({ auth, roles, permissionGroups, canManageAccess, designationOptions = [] }) {
+export default function UserCreate({ auth, roles, permissionGroups, canManageAccess, designationOptions = [], teams = [] }) {
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Add User" />
@@ -18,6 +18,7 @@ export default function UserCreate({ auth, roles, permissionGroups, canManageAcc
                         permissionGroups={permissionGroups}
                         canManageAccess={canManageAccess}
                         designationOptions={designationOptions}
+                        teams={teams}
                     />
                 </div>
             </div>

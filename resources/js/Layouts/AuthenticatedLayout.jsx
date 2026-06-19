@@ -18,6 +18,7 @@ import {
     Sparkles,
     UserCircle,
     Users,
+    UsersRound,
     Wrench,
     X,
 } from 'lucide-react';
@@ -119,6 +120,7 @@ export default function Authenticated({ user, header, children }) {
     // Internal management — people and client records.
     const managementItems = useMemo(() => [
         can('users.view') && { label: 'Users', href: route('users.index'), icon: Users, active: ['users.index', 'users.create', 'users.edit'] },
+        can('users.view') && { label: 'Teams', href: route('teams.index'), icon: UsersRound, active: ['teams.index'] },
         can('clients.view') && { label: 'Clients', href: route('clients.index'), icon: Briefcase, active: ['clients.index', 'clients.create', 'clients.edit'] },
         can('profiles.view') && { label: 'Profiles', href: route('upwork-profiles.index'), icon: UserCircle, active: ['upwork-profiles.index', 'upwork-profiles.create', 'upwork-profiles.edit'] },
     ].filter(Boolean), [user?.is_super_admin, user?.permissions]);

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Designation;
 use App\Models\MonitoringSetting;
+use App\Models\Team;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -167,6 +168,7 @@ class UserController extends Controller
             'shift_hours' => ['nullable', 'numeric', 'min:0', 'max:24'],
             'clockout_reminder_hours' => ['nullable', 'numeric', 'min:0', 'max:24'],
             'allow_multiple_devices' => 'nullable|boolean',
+            'team_id' => ['nullable', Rule::in(Team::pluck('id')->all())],
         ];
 
         // Only add avatar validation if file is present
@@ -198,6 +200,7 @@ class UserController extends Controller
             'shift_grace_minutes' => $validated['shift_grace_minutes'] ?? 15,
             'shift_hours' => $validated['shift_hours'] ?? null,
             'clockout_reminder_hours' => $validated['clockout_reminder_hours'] ?? null,
+            'team_id' => $validated['team_id'] ?? null,
             'allow_multiple_devices' => $request->user()->isSuperAdmin()
                 ? (bool) ($validated['allow_multiple_devices'] ?? false)
                 : false,
@@ -233,6 +236,7 @@ class UserController extends Controller
                 'shift_grace_minutes' => $user->shift_grace_minutes ?? 15,
                 'shift_hours' => $user->shift_hours !== null ? (float) $user->shift_hours : '',
                 'clockout_reminder_hours' => $user->clockout_reminder_hours !== null ? (float) $user->clockout_reminder_hours : '',
+                'team_id' => $user->team_id,
                 'allow_multiple_devices' => (bool) $user->allow_multiple_devices,
                 'return_to' => request('return_to'),
             ],
@@ -262,6 +266,7 @@ class UserController extends Controller
             'shift_hours' => ['nullable', 'numeric', 'min:0', 'max:24'],
             'clockout_reminder_hours' => ['nullable', 'numeric', 'min:0', 'max:24'],
             'allow_multiple_devices' => 'nullable|boolean',
+            'team_id' => ['nullable', Rule::in(Team::pluck('id')->all())],
         ];
 
         // Only add avatar validation if file is present
@@ -288,6 +293,7 @@ class UserController extends Controller
         $user->shift_grace_minutes = $validated['shift_grace_minutes'] ?? 15;
         $user->shift_hours = $validated['shift_hours'] ?? null;
         $user->clockout_reminder_hours = $validated['clockout_reminder_hours'] ?? null;
+        $user->team_id = $validated['team_id'] ?? null;
 
         if ($request->user()->isSuperAdmin()) {
             $user->role = $validated['role'] ?? 'member';
@@ -386,6 +392,7 @@ class UserController extends Controller
             'permissionGroups' => config('access.permissions'),
             'canManageAccess' => request()->user()->isSuperAdmin(),
             'designationOptions' => $this->designationOptions()->pluck('name')->values()->all(),
+            'teams' => Team::orderBy('name')->get(['id', 'name']),
         ];
     }
 

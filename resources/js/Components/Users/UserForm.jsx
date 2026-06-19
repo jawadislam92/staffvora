@@ -15,6 +15,7 @@ export default function UserForm({
     permissionGroups = {},
     canManageAccess = false,
     designationOptions = [],
+    teams = [],
     returnTo = '',
 }) {
     const editing = Boolean(user);
@@ -35,6 +36,7 @@ export default function UserForm({
         shift_grace_minutes: user?.shift_grace_minutes ?? 15,
         shift_hours: user?.shift_hours ?? '',
         clockout_reminder_hours: user?.clockout_reminder_hours ?? '',
+        team_id: user?.team_id ?? '',
         role: user?.role || 'member',
         permissions: user?.permissions || [],
         include_in_slack_reports: user?.include_in_slack_reports ?? true,
@@ -165,6 +167,18 @@ export default function UserForm({
                                 onChange={(event) => form.setData('joining_date', event.target.value)}
                                 className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
                             />
+                        </Field>
+                        <Field label="Team" hint="Group this person belongs to. Manage teams under Management → Teams." error={form.errors.team_id}>
+                            <select
+                                value={form.data.team_id ?? ''}
+                                onChange={(event) => form.setData('team_id', event.target.value ? Number(event.target.value) : '')}
+                                className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+                            >
+                                <option value="">No team</option>
+                                {teams.map((team) => (
+                                    <option key={team.id} value={team.id}>{team.name}</option>
+                                ))}
+                            </select>
                         </Field>
                         <Field label="Shift start time" hint="Used to detect late coming automatically." error={form.errors.shift_start_time}>
                             <input

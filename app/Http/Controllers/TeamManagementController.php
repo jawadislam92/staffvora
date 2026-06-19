@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Team;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 /**
  * Org-owner management of customizable Teams (groups of users). Distinct from
@@ -15,8 +16,9 @@ class TeamManagementController extends Controller
 {
     public function index()
     {
-        return response()->json([
+        return Inertia::render('Teams/Index', [
             'teams' => Team::withCount('users')->orderBy('name')->get(['id', 'name', 'color']),
+            'canManage' => request()->user()->hasPermission('users.manage'),
         ]);
     }
 
