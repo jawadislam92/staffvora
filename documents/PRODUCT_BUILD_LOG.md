@@ -161,6 +161,25 @@ Default-deny control so "no one abuses our system". Deployed; prod plans backfil
   keeps it). Per-integration save buttons (Slack/bot/AI/S3 save independently).
   Branding card removed from Developer. Developer + Plans now in the platform nav group.
 
+## Phase 5C — branding overhaul  ✅  (5e0443b, 5ef3f98)
+- **Accent propagation**: the brand (orange) Tailwind scale is remapped to per-tenant
+  accent CSS vars; app.jsx derives a light→dark ramp from the accent hex so a tenant's
+  colour recolours the whole UI (amber stays semantic). Default ember = unchanged.
+- Brand name now in the document `<title>` + sidebar + mobile bar; logo site-wide.
+- Branding (logo/name/accent) gated behind the `white_label` entitlement (server +
+  UI lock); added a workspace **default-theme** picker.
+
+## Phase 5E — billing reflects entitlements  ✅  (972b9bc)
+- Plan cards show real caps (users, screenshots/hr, auto-pause floor, retention) +
+  feature flags from 5B, via `Entitlements::describe(Plan::entitlementMap())`. The
+  billing summary shows the org's actual price, flagged "custom" when negotiated.
+
+## Phase 5F — humane attendance  ✅  (9848fc6)
+- Per-org policy on `monitoring_settings`: tracking-start date (pre-tracking days =
+  "Not tracked"), configurable weekly-off days, public-holiday dates, and an
+  auto-Absent toggle (off → neutral "No record"). Every state carries a reason.
+  Settings → "Attendance policy". Defaults preserve old behaviour.
+
 ## How to operate (quick reference)
 - Create a tenant by hand: `php artisan tenant:create "Acme" owner@acme.com`
 - Make yourself the platform admin: `php artisan platform:grant you@email.com`
