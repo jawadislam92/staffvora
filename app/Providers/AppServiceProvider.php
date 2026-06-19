@@ -17,6 +17,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // One tenant context shared across the request/command.
         $this->app->singleton(CurrentOrganization::class);
+
+        // Billing is manual for now; swap this binding for a gateway adapter later.
+        $this->app->bind(\App\Billing\PaymentProvider::class, \App\Billing\ManualBankTransfer::class);
     }
 
     /**

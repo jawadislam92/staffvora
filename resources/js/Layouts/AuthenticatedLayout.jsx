@@ -7,6 +7,7 @@ import {
     CalendarDays,
     ChevronDown,
     Clock,
+    CreditCard,
     Film,
     LayoutDashboard,
     LayoutGrid,
@@ -131,6 +132,7 @@ export default function Authenticated({ user, header, children }) {
     const systemItems = useMemo(() => [
         can('monitoring.settings') && { label: 'Settings', href: route('settings.index'), icon: SettingsIcon, active: ['settings.index'] },
         can('monitoring.settings') && { label: 'Branding', href: route('settings.branding'), icon: Palette, active: ['settings.branding'] },
+        user?.is_super_admin && { label: 'Billing', href: route('billing.index'), icon: CreditCard, active: ['billing.index'] },
         user?.is_super_admin && { label: 'Developer', href: route('developer.index'), icon: Wrench, active: ['developer.index'] },
     ].filter(Boolean), [user?.is_super_admin, user?.permissions]);
 

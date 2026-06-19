@@ -63,4 +63,23 @@ class BillingTest extends TestCase
         $add(3)->assertSessionHasNoErrors(); // seat #3
         $add(4)->assertSessionHasErrors('email'); // would be #4 — blocked
     }
+
+    public function test_record_payment_activates_the_org_and_extends_the_period(): void
+    {
+        $owner = app(TenantProvisioner::class)->provision('Acme', 'Owner', 'owner@acme.test', 'super-secret-pw')['owner'];
+        $org = Organization::find($owner->organization_id);
+
+        $this->artisan('billing:record-payment', ['org' => $org->id, 'amount' => '80', '--months' => 2])->assertExitCode(0);
+
+        $org->refresh();
+        $this->assertSame(Organization::STATUS_ACTIVE, $org->status);
+
+        $sub = $org->subscription;
+        $this->assertSame('active', $sub->status);
+        $this->assertNotNull($sub->current_period_end);
+        $this->assertTrue($sub->current_period_end->isFuture());
+
+        $paymentCount = app(CurrentOrganization::class)->runFor($org->id, fn () => \App\Models\Payment::count());
+        $this->assertSame(1, $paymentCount);
+    }
 }

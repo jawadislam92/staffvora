@@ -74,4 +74,27 @@ repo, folder are all trivial to change). Repo: github.com/jawadislam92/tracksuit
 **Phase 2 COMPLETE.** The product is sellable: self-serve signup, customizable
 teams, white-label branding, and per-org Slack.
 
+## Phase 3 — subscriptions + manual billing  ✅  (0cd8646, + this)
+- Data: `plans` (self-seeding catalogue Free/Starter/Pro/Enterprise with seat
+  limits + feature flags), `subscriptions`, `payments` (org-scoped). New signups
+  start on a 14-day Pro trial. Org helpers: subscription/activePlan/planFeature/
+  seatLimit; UserController enforces the seat limit on user creation.
+- Billing page (Billing → owner only): current plan + trial/period status, seat
+  usage, plan comparison cards, payment history, and bank-transfer instructions
+  (config/billing.php). No self-serve checkout yet.
+- Payment seam: `App\Billing\PaymentProvider` interface + `ManualBankTransfer`
+  (bound in AppServiceProvider) — a Stripe/Paddle adapter can replace it.
+  `billing:record-payment {org} {amount} [--months --plan --reference]` records a
+  transfer, extends the period, and activates the org.
+- Bug fix found by new tests: MonitoringSetting::current() memoization moved from
+  a function `static` (leaked across tests/orgs in a worker) to the container.
+- Tests: trial on signup, plan-driven seats/features, seat-limit block, payment
+  recording. Suite: 133 passed (541 assertions).
+
+### Cleanup noted for the end-audit (not blocking)
+- Internal seeders still present (AdminUserSeeder creates a Sparking-Asia admin;
+  Client/Upwork/Monitoring seeders) — strip/replace for the product.
+- Accent var (`--brand-accent`) not yet propagated across hard-coded oranges.
+- Some inherited copy/footers may still say SA Track / Sparking Asia.
+
 <!-- New entries appended below as each piece lands. -->
