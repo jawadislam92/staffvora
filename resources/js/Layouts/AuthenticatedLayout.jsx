@@ -63,26 +63,53 @@ function SideLink({ item, collapsed, onClick }) {
     );
 }
 
-// A labelled group of links. When collapsed the label becomes a divider so the
-// rail stays scannable without text.
-function NavSection({ label, items, collapsed, onItemClick }) {
+// A collapsible group of links. The header toggles the group with a smooth
+// slide (grid-rows 0fr→1fr needs no height measuring). In the collapsed rail
+// there's no room for a header, so the group degrades to a divider + icon list
+// that stays visible.
+function NavGroup({ label, items, collapsed, open, onToggle, onItemClick }) {
     if (!items.length) {
         return null;
     }
 
-    return (
-        <div className="space-y-0.5">
-            {label &&
-                (collapsed ? (
-                    <div className="mx-2 my-2 border-t border-line" aria-hidden="true" />
-                ) : (
-                    <div className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wider text-subtle">
-                        {label}
-                    </div>
+    if (collapsed) {
+        return (
+            <div className="space-y-0.5">
+                <div className="mx-2 my-2 border-t border-line" aria-hidden="true" />
+                {items.map((item) => (
+                    <SideLink key={item.label} item={item} collapsed onClick={onItemClick} />
                 ))}
-            {items.map((item) => (
-                <SideLink key={item.label} item={item} collapsed={collapsed} onClick={onItemClick} />
-            ))}
+            </div>
+        );
+    }
+
+    return (
+        <div className="pt-1">
+            <button
+                type="button"
+                onClick={onToggle}
+                aria-expanded={open}
+                className="flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-subtle transition hover:text-body"
+            >
+                <span>{label}</span>
+                <ChevronDown
+                    className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+                    aria-hidden="true"
+                />
+            </button>
+            <div
+                className={`grid transition-all duration-200 ease-in-out ${
+                    open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                }`}
+            >
+                <div className="overflow-hidden">
+                    <div className="space-y-0.5 pt-0.5">
+                        {items.map((item) => (
+                            <SideLink key={item.label} item={item} collapsed={false} onClick={onItemClick} />
+                        ))}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
@@ -157,6 +184,32 @@ export default function Authenticated({ user, header, children }) {
         user?.is_platform_admin && { label: 'Plans', href: route('platform.plans'), icon: CreditCard, active: ['platform.plans'] },
         user?.is_platform_admin && { label: 'Developer', href: route('developer.index'), icon: Wrench, active: ['developer.index'] },
     ].filter(Boolean), [user?.is_platform_admin]);
+
+    // The labelled, collapsible sections (the primary/daily links stay pinned
+    // above them and are never part of the accordion).
+    const sections = useMemo(() => [
+        { label: 'Performance', items: performanceItems },
+        { label: 'Management', items: managementItems },
+        { label: 'System', items: systemItems },
+        { label: 'Platform', items: platformItems },
+    ].filter((s) => s.items.length), [performanceItems, managementItems, systemItems, platformItems]);
+
+    // Which section holds the page you're on (null when a pinned/daily item is active).
+    const activeSection = useMemo(
+        () => sections.find((s) => s.items.some((item) => isActiveRoute(item.active)))?.label ?? null,
+        [sections, page.url],
+    );
+
+    // Single-open accordion: exactly one section expands at a time. A manual
+    // toggle can deviate (peek another group without leaving the page), but any
+    // navigation snaps back so only the section you're in stays open.
+    const [openSection, setOpenSection] = useState(activeSection);
+    useEffect(() => {
+        setOpenSection(activeSection);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [page.url]);
+
+    const toggleSection = (label) => setOpenSection((prev) => (prev === label ? null : label));
 
     const closeMobile = () => setMobileOpen(false);
 
@@ -234,11 +287,25 @@ export default function Authenticated({ user, header, children }) {
                             </Link>
                         )}
 
-                        <NavSection items={primaryItems} collapsed={collapsed} onItemClick={closeMobile} />
-                        <NavSection label="Performance" items={performanceItems} collapsed={collapsed} onItemClick={closeMobile} />
-                        <NavSection label="Management" items={managementItems} collapsed={collapsed} onItemClick={closeMobile} />
-                        <NavSection label="System" items={systemItems} collapsed={collapsed} onItemClick={closeMobile} />
-                        <NavSection label="Platform" items={platformItems} collapsed={collapsed} onItemClick={closeMobile} />
+                        {/* Pinned daily links — always visible, never collapse. */}
+                        <div className="space-y-0.5">
+                            {primaryItems.map((item) => (
+                                <SideLink key={item.label} item={item} collapsed={collapsed} onClick={closeMobile} />
+                            ))}
+                        </div>
+
+                        {/* Collapsible sections — single-open accordion. */}
+                        {sections.map((section) => (
+                            <NavGroup
+                                key={section.label}
+                                label={section.label}
+                                items={section.items}
+                                collapsed={collapsed}
+                                open={openSection === section.label}
+                                onToggle={() => toggleSection(section.label)}
+                                onItemClick={closeMobile}
+                            />
+                        ))}
                     </nav>
 
                     {/* Footer: theme + user + collapse */}

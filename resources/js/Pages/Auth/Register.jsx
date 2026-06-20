@@ -5,13 +5,13 @@ import ApplicationLogo from '@/Components/ApplicationLogo';
 function Field({ id, label, type = 'text', value, onChange, error, placeholder, autoComplete, autoFocus = false }) {
     return (
         <div>
-            <label htmlFor={id} className="block text-sm font-semibold text-gray-700 mb-2">{label}</label>
+            <label htmlFor={id} className="block text-sm font-semibold text-[#374151] mb-2">{label}</label>
             <input
                 id={id}
                 type={type}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50 transition-all duration-200 focus:bg-white focus:outline-none"
+                className="w-full px-4 py-3 border-2 border-[#e5e7eb] rounded-xl bg-[#f9fafb] text-[#111827] placeholder:text-[#9ca3af] transition-all duration-200 focus:bg-white focus:outline-none"
                 onFocus={(e) => { e.target.style.borderColor = '#f97316'; e.target.style.boxShadow = '0 0 0 4px rgba(249, 115, 22, 0.12)'; }}
                 onBlur={(e) => { e.target.style.borderColor = '#e5e7eb'; e.target.style.boxShadow = 'none'; }}
                 placeholder={placeholder}

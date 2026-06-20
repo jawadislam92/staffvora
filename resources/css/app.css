@@ -113,7 +113,15 @@ html { background-color: var(--bg); color: var(--text); }
 
 /* Smooth transitions for form elements */
 .form-input {
+    /* Auth pages sit on a fixed white glass card, so the input text must be a
+       fixed dark colour — otherwise it inherits the (light) theme text token
+       and types invisibly on white. */
+    color: #111827;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.form-input::placeholder {
+    color: #9ca3af;
 }
 
 .form-input:focus {
