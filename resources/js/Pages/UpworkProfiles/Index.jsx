@@ -22,10 +22,10 @@ export default function Index({ auth, profiles }) {
 
     return (
         <AuthenticatedLayout user={auth.user}>
-            <Head title="Upwork Profiles" />
+            <Head title="Profiles" />
             <PageShell>
                 <PageHeader
-                    title="Upwork Profiles"
+                    title="Profiles"
                     description="Manage profile names used for client assignments and time tracking."
                     actions={canManage && (
                                 <Link

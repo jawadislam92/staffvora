@@ -207,7 +207,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                 {(isProfileRequired) && (
                                     <div>
                                         <label className="block text-sm font-semibold text-slate-700 mb-3">
-                                            Upwork Profiles
+                                            Profiles
                                             {isProfileRequired && <span className="text-red-500 ml-1">*</span>}
                                             {!isProfileRequired && <span className="text-slate-400 font-normal ml-2">(optional)</span>}
                                         </label>
@@ -372,7 +372,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                             
                                             {selectedProfiles.length > 0 && (
                                                 <div>
-                                                    <p className="text-sm text-slate-600 font-medium mb-2">Upwork Profiles ({selectedProfiles.length})</p>
+                                                    <p className="text-sm text-slate-600 font-medium mb-2">Profiles ({selectedProfiles.length})</p>
                                                     <div className="flex flex-wrap gap-2">
                                                         {selectedProfiles.map((profile) => (
                                                             <span

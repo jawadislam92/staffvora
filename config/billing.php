@@ -1,9 +1,11 @@
 <?php
 
 return [
-    // Shown on the billing page so customers know how to pay while billing is
-    // manual (bank transfer). Override per deployment via env.
-    'support_email' => env('BILLING_SUPPORT_EMAIL', 'billing@example.com'),
+    // Shown on the billing + help pages so customers know how to reach you while
+    // billing is manual (bank transfer). Set BILLING_SUPPORT_EMAIL per deployment.
+    // Left unset by default so we never show a fake placeholder address — the UI
+    // simply hides the contact line until a real address is configured.
+    'support_email' => env('BILLING_SUPPORT_EMAIL'),
 
     'bank_transfer_instructions' => env(
         'BILLING_BANK_INSTRUCTIONS',

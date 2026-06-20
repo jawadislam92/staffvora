@@ -136,7 +136,7 @@ export default function ClientsList({ auth, clients, flash, filters = {}, workTy
     // Download sample CSV template
     const downloadSample = () => {
         const sampleData = [
-            ['Name', 'Work Type', 'Upwork Profile', 'Tags'],
+            ['Name', 'Work Type', 'Profile', 'Tags'],
             ['Example Client 1', 'Tracker/Manual Time', 'John Doe Profile', 'web development, react'],
             ['Example Client 2', 'Fixed Client', 'Jane Smith Profile', 'mobile app, flutter'],
             ['Example Client 3', 'Outside of Upwork', '', 'consulting, strategy']
@@ -365,7 +365,7 @@ export default function ClientsList({ auth, clients, flash, filters = {}, workTy
                                             <th className="w-16 px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider">ID</th>
                                             <th className="px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider">Name</th>
                                             <th className="w-32 px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider">Work Type</th>
-                                            <th className="w-40 px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider">Upwork Profile</th>
+                                            <th className="w-40 px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider">Profile</th>
                                             <th className="w-48 px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider">Tags</th>
                                             <th className="w-40 px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider">Weekly Hours Worked</th>
                                             {canManage && <th className="w-40 px-6 py-4 text-left text-xs font-bold text-body uppercase tracking-wider sticky right-0 bg-slate-950 border-l border-slate-800">Actions</th>}

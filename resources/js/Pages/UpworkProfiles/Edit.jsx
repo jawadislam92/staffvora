@@ -19,11 +19,11 @@ export default function Edit({ auth, profile }) {
 
     return (
         <AuthenticatedLayout user={auth.user}>
-            <Head title="Edit Upwork Profile" />
-            
+            <Head title="Edit Profile" />
+
             <PageShell width="max-w-5xl">
                 <PageHeader
-                    eyebrow="Upwork profiles"
+                    eyebrow="Profiles"
                     title="Edit Profile"
                     description={`Update profile information for ${profile.name}.`}
                 />

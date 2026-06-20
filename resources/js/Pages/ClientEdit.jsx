@@ -213,7 +213,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                 {(isProfileRequired) && (
                                     <div>
                                         <label className="block text-sm font-semibold text-slate-700 mb-3">
-                                            Upwork Profiles 
+                                            Profiles
                                             {isProfileRequired && <span className="text-red-500">*</span>}
                                             {!isProfileRequired && <span className="text-slate-400 font-normal ml-2">(optional)</span>}
                                         </label>
@@ -335,7 +335,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                         </div>
                                         
                                         <div>
-                                            <p className="text-sm text-slate-500 mb-1">Current Upwork Profiles:</p>
+                                            <p className="text-sm text-slate-500 mb-1">Current Profiles:</p>
                                             <div className="flex flex-wrap gap-2">
                                                 {/* Show multiple profiles if they exist */}
                                                 {client.upwork_profiles && client.upwork_profiles.length > 0 ? (

@@ -19,11 +19,11 @@ export default function Create({ auth }) {
 
     return (
         <AuthenticatedLayout user={auth.user}>
-            <Head title="Create Upwork Profile" />
-            
+            <Head title="Create Profile" />
+
             <PageShell width="max-w-5xl">
                 <PageHeader
-                    eyebrow="Upwork profiles"
+                    eyebrow="Profiles"
                     title="Create Profile"
                     description="Add a profile for client assignments and time tracking."
                 />

@@ -271,7 +271,7 @@ export default function UsersList({ auth, users, filters = {}, filterOptions = {
                                         setPerPage(next);
                                         applyFilters({ perPage: next });
                                     }}
-                                    className="w-full rounded-lg border-slate-300 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                    className="w-full rounded-lg border-slate-300 py-2 text-sm text-slate-900 focus:border-blue-500 focus:ring-blue-500"
                                 >
                                     {[10, 25, 50, 100].map((value) => <option key={value} value={value}>{value}</option>)}
                                 </select>

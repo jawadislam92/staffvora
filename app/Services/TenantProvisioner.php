@@ -56,7 +56,13 @@ class TenantProvisioner
 
             $org->forceFill(['owner_user_id' => $owner->id])->save();
             Team::create(['name' => 'General']);
-            MonitoringSetting::current(); // materialise the org's settings row
+
+            // Materialise the org's settings row, and start attendance tracking
+            // from today: a brand-new workspace has no history, so the monthly
+            // grid must never brand anyone Absent for days before they signed up.
+            MonitoringSetting::current()->update([
+                'attendance_tracking_start_date' => now()->toDateString(),
+            ]);
 
             // Start everyone on a full-featured Pro trial.
             Plan::ensureSeeded();
