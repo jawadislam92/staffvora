@@ -10,6 +10,7 @@ import {
     Clock,
     CreditCard,
     Film,
+    Globe,
     HelpCircle,
     LayoutDashboard,
     LogOut,
@@ -182,6 +183,7 @@ export default function Authenticated({ user, header, children }) {
     const platformItems = useMemo(() => [
         user?.is_platform_admin && { label: 'Platform', href: route('platform.index'), icon: Building2, active: ['platform.index', 'platform.show'] },
         user?.is_platform_admin && { label: 'Plans', href: route('platform.plans'), icon: CreditCard, active: ['platform.plans'] },
+        user?.is_platform_admin && { label: 'Website', href: route('platform.site.index'), icon: Globe, active: ['platform.site.index', 'platform.site.edit'] },
         user?.is_platform_admin && { label: 'Developer', href: route('developer.index'), icon: Wrench, active: ['developer.index'] },
     ].filter(Boolean), [user?.is_platform_admin]);
 

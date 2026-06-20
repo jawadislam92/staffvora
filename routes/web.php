@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\BrandingController;
+use App\Http\Controllers\Platform\SiteBuilderController;
 use App\Http\Controllers\PlatformController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
@@ -12,6 +13,7 @@ use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SchedulerController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\Site\PageController as SitePageController;
 use App\Http\Controllers\SlackReportController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamManagementController;
@@ -37,14 +39,12 @@ use Inertia\Inertia;
 |
 */
 
-Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
-});
+// Public marketing home — rendered from the builder-driven content (Site\PageController).
+Route::get('/', [SitePageController::class, 'home'])->name('home');
+
+// Builder-uploaded images + the marketing-site logo (public, cached).
+Route::get('/site/media/{media}', [SitePageController::class, 'media'])->name('site.media');
+Route::get('/site/logo', [SitePageController::class, 'logo'])->name('site.media.logo');
 
 Route::get('/storage/avatars/{filename}', function (string $filename) {
     $path = 'avatars/'.$filename;
@@ -249,6 +249,20 @@ Route::middleware(['auth', 'verified', 'platform'])->prefix('platform')->group(f
     // isn't treated as a tenant slug.
     Route::get('/plans', [PlatformController::class, 'plans'])->name('platform.plans');
     Route::put('/plans/{plan}', [PlatformController::class, 'updatePlan'])->name('platform.plans.update');
+
+    // No-code marketing-site builder (declared before the /{organization} wildcard).
+    Route::prefix('site')->group(function () {
+        Route::get('/', [SiteBuilderController::class, 'index'])->name('platform.site.index');
+        Route::put('/theme', [SiteBuilderController::class, 'updateTheme'])->name('platform.site.theme');
+        Route::post('/logo', [SiteBuilderController::class, 'setLogo'])->name('platform.site.logo');
+        Route::post('/image', [SiteBuilderController::class, 'uploadImage'])->name('platform.site.image');
+        Route::post('/pages', [SiteBuilderController::class, 'createPage'])->name('platform.site.pages.create');
+        Route::get('/pages/{page}', [SiteBuilderController::class, 'edit'])->name('platform.site.edit');
+        Route::put('/pages/{page}', [SiteBuilderController::class, 'saveDraft'])->name('platform.site.save');
+        Route::post('/pages/{page}/publish', [SiteBuilderController::class, 'publish'])->name('platform.site.publish');
+        Route::delete('/pages/{page}', [SiteBuilderController::class, 'destroyPage'])->name('platform.site.pages.destroy');
+    });
+
     Route::get('/{organization}', [PlatformController::class, 'show'])->name('platform.show');
     Route::post('/{organization}/suspend', [PlatformController::class, 'suspend'])->name('platform.suspend');
     Route::post('/{organization}/resume', [PlatformController::class, 'resume'])->name('platform.resume');
@@ -262,3 +276,10 @@ Route::post('/stop-impersonating', [PlatformController::class, 'stopImpersonatin
     ->middleware('auth')->name('platform.stop-impersonating');
 
 require __DIR__.'/auth.php';
+
+// Published marketing pages by slug (e.g. /pricing, /privacy). Declared LAST so
+// it can never shadow an app route — only unmatched lowercase slugs reach it,
+// and the controller 404s when there's no published page.
+Route::get('/{slug}', [SitePageController::class, 'show'])
+    ->where('slug', '[a-z0-9][a-z0-9-]*')
+    ->name('site.page');
