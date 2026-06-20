@@ -369,10 +369,10 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                 />
 
                     {/* Form Section */}
-                    <div className="overflow-visible rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div className="overflow-visible rounded-lg border border-line bg-surface shadow-sm">
                         <div className="p-5 sm:p-6">
                             <form onSubmit={handleSubmit}>
-                                <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                                <div className="mb-5 rounded-lg border border-emerald-200 bg-surface-2 p-4">
                                     <div className="mb-4">
                                         <div className="flex items-center gap-3 mb-3">
                                             <div className="p-2 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-lg">
@@ -380,9 +380,9 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                                 </svg>
                                             </div>
-                                            <h3 className="text-lg font-bold text-slate-900">Work Type</h3>
+                                            <h3 className="text-lg font-bold text-body">Work Type</h3>
                                         </div>
-                                        <p className="text-sm text-slate-700 mb-4 pl-14">
+                                        <p className="text-sm text-muted mb-4 pl-14">
                                             {form.data.work_type ? (
                                                 <>
                                                     <span className="font-semibold text-emerald-700">Required fields:</span> {' '}
@@ -395,7 +395,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                                     {form.data.work_type === 'upwork_bidding' && "Description, Hours/Minutes, Tracking Date"}
                                                 </>
                                             ) : (
-                                                <span className="text-slate-500 italic">Please select a work type to see required fields</span>
+                                                <span className="text-subtle italic">Please select a work type to see required fields</span>
                                             )}
                                         </p>
                                     </div>
@@ -408,7 +408,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                                 className={`min-h-11 rounded-lg p-2.5 text-sm font-semibold transition ${
                                                     form.data.work_type === type.value
                                                         ? 'bg-emerald-600 text-white shadow-sm'
-                                                        : 'border border-slate-300 bg-white text-slate-700 hover:border-emerald-400 hover:bg-emerald-50'
+                                                        : 'border border-line bg-surface text-muted hover:border-emerald-400 hover:bg-surface-2'
                                                 }`}
                                             >
                                                 {type.label}
@@ -426,7 +426,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                     {/* Client Name */}
                                     {isClientRequired() && (
                                         <div className="relative">
-                                            <label htmlFor="client" className="block text-sm font-semibold text-slate-700 mb-3">
+                                            <label htmlFor="client" className="block text-sm font-semibold text-muted mb-3">
                                                 Client Name <span className="text-red-500 ml-1">*</span>
                                             </label>
                                             <div className="relative">
@@ -439,8 +439,8 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                                     ref={clientRef}
                                                     type="text"
                                                     placeholder="Search or select client..."
-                                                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-emerald-200 text-slate-900 placeholder-slate-400 transition-all ${
-                                                        clientValidationError ? 'border-red-500 focus:border-red-500' : 'border-slate-200 focus:border-emerald-500'
+                                                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-emerald-200 text-body placeholder-slate-400 transition-all ${
+                                                        clientValidationError ? 'border-red-500 focus:border-red-500' : 'border-line focus:border-emerald-500'
                                                     }`}
                                                     value={form.data.clientSearch}
                                                     onChange={handleClientSearchChange}
@@ -458,7 +458,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                                 </div>
                                             )}
                                             {!clientValidationError && form.data.work_type && (
-                                                <div className="mt-2 text-xs text-slate-600 flex items-center gap-1.5">
+                                                <div className="mt-2 text-xs text-muted flex items-center gap-1.5">
                                                     <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
                                                         <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                                                     </svg>
@@ -475,7 +475,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                             {showClientOptions && (
                                                 <div 
                                                     ref={clientDropdownRef}
-                                                    className="absolute z-50 w-full mt-2 bg-white border-2 border-slate-200 rounded-xl max-h-64 overflow-y-auto shadow-xl"
+                                                    className="absolute z-50 w-full mt-2 bg-surface border-2 border-line rounded-xl max-h-64 overflow-y-auto shadow-xl"
                                                 >
                                                     <div className="p-2">
                                                         {getFilteredClients().filter(client => {
@@ -485,13 +485,13 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                                             <button
                                                                 key={client.id}
                                                                 type="button"
-                                                                className="w-full text-left px-3 py-2.5 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-teal-50 rounded-lg text-slate-700 transition-all border-b border-slate-100 last:border-0"
+                                                                className="w-full text-left px-3 py-2.5 hover:bg-gradient-to-r hover:from-surface hover:to-surface rounded-lg text-muted transition-all border-b border-line last:border-0"
                                                                 onMouseDown={(e) => e.preventDefault()} // Prevent blur when clicking
                                                                 onClick={() => handleClientSelect(client)}
                                                             >
                                                                 <div className="flex items-center justify-between">
                                                                     <span className="font-medium">{client.name}</span>
-                                                                    <span className="text-xs px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md font-semibold">
+                                                                    <span className="text-xs px-2 py-1 bg-surface-2 text-emerald-700 rounded-md font-semibold">
                                                                         {client.work_type === 'tracker_manual' && 'Tracker/Manual'}
                                                                         {client.work_type === 'fixed' && 'Fixed'}
                                                                         {client.work_type === 'outside_of_upwork' && 'Outside Upwork'}
@@ -503,7 +503,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                                             const label = client.name;
                                                             return !form.data.clientSearch || label.toLowerCase().includes(form.data.clientSearch.toLowerCase());
                                                         }).length === 0 && (
-                                                            <div className="px-3 py-4 text-slate-500 text-sm text-center">
+                                                            <div className="px-3 py-4 text-subtle text-sm text-center">
                                                                 <svg className="w-12 h-12 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                                 </svg>
@@ -521,7 +521,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                     {/* Profile Name */}
                                     {isTrackerRequired() && (
                                         <div className="relative">
-                                            <label htmlFor="tracker" className="block text-sm font-semibold text-slate-700 mb-3">
+                                            <label htmlFor="tracker" className="block text-sm font-semibold text-muted mb-3">
                                                 Profile Name <span className="text-red-500 ml-1">*</span>
                                             </label>
                                             <div className="relative">
@@ -534,8 +534,8 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                                     ref={trackerRef}
                                                     type="text"
                                                     placeholder="Search or select profile..."
-                                                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-emerald-200 text-slate-900 placeholder-slate-400 transition-all ${
-                                                        trackerValidationError ? 'border-red-500 focus:border-red-500' : 'border-slate-200 focus:border-emerald-500'
+                                                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-emerald-200 text-body placeholder-slate-400 transition-all ${
+                                                        trackerValidationError ? 'border-red-500 focus:border-red-500' : 'border-line focus:border-emerald-500'
                                                     }`}
                                                     value={
                                                         form.data.trackerSearch ||
@@ -556,7 +556,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                                 </div>
                                             )}
                                             {!trackerValidationError && form.data.client_id && (
-                                                <div className="mt-2 text-xs text-slate-600 flex items-center gap-1.5">
+                                                <div className="mt-2 text-xs text-muted flex items-center gap-1.5">
                                                     <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
                                                         <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                                                     </svg>
@@ -586,7 +586,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                             {showTrackerOptions && (
                                                 <div 
                                                     ref={trackerDropdownRef}
-                                                    className="absolute z-50 w-full mt-2 bg-white border-2 border-slate-200 rounded-xl max-h-64 overflow-y-auto shadow-xl"
+                                                    className="absolute z-50 w-full mt-2 bg-surface border-2 border-line rounded-xl max-h-64 overflow-y-auto shadow-xl"
                                                 >
                                                     <div className="p-2">
                                                         {getFilteredTrackers().filter(tracker => 
@@ -595,7 +595,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                                             <button
                                                                 key={index}
                                                                 type="button"
-                                                                className="w-full text-left px-3 py-2.5 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-teal-50 rounded-lg text-slate-700 transition-all border-b border-slate-100 last:border-0 font-medium"
+                                                                className="w-full text-left px-3 py-2.5 hover:bg-gradient-to-r hover:from-surface hover:to-surface rounded-lg text-muted transition-all border-b border-line last:border-0 font-medium"
                                                                 onMouseDown={(e) => e.preventDefault()} // Prevent blur when clicking
                                                                 onClick={() => handleTrackerSelect(tracker)}
                                                             >
@@ -610,7 +610,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                                         {getFilteredTrackers().filter(tracker => 
                                                             !form.data.trackerSearch || tracker.toLowerCase().includes(form.data.trackerSearch.toLowerCase())
                                                         ).length === 0 && (
-                                                            <div className="px-3 py-4 text-slate-500 text-sm text-center">
+                                                            <div className="px-3 py-4 text-subtle text-sm text-center">
                                                                 <svg className="w-12 h-12 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                                 </svg>
@@ -629,7 +629,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                                     {/* Date */}
                                     <div>
-                                        <label htmlFor="date" className="block text-sm font-medium text-slate-700 mb-3 font-semibold">
+                                        <label htmlFor="date" className="block text-sm font-medium text-muted mb-3 font-semibold">
                                             Date <span className="text-red-500">*</span>
                                         </label>
                                         <input
@@ -637,14 +637,14 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                             id="date"
                                             value={form.data.date}
                                             onChange={(e) => form.setData('date', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-slate-900"
+                                            className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body"
                                             required
                                         />
                                     </div>
 
                                     {/* Hours */}
                                     <div>
-                                        <label htmlFor="hours" className="block text-sm font-medium text-slate-700 mb-3 font-semibold">
+                                        <label htmlFor="hours" className="block text-sm font-medium text-muted mb-3 font-semibold">
                                             Hours <span className="text-red-500">*</span>
                                         </label>
                                         <input
@@ -664,14 +664,14 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                             onFocus={(e) => e.target.addEventListener('wheel', (event) => event.preventDefault(), { passive: false })}
                                             onBlur={(e) => e.target.removeEventListener('wheel', (event) => event.preventDefault())}
                                             placeholder="Enter hours (0-24)"
-                                            className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-slate-900 placeholder-slate-400"
+                                            className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body placeholder-slate-400"
                                             required
                                         />
                                     </div>
 
                                     {/* Minutes */}
                                     <div>
-                                        <label htmlFor="minutes" className="block text-sm font-medium text-slate-700 mb-3 font-semibold">
+                                        <label htmlFor="minutes" className="block text-sm font-medium text-muted mb-3 font-semibold">
                                             Minutes
                                         </label>
                                         <input
@@ -691,7 +691,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                             onFocus={(e) => e.target.addEventListener('wheel', (event) => event.preventDefault(), { passive: false })}
                                             onBlur={(e) => e.target.removeEventListener('wheel', (event) => event.preventDefault())}
                                             placeholder="Enter minutes (0-59)"
-                                            className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-slate-900 placeholder-slate-400"
+                                            className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body placeholder-slate-400"
                                         />
                                     </div>
                                 </div>
@@ -699,18 +699,18 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                 {/* Total Time Display */}
                                 <div className={`mb-6 p-4 backdrop-blur-xl rounded-xl border ${
                                     hasTimeEntered() 
-                                        ? 'bg-gradient-to-r from-green-500/20 to-blue-500/20 border-slate-200' 
+                                        ? 'bg-gradient-to-r from-green-500/20 to-blue-500/20 border-line' 
                                         : 'bg-gradient-to-r from-red-500/20 to-orange-500/20 border-red-400/30'
                                 }`}>
                                     <div className="flex items-center gap-3">
                                         <svg className={`w-6 h-6 ${hasTimeEntered() ? 'text-blue-500' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                         </svg>
-                                        <div className="text-slate-900">
-                                            <div className={`text-sm font-medium ${hasTimeEntered() ? 'text-slate-600' : 'text-red-600'}`}>
+                                        <div className="text-body">
+                                            <div className={`text-sm font-medium ${hasTimeEntered() ? 'text-muted' : 'text-red-600'}`}>
                                                 Total Time {!hasTimeEntered() && '(Required)'}
                                             </div>
-                                            <div className={`text-2xl font-bold ${!hasTimeEntered() ? 'text-red-600' : 'text-slate-900'}`}>
+                                            <div className={`text-2xl font-bold ${!hasTimeEntered() ? 'text-red-600' : 'text-body'}`}>
                                                 {(() => {
                                                     const hours = parseInt(form.data.hours) || 0;
                                                     const minutes = parseInt(form.data.minutes) || 0;
@@ -721,7 +721,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                                 })()}
                                             </div>
                                             {hasTimeEntered() && (
-                                                <div className="text-xs text-slate-500">
+                                                <div className="text-xs text-subtle">
                                                     {(() => {
                                                         const hours = parseInt(form.data.hours) || 0;
                                                         const minutes = parseInt(form.data.minutes) || 0;
@@ -741,7 +741,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
 
                                 {/* Description */}
                                 <div className="mb-6">
-                                    <label htmlFor="description" className="block text-sm font-medium text-slate-700 mb-3 font-semibold">
+                                    <label htmlFor="description" className="block text-sm font-medium text-muted mb-3 font-semibold">
                                         Description <span className="text-red-500">*</span>
                                     </label>
                                     <textarea
@@ -749,7 +749,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                         rows={4}
                                         value={form.data.description}
                                         onChange={(e) => form.setData('description', e.target.value)}
-                                        className="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-slate-900 placeholder-slate-400"
+                                        className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body placeholder-slate-400"
                                         placeholder="Describe the work you did..."
                                         required
                                     />
@@ -758,7 +758,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                 <div className="flex items-center justify-between">
                                     <Link
                                         href={route('work-hours.index')}
-                                        className="inline-flex items-center px-6 py-3 bg-white hover:bg-slate-50 text-slate-700 rounded-xl font-medium transition-all border border-slate-300"
+                                        className="inline-flex items-center px-6 py-3 bg-surface hover:bg-surface-2 text-muted rounded-xl font-medium transition-all border border-line"
                                     >
                                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -768,7 +768,7 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                     <button
                                         type="submit"
                                         disabled={form.processing}
-                                        className="inline-flex items-center rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+                                        className="inline-flex items-center rounded-lg bg-accent px-5 py-2.5 font-semibold text-white shadow-sm hover:bg-accent disabled:opacity-50"
                                     >
                                         {form.processing ? (
                                             <>

@@ -70,17 +70,17 @@ export default function SearchableMultiSelect({
 
     return (
         <div className="relative" ref={containerRef}>
-            <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-600">{label}</label>
+            <label className="mb-1.5 block text-xs font-semibold uppercase text-muted">{label}</label>
             <button
                 type="button"
                 onClick={() => setOpen((current) => !current)}
-                className="flex min-h-10 w-full items-center justify-between gap-3 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-900 shadow-sm transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex min-h-10 w-full items-center justify-between gap-3 rounded-lg border border-line bg-surface px-3 py-2 text-left text-sm text-body shadow-sm transition hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-accent"
             >
-                <span className={selectedOptions.length ? 'font-medium text-slate-900' : 'text-slate-500'}>
+                <span className={selectedOptions.length ? 'font-medium text-body' : 'text-subtle'}>
                     {buttonText}
                 </span>
                 <svg
-                    className={`h-4 w-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`}
+                    className={`h-4 w-4 text-subtle transition-transform ${open ? 'rotate-180' : ''}`}
                     viewBox="0 0 20 20"
                     fill="currentColor"
                     aria-hidden="true"
@@ -93,23 +93,23 @@ export default function SearchableMultiSelect({
                 <div
                     className={
                         inline
-                            ? 'relative mt-1.5 w-full rounded-lg border border-slate-200 bg-white'
-                            : 'absolute z-40 mt-1.5 w-full rounded-lg border border-slate-200 bg-white shadow-xl'
+                            ? 'relative mt-1.5 w-full rounded-lg border border-line bg-surface'
+                            : 'absolute z-40 mt-1.5 w-full rounded-lg border border-line bg-surface shadow-xl'
                     }
                 >
-                    <div className="border-b border-slate-100 p-2">
+                    <div className="border-b border-line p-2">
                         <input
                             type="text"
                             value={query}
                             onChange={(event) => setQuery(event.target.value)}
                             placeholder={searchPlaceholder}
-                            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full rounded-md border border-line px-3 py-2 text-sm text-body placeholder-slate-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent"
                         />
                     </div>
 
                     <div className={inline ? 'py-1' : 'max-h-64 overflow-y-auto py-1'}>
                         {filteredOptions.length === 0 ? (
-                            <div className="px-3 py-3 text-sm text-slate-500">No options found</div>
+                            <div className="px-3 py-3 text-sm text-subtle">No options found</div>
                         ) : (
                             filteredOptions.map((option) => {
                                 const checked = selectedSet.has(String(option.value));
@@ -119,13 +119,13 @@ export default function SearchableMultiSelect({
                                         key={option.value}
                                         type="button"
                                         onClick={() => toggleValue(option.value)}
-                                        className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-slate-800 transition hover:bg-slate-50"
+                                        className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-body transition hover:bg-surface-2"
                                     >
                                         <span
                                             className={`flex h-4 w-4 items-center justify-center rounded border ${
                                                 checked
-                                                    ? 'border-blue-600 bg-blue-600 text-white'
-                                                    : 'border-slate-300 bg-white'
+                                                    ? 'border-blue-600 bg-accent text-white'
+                                                    : 'border-line bg-surface'
                                             }`}
                                         >
                                             {checked && (
@@ -142,14 +142,14 @@ export default function SearchableMultiSelect({
                     </div>
 
                     {selectedOptions.length > 0 && (
-                        <div className="border-t border-slate-100 p-2">
+                        <div className="border-t border-line p-2">
                             <div className="mb-2 flex flex-wrap gap-1.5">
                                 {selectedOptions.map((option) => (
                                     <button
                                         key={option.value}
                                         type="button"
                                         onClick={() => toggleValue(option.value)}
-                                        className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                                        className="inline-flex items-center gap-1 rounded-md bg-surface-2 px-2 py-1 text-xs font-medium text-accent hover:bg-surface-2"
                                         title={`Remove ${option.label}`}
                                     >
                                         <span className="max-w-36 truncate">{option.label}</span>
@@ -160,7 +160,7 @@ export default function SearchableMultiSelect({
                             <button
                                 type="button"
                                 onClick={clearAll}
-                                className="w-full rounded-md px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                                className="w-full rounded-md px-3 py-1.5 text-xs font-semibold text-muted transition hover:bg-surface-2 hover:text-body"
                             >
                                 Clear {label}
                             </button>

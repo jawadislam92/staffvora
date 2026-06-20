@@ -76,21 +76,21 @@ export default function UserForm({
 
     return (
         <form onSubmit={submit} className="space-y-6">
-            <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-5 py-4">
-                    <h2 className="font-bold text-slate-950">Account details</h2>
-                    <p className="mt-1 text-sm text-slate-600">Identity, login, designation, and attendance schedule.</p>
+            <section className="rounded-lg border border-line bg-surface shadow-sm">
+                <div className="border-b border-line px-5 py-4">
+                    <h2 className="font-bold text-body">Account details</h2>
+                    <p className="mt-1 text-sm text-muted">Identity, login, designation, and attendance schedule.</p>
                 </div>
 
                 <div className="grid gap-6 p-5 lg:grid-cols-[180px_1fr]">
                     <div>
-                        <div className="flex flex-col items-center gap-3 rounded-lg bg-slate-50 p-4">
+                        <div className="flex flex-col items-center gap-3 rounded-lg bg-surface-2 p-4">
                             {avatarPreview ? (
                                 <img src={avatarPreview} alt="" className="h-24 w-24 rounded-full object-cover" />
                             ) : (
                                 <Avatar user={{ name: form.data.name || 'User' }} size="xl" />
                             )}
-                            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+                            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-semibold text-muted hover:bg-surface-2">
                                 <Camera className="h-4 w-4" />
                                 Choose photo
                                 <input type="file" accept="image/*" onChange={handleAvatar} className="hidden" />
@@ -104,7 +104,7 @@ export default function UserForm({
                             <input
                                 value={form.data.name}
                                 onChange={(event) => form.setData('name', event.target.value)}
-                                className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                className="w-full rounded-lg border-line text-sm focus:border-accent focus:ring-accent"
                                 required
                             />
                         </Field>
@@ -113,7 +113,7 @@ export default function UserForm({
                                 type="email"
                                 value={form.data.email}
                                 onChange={(event) => form.setData('email', event.target.value)}
-                                className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                className="w-full rounded-lg border-line text-sm focus:border-accent focus:ring-accent"
                                 required
                             />
                         </Field>
@@ -126,7 +126,7 @@ export default function UserForm({
                                 type="password"
                                 value={form.data.password}
                                 onChange={(event) => form.setData('password', event.target.value)}
-                                className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                className="w-full rounded-lg border-line text-sm focus:border-accent focus:ring-accent"
                                 required={!editing}
                             />
                         </Field>
@@ -142,7 +142,7 @@ export default function UserForm({
                                         form.setData('designation', event.target.value);
                                     }
                                 }}
-                                className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                className="w-full rounded-lg border-line text-sm focus:border-accent focus:ring-accent"
                             >
                                 <option value="">No designation</option>
                                 {designationOptions.map((designation) => (
@@ -156,7 +156,7 @@ export default function UserForm({
                                     onChange={(event) => form.setData('designation', event.target.value)}
                                     placeholder="Type the new designation"
                                     autoFocus
-                                    className="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                    className="mt-2 w-full rounded-lg border-line text-sm focus:border-accent focus:ring-accent"
                                 />
                             )}
                         </Field>
@@ -165,14 +165,14 @@ export default function UserForm({
                                 type="date"
                                 value={form.data.joining_date}
                                 onChange={(event) => form.setData('joining_date', event.target.value)}
-                                className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                className="w-full rounded-lg border-line text-sm focus:border-accent focus:ring-accent"
                             />
                         </Field>
                         <Field label="Team" hint="Group this person belongs to. Manage teams under Management → Teams." error={form.errors.team_id}>
                             <select
                                 value={form.data.team_id ?? ''}
                                 onChange={(event) => form.setData('team_id', event.target.value ? Number(event.target.value) : '')}
-                                className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                className="w-full rounded-lg border-line text-sm focus:border-accent focus:ring-accent"
                             >
                                 <option value="">No team</option>
                                 {teams.map((team) => (
@@ -185,14 +185,14 @@ export default function UserForm({
                                 type="time"
                                 value={form.data.shift_start_time}
                                 onChange={(event) => form.setData('shift_start_time', event.target.value)}
-                                className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                className="w-full rounded-lg border-line text-sm focus:border-accent focus:ring-accent"
                             />
                         </Field>
                         <Field label="Grace period" hint="Late after shift start plus this many minutes." error={form.errors.shift_grace_minutes}>
                             <select
                                 value={form.data.shift_grace_minutes}
                                 onChange={(event) => form.setData('shift_grace_minutes', Number(event.target.value))}
-                                className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                className="w-full rounded-lg border-line text-sm focus:border-accent focus:ring-accent"
                             >
                                 {[0, 5, 10, 15, 20, 30, 45, 60].map((minutes) => (
                                     <option key={minutes} value={minutes}>
@@ -210,7 +210,7 @@ export default function UserForm({
                                 value={form.data.shift_hours}
                                 onChange={(event) => form.setData('shift_hours', event.target.value)}
                                 placeholder="e.g. 10"
-                                className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                className="w-full rounded-lg border-line text-sm focus:border-accent focus:ring-accent"
                             />
                         </Field>
                         <Field label="Clock-out reminder after (hours)" hint="When the Slack “still working?” check pings this person. Blank = team default." error={form.errors.clockout_reminder_hours}>
@@ -222,7 +222,7 @@ export default function UserForm({
                                 value={form.data.clockout_reminder_hours}
                                 onChange={(event) => form.setData('clockout_reminder_hours', event.target.value)}
                                 placeholder="e.g. 8"
-                                className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+                                className="w-full rounded-lg border-line text-sm focus:border-accent focus:ring-accent"
                             />
                         </Field>
                     </div>
@@ -231,10 +231,10 @@ export default function UserForm({
 
             {canManageAccess && (
                 <>
-                    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div className="border-b border-slate-200 px-5 py-4">
-                            <h2 className="font-bold text-slate-950">Role</h2>
-                            <p className="mt-1 text-sm text-slate-600">Roles describe responsibility; permissions control exact access.</p>
+                    <section className="rounded-lg border border-line bg-surface shadow-sm">
+                        <div className="border-b border-line px-5 py-4">
+                            <h2 className="font-bold text-body">Role</h2>
+                            <p className="mt-1 text-sm text-muted">Roles describe responsibility; permissions control exact access.</p>
                         </div>
                         <div className="grid gap-3 p-5 md:grid-cols-3">
                             {Object.entries(roles).map(([key, role]) => {
@@ -247,19 +247,19 @@ export default function UserForm({
                                         onClick={() => selectRole(key)}
                                         className={`flex min-h-28 items-start gap-3 rounded-lg border p-4 text-left transition ${
                                             selected
-                                                ? 'border-blue-600 bg-blue-50 ring-1 ring-blue-600'
-                                                : 'border-slate-200 bg-white hover:border-slate-400'
+                                                ? 'border-blue-600 bg-surface-2 ring-1 ring-blue-600'
+                                                : 'border-line bg-surface hover:border-slate-400'
                                         }`}
                                     >
-                                        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${selected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                                        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${selected ? 'bg-accent text-white' : 'bg-surface-2 text-muted'}`}>
                                             <Icon className="h-5 w-5" />
                                         </span>
                                         <span>
-                                            <span className="flex items-center gap-2 font-bold text-slate-950">
+                                            <span className="flex items-center gap-2 font-bold text-body">
                                                 {role.label}
-                                                {selected && <Check className="h-4 w-4 text-blue-700" />}
+                                                {selected && <Check className="h-4 w-4 text-accent" />}
                                             </span>
-                                            <span className="mt-1 block text-sm leading-5 text-slate-600">{role.description}</span>
+                                            <span className="mt-1 block text-sm leading-5 text-muted">{role.description}</span>
                                         </span>
                                     </button>
                                 );
@@ -267,19 +267,19 @@ export default function UserForm({
                         </div>
                     </section>
 
-                    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div className="border-b border-slate-200 px-5 py-4">
-                            <h2 className="font-bold text-slate-950">Selected access</h2>
-                            <p className="mt-1 text-sm text-slate-600">
+                    <section className="rounded-lg border border-line bg-surface shadow-sm">
+                        <div className="border-b border-line px-5 py-4">
+                            <h2 className="font-bold text-body">Selected access</h2>
+                            <p className="mt-1 text-sm text-muted">
                                 {form.data.role === 'super_admin'
                                     ? 'Super Admin already has every permission.'
                                     : 'Choose only the areas this account needs.'}
                             </p>
                         </div>
-                        <div className="divide-y divide-slate-200">
+                        <div className="divide-y divide-line">
                             {Object.entries(permissionGroups).map(([group, permissions]) => (
                                 <div key={group} className="grid gap-3 px-5 py-4 md:grid-cols-[160px_1fr]">
-                                    <h3 className="text-sm font-bold text-slate-900">{group}</h3>
+                                    <h3 className="text-sm font-bold text-body">{group}</h3>
                                     <div className="grid gap-2 xl:grid-cols-2">
                                         {Object.entries(permissions).map(([permission, def]) => {
                                             // Catalog entries are {label, description}; tolerate
@@ -291,8 +291,8 @@ export default function UserForm({
                                                     key={permission}
                                                     className={`flex items-start gap-3 rounded-lg px-3 py-2 ${
                                                         form.data.role === 'super_admin'
-                                                            ? 'cursor-not-allowed bg-slate-50'
-                                                            : 'cursor-pointer hover:bg-slate-50'
+                                                            ? 'cursor-not-allowed bg-surface-2'
+                                                            : 'cursor-pointer hover:bg-surface-2'
                                                     }`}
                                                 >
                                                     <input
@@ -300,12 +300,12 @@ export default function UserForm({
                                                         checked={form.data.role === 'super_admin' || form.data.permissions.includes(permission)}
                                                         disabled={form.data.role === 'super_admin'}
                                                         onChange={() => togglePermission(permission)}
-                                                        className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                        className="mt-0.5 rounded border-line text-accent focus:ring-accent"
                                                     />
                                                     <span className="min-w-0">
-                                                        <span className="block text-sm font-semibold text-slate-800">{label}</span>
+                                                        <span className="block text-sm font-semibold text-body">{label}</span>
                                                         {description && (
-                                                            <span className="mt-0.5 block text-xs leading-5 text-slate-500">{description}</span>
+                                                            <span className="mt-0.5 block text-xs leading-5 text-subtle">{description}</span>
                                                         )}
                                                     </span>
                                                 </label>
@@ -318,21 +318,21 @@ export default function UserForm({
                         {form.errors.permissions && <p className="px-5 pb-4 text-sm font-medium text-rose-600">{form.errors.permissions}</p>}
                     </section>
 
-                    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div className="border-b border-slate-200 px-5 py-4">
-                            <h2 className="font-bold text-slate-950">Slack reporting</h2>
-                            <p className="mt-1 text-sm text-slate-600">Control whether this person is included in routine hours reports.</p>
+                    <section className="rounded-lg border border-line bg-surface shadow-sm">
+                        <div className="border-b border-line px-5 py-4">
+                            <h2 className="font-bold text-body">Slack reporting</h2>
+                            <p className="mt-1 text-sm text-muted">Control whether this person is included in routine hours reports.</p>
                         </div>
                         <label className="flex cursor-pointer items-start gap-3 p-5">
                             <input
                                 type="checkbox"
                                 checked={form.data.include_in_slack_reports}
                                 onChange={(event) => form.setData('include_in_slack_reports', event.target.checked)}
-                                className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                className="mt-0.5 rounded border-line text-accent focus:ring-accent"
                             />
                             <span>
-                                <span className="block text-sm font-semibold text-slate-900">Include in Slack reports by default</span>
-                                <span className="mt-1 block text-sm leading-5 text-slate-600">
+                                <span className="block text-sm font-semibold text-body">Include in Slack reports by default</span>
+                                <span className="mt-1 block text-sm leading-5 text-muted">
                                     Enabled users are preselected in manual reports and included in automatic Sunday reports.
                                 </span>
                             </span>
@@ -342,21 +342,21 @@ export default function UserForm({
                         )}
                     </section>
 
-                    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div className="border-b border-slate-200 px-5 py-4">
-                            <h2 className="font-bold text-slate-950">Devices</h2>
-                            <p className="mt-1 text-sm text-slate-600">By default a person can track on only one device at a time — starting on a second device stops the first, so time is never double-counted.</p>
+                    <section className="rounded-lg border border-line bg-surface shadow-sm">
+                        <div className="border-b border-line px-5 py-4">
+                            <h2 className="font-bold text-body">Devices</h2>
+                            <p className="mt-1 text-sm text-muted">By default a person can track on only one device at a time — starting on a second device stops the first, so time is never double-counted.</p>
                         </div>
                         <label className="flex cursor-pointer items-start gap-3 p-5">
                             <input
                                 type="checkbox"
                                 checked={form.data.allow_multiple_devices}
                                 onChange={(event) => form.setData('allow_multiple_devices', event.target.checked)}
-                                className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                className="mt-0.5 rounded border-line text-accent focus:ring-accent"
                             />
                             <span>
-                                <span className="block text-sm font-semibold text-slate-900">Allow tracking on multiple devices at once</span>
-                                <span className="mt-1 block text-sm leading-5 text-slate-600">
+                                <span className="block text-sm font-semibold text-body">Allow tracking on multiple devices at once</span>
+                                <span className="mt-1 block text-sm leading-5 text-muted">
                                     Only enable for someone who genuinely needs two machines tracking simultaneously. Overlapping time is kept and clearly marked as double-tracked.
                                 </span>
                             </span>
@@ -365,10 +365,10 @@ export default function UserForm({
                 </>
             )}
 
-            <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
+            <div className="flex flex-col-reverse gap-3 border-t border-line pt-5 sm:flex-row sm:justify-end">
                 <Link
                     href={route('users.index')}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-muted hover:bg-surface-2"
                 >
                     <ArrowLeft className="h-4 w-4" />
                     Cancel
@@ -376,7 +376,7 @@ export default function UserForm({
                 <button
                     type="submit"
                     disabled={form.processing}
-                    className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-lg bg-accent px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
                     {form.processing ? 'Saving...' : editing ? 'Save changes' : 'Create user'}
                 </button>
@@ -388,9 +388,9 @@ export default function UserForm({
 function Field({ label, hint = null, error = null, children }) {
     return (
         <label className="block">
-            <span className="mb-1.5 block text-sm font-semibold text-slate-800">{label}</span>
+            <span className="mb-1.5 block text-sm font-semibold text-body">{label}</span>
             {children}
-            {hint && <span className="mt-1 block text-xs text-slate-500">{hint}</span>}
+            {hint && <span className="mt-1 block text-xs text-subtle">{hint}</span>}
             {error && <span className="mt-1 block text-xs font-medium text-rose-600">{error}</span>}
         </label>
     );

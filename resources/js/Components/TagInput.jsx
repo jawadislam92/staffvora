@@ -59,9 +59,9 @@ export default function TagInput({ tags = [], onChange, placeholder = 'Add tags.
                 onKeyDown={handleKeyDown}
                 onBlur={handleInputBlur}
                 placeholder={placeholder}
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 transition-all placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-line bg-surface px-4 py-3 text-sm text-body transition-all placeholder-slate-400 focus:border-accent focus:ring-2 focus:ring-accent"
             />
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-subtle">
                 Press Enter or comma to add a tag. Click x to remove tags.
             </p>
         </div>

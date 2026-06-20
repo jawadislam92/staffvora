@@ -77,6 +77,49 @@
 }
 html { background-color: var(--bg); color: var(--text); }
 
+/* Native form controls follow the active theme by default, so the legacy
+   white-card pages (Settings, Users, Developer, Profile) match the dark app
+   shell instead of rendering as bright white boxes. Inputs that set their own
+   background utility (the auth glass pages: bg-gray-50 / bg-[#f9fafb]) win via
+   the utilities layer and keep their light look; checkboxes/radios/files keep
+   native rendering. */
+@layer base {
+    /* Native form controls follow the active theme so the legacy white-card
+       pages (Settings, Users, Developer, Profile) match the dark app shell.
+       We mirror @tailwindcss/forms' exact selector list at the SAME specificity
+       so this wins over the plugin's `background:#fff` by source order — yet any
+       Tailwind bg/text *utility* (the auth glass pages, explicit input colours)
+       still wins over both, since the utilities layer is emitted last. */
+    [type='text'],
+    [type='email'],
+    [type='url'],
+    [type='password'],
+    [type='number'],
+    [type='date'],
+    [type='datetime-local'],
+    [type='month'],
+    [type='search'],
+    [type='tel'],
+    [type='time'],
+    [type='week'],
+    [multiple],
+    textarea,
+    select,
+    /* typeless <input> defaults to text; @tailwindcss/forms styles it white via
+       `input:where(:not([type]))` (specificity 0,0,1), so we mirror that exact
+       selector — emitted later in @layer base, it wins by source order, while a
+       real bg utility (specificity 0,1,0) still beats it. */
+    input:where(:not([type])) {
+        background-color: var(--surface-2);
+        color: var(--text);
+        border-color: var(--border);
+    }
+    select option {
+        background-color: var(--surface);
+        color: var(--text);
+    }
+}
+
 /* Custom animations for the modern login page */
 @layer utilities {
     .animate-float {

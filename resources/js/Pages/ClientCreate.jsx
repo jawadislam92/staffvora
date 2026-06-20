@@ -114,13 +114,13 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                 />
 
                     {/* Form Card */}
-                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                    <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
                         <div className="p-5 sm:p-6">
                             
                             <form onSubmit={handleSubmit} className="space-y-6">
                                 {/* Client Name */}
                                 <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-3">
+                                    <label className="block text-sm font-semibold text-muted mb-3">
                                         Client Name
                                         <span className="text-red-500 ml-1">*</span>
                                     </label>
@@ -135,7 +135,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                             placeholder="Enter client name..." 
                                             value={form.data.name} 
                                             onChange={e => form.setData('name', e.target.value)} 
-                                            className="w-full pl-10 pr-4 py-3 border-2 border-slate-200 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-slate-900 placeholder-slate-400"
+                                            className="w-full pl-10 pr-4 py-3 border-2 border-line rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-body placeholder-slate-400"
                                             required 
                                         />
                                     </div>
@@ -151,7 +151,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
 
                                 {/* Work Type - Searchable Dropdown */}
                                 <div ref={workTypeRef} className="relative">
-                                    <label className="block text-sm font-semibold text-slate-700 mb-3">
+                                    <label className="block text-sm font-semibold text-muted mb-3">
                                         Work Type
                                         <span className="text-red-500 ml-1">*</span>
                                     </label>
@@ -170,18 +170,18 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                                 setShowWorkTypeDropdown(true);
                                             }}
                                             onFocus={() => setShowWorkTypeDropdown(true)}
-                                            className="w-full pl-10 pr-4 py-3 border-2 border-slate-200 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-slate-900 placeholder-slate-400"
+                                            className="w-full pl-10 pr-4 py-3 border-2 border-line rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-body placeholder-slate-400"
                                             required
                                         />
                                     </div>
                                     {showWorkTypeDropdown && filteredWorkTypes.length > 0 && (
-                                        <div ref={workTypeDropdownRef} className="absolute z-50 w-full mt-2 bg-white border-2 border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+                                        <div ref={workTypeDropdownRef} className="absolute z-50 w-full mt-2 bg-surface border-2 border-line rounded-xl shadow-xl max-h-64 overflow-y-auto">
                                             {filteredWorkTypes.map(([key, value]) => (
                                                 <button
                                                     key={key}
                                                     type="button"
                                                     onClick={() => handleWorkTypeSelect(key, value)}
-                                                    className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 transition-all text-slate-700 border-b border-slate-100 last:border-0 flex items-center justify-between group"
+                                                    className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-surface hover:to-surface transition-all text-muted border-b border-line last:border-0 flex items-center justify-between group"
                                                 >
                                                     <span className="font-medium">{value}</span>
                                                     {form.data.work_type === key && (
@@ -206,10 +206,10 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                 {/* Upwork Profiles - conditionally shown with search and multiple selection */}
                                 {(isProfileRequired) && (
                                     <div>
-                                        <label className="block text-sm font-semibold text-slate-700 mb-3">
+                                        <label className="block text-sm font-semibold text-muted mb-3">
                                             Profiles
                                             {isProfileRequired && <span className="text-red-500 ml-1">*</span>}
-                                            {!isProfileRequired && <span className="text-slate-400 font-normal ml-2">(optional)</span>}
+                                            {!isProfileRequired && <span className="text-subtle font-normal ml-2">(optional)</span>}
                                         </label>
 
                                         {/* Selected Profiles Display */}
@@ -218,7 +218,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                                 {selectedProfiles.map((profile) => (
                                                     <div
                                                         key={profile.id}
-                                                        className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 rounded-lg border-2 border-purple-200 font-medium text-sm shadow-sm"
+                                                        className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-surface to-surface text-purple-700 rounded-lg border-2 border-purple-200 font-medium text-sm shadow-sm"
                                                     >
                                                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                                             <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
@@ -259,32 +259,32 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                                         setShowProfileDropdown(true);
                                                     }}
                                                     onFocus={() => setShowProfileDropdown(true)}
-                                                    className="w-full pl-10 pr-4 py-3 border-2 border-slate-200 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-slate-900 placeholder-slate-400"
+                                                    className="w-full pl-10 pr-4 py-3 border-2 border-line rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-body placeholder-slate-400"
                                                 />
                                             </div>
                                             {showProfileDropdown && filteredProfiles.length > 0 && (
-                                                <div ref={profileDropdownRef} className="absolute z-50 w-full mt-2 bg-white border-2 border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+                                                <div ref={profileDropdownRef} className="absolute z-50 w-full mt-2 bg-surface border-2 border-line rounded-xl shadow-xl max-h-64 overflow-y-auto">
                                                     {filteredProfiles.map((profile) => (
                                                         <button
                                                             key={profile.id}
                                                             type="button"
                                                             onClick={() => handleProfileSelect(profile)}
-                                                            className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 transition-all border-b border-slate-100 last:border-0 flex items-center gap-3 group"
+                                                            className="w-full px-4 py-3 text-left hover:bg-gradient-to-r hover:from-surface hover:to-surface transition-all border-b border-line last:border-0 flex items-center gap-3 group"
                                                         >
                                                             <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white font-semibold shadow-md">
                                                                 {profile.name.charAt(0).toUpperCase()}
                                                             </div>
                                                             <div className="flex-1">
-                                                                <div className="font-semibold text-slate-700">{profile.name}</div>
-                                                                {profile.email && <div className="text-sm text-slate-500">{profile.email}</div>}
+                                                                <div className="font-semibold text-muted">{profile.name}</div>
+                                                                {profile.email && <div className="text-sm text-subtle">{profile.email}</div>}
                                                             </div>
                                                         </button>
                                                     ))}
                                                 </div>
                                             )}
                                             {filteredProfiles.length === 0 && profileSearch && showProfileDropdown && (
-                                                <div className="absolute z-50 w-full mt-2 bg-white border-2 border-slate-200 rounded-xl shadow-lg">
-                                                    <div className="px-4 py-3 text-slate-500 text-sm text-center">
+                                                <div className="absolute z-50 w-full mt-2 bg-surface border-2 border-line rounded-xl shadow-lg">
+                                                    <div className="px-4 py-3 text-subtle text-sm text-center">
                                                         <svg className="w-12 h-12 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                         </svg>
@@ -302,7 +302,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                             )}
                                         </div>
                                         
-                                        <p className="text-slate-500 text-sm mt-3 flex items-start gap-2">
+                                        <p className="text-subtle text-sm mt-3 flex items-start gap-2">
                                             <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                                             </svg>
@@ -318,9 +318,9 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
 
                                 {/* Tags */}
                                 <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-3">
+                                    <label className="block text-sm font-semibold text-muted mb-3">
                                         Tags
-                                        <span className="text-slate-400 font-normal ml-2">(optional)</span>
+                                        <span className="text-subtle font-normal ml-2">(optional)</span>
                                     </label>
                                     <TagInput
                                         tags={form.data.tags}
@@ -335,7 +335,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                             {form.errors.tags}
                                         </div>
                                     )}
-                                    <p className="text-slate-500 text-sm mt-3 flex items-start gap-2">
+                                    <p className="text-subtle text-sm mt-3 flex items-start gap-2">
                                         <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                                         </svg>
@@ -345,22 +345,22 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
 
                                 {/* Preview Card - only show if name is entered */}
                                 {form.data.name && (
-                                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-5">
+                                    <div className="rounded-lg border border-blue-200 bg-surface-2 p-5">
                                         <div className="flex items-center mb-5">
                                             <div className="w-14 h-14 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-white font-bold text-xl mr-4 shadow-lg">
                                                 {form.data.name.charAt(0).toUpperCase()}
                                             </div>
                                             <div>
                                                 <p className="text-sm text-purple-600 font-medium mb-1">Client Preview</p>
-                                                <p className="font-bold text-slate-900 text-xl">{form.data.name}</p>
+                                                <p className="font-bold text-body text-xl">{form.data.name}</p>
                                             </div>
                                         </div>
                                         
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                             {form.data.work_type && (
                                                 <div>
-                                                    <p className="text-sm text-slate-600 font-medium mb-2">Work Type</p>
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold bg-white text-purple-700 rounded-lg border-2 border-purple-200 shadow-sm">
+                                                    <p className="text-sm text-muted font-medium mb-2">Work Type</p>
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold bg-surface text-purple-700 rounded-lg border-2 border-purple-200 shadow-sm">
                                                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                                             <path fillRule="evenodd" d="M6 6V5a3 3 0 013-3h2a3 3 0 013 3v1h2a2 2 0 012 2v3.57A22.952 22.952 0 0110 13a22.95 22.95 0 01-8-1.43V8a2 2 0 012-2h2zm2-1a1 1 0 011-1h2a1 1 0 011 1v1H8V5zm1 5a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clipRule="evenodd" />
                                                             <path d="M2 13.692V16a2 2 0 002 2h12a2 2 0 002-2v-2.308A24.974 24.974 0 0110 15c-2.796 0-5.487-.46-8-1.308z" />
@@ -372,12 +372,12 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                             
                                             {selectedProfiles.length > 0 && (
                                                 <div>
-                                                    <p className="text-sm text-slate-600 font-medium mb-2">Profiles ({selectedProfiles.length})</p>
+                                                    <p className="text-sm text-muted font-medium mb-2">Profiles ({selectedProfiles.length})</p>
                                                     <div className="flex flex-wrap gap-2">
                                                         {selectedProfiles.map((profile) => (
                                                             <span
                                                                 key={profile.id}
-                                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold bg-white text-pink-700 rounded-lg border-2 border-pink-200 shadow-sm"
+                                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold bg-surface text-pink-700 rounded-lg border-2 border-pink-200 shadow-sm"
                                                             >
                                                                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                                                     <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
@@ -392,12 +392,12 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                         
                                         {form.data.tags && form.data.tags.length > 0 && (
                                             <div className="pt-4 border-t border-purple-200">
-                                                <p className="text-sm text-slate-600 font-medium mb-2">Tags ({form.data.tags.length})</p>
+                                                <p className="text-sm text-muted font-medium mb-2">Tags ({form.data.tags.length})</p>
                                                 <div className="flex flex-wrap gap-2">
                                                     {form.data.tags.map((tag, index) => (
                                                         <span
                                                             key={index}
-                                                            className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-white text-slate-700 rounded-lg border-2 border-slate-200 shadow-sm"
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold bg-surface text-muted rounded-lg border-2 border-line shadow-sm"
                                                         >
                                                             <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                                                                 <path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
@@ -412,11 +412,11 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                 )}
 
                                 {/* Submit Buttons */}
-                                <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-slate-100">
+                                <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-line">
                                     <button
                                         type="submit"
                                         disabled={form.processing}
-                                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-accent px-6 py-3 font-semibold text-white shadow-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                                     >
                                         {form.processing ? (
                                             <>
@@ -437,7 +437,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                     </button>
                                     <Link
                                         href={route('clients.index')}
-                                        className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-white hover:bg-slate-50 text-slate-700 rounded-lg font-semibold transition-all shadow-md hover:shadow-lg border-2 border-slate-200"
+                                        className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-surface hover:bg-surface-2 text-muted rounded-lg font-semibold transition-all shadow-md hover:shadow-lg border-2 border-line"
                                     >
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />

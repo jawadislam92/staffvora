@@ -94,7 +94,7 @@ function Toggle({ checked, onChange, disabled }) {
             ].join(' ')}
             aria-pressed={checked}
         >
-            <span className={['inline-block h-4 w-4 transform rounded-full bg-white shadow transition', checked ? 'translate-x-6' : 'translate-x-1'].join(' ')} />
+            <span className={['inline-block h-4 w-4 transform rounded-full bg-surface shadow transition', checked ? 'translate-x-6' : 'translate-x-1'].join(' ')} />
         </button>
     );
 }
@@ -102,7 +102,7 @@ function Toggle({ checked, onChange, disabled }) {
 function SectionShell({ title, blurb, children }) {
     return (
         <div className="space-y-5">
-            <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
+            <h2 className="text-xl font-semibold text-body">{title}</h2>
             {blurb && (
                 <div className="rounded-lg bg-slate-700 px-4 py-3 text-sm text-slate-100">{blurb}</div>
             )}
@@ -161,7 +161,7 @@ function ScreenshotsSection({ team, users, setTeam, maxShots }) {
                     />
                     <span>Take</span>
                     <select
-                        className="rounded border-slate-300 text-sm"
+                        className="rounded border-line text-sm"
                         value={team.screenshots_per_hour || 6}
                         disabled={captureOff}
                         onChange={(e) => {
@@ -176,7 +176,7 @@ function ScreenshotsSection({ team, users, setTeam, maxShots }) {
                     </select>
                     <span>screenshots per hour</span>
                     <select
-                        className="rounded border-slate-300 text-sm"
+                        className="rounded border-line text-sm"
                         value={team.blur_screenshots ? 'allow' : 'disallow'}
                         disabled={captureOff}
                         onChange={(e) => {
@@ -228,7 +228,7 @@ function ScreenshotsSection({ team, users, setTeam, maxShots }) {
                                 />
                                 Take
                                 <select
-                                    className="rounded border-slate-300 text-xs"
+                                    className="rounded border-line text-xs"
                                     value={override.screenshots_per_hour || team.screenshots_per_hour || 6}
                                     disabled={off}
                                     onChange={(e) => setValues({
@@ -243,7 +243,7 @@ function ScreenshotsSection({ team, users, setTeam, maxShots }) {
                                 </select>
                                 / hr
                                 <select
-                                    className="rounded border-slate-300 text-xs"
+                                    className="rounded border-line text-xs"
                                     value={override.blur_screenshots ? 'allow' : 'disallow'}
                                     disabled={off}
                                     onChange={(e) => setValues({
@@ -367,7 +367,7 @@ function WeeklyLimitSection({ team, users, setTeam }) {
                             setTeam(next);
                             patchTeam(next);
                         }}
-                        className="w-20 rounded border-slate-300 text-sm"
+                        className="w-20 rounded border-line text-sm"
                     />
                     <span>hours per week</span>
                 </label>
@@ -407,7 +407,7 @@ function WeeklyLimitSection({ team, users, setTeam }) {
                                     value={en ? override.weekly_time_limit_hours : 0}
                                     disabled={!en}
                                     onChange={(e) => setValues({ weekly_time_limit_hours: Number(e.target.value) })}
-                                    className="w-16 rounded border-slate-300 text-xs"
+                                    className="w-16 rounded border-line text-xs"
                                 />
                                 hours/week
                             </label>
@@ -461,7 +461,7 @@ function AutoPauseSection({ team, users, setTeam, minMinutes }) {
                             setTeam(next);
                             patchTeam(next);
                         }}
-                        className="w-20 rounded border-slate-300 text-sm"
+                        className="w-20 rounded border-line text-sm"
                     />
                     <span>minutes of user inactivity</span>
                 </label>
@@ -502,7 +502,7 @@ function AutoPauseSection({ team, users, setTeam, minMinutes }) {
                                     value={en ? mins : 5}
                                     disabled={!en}
                                     onChange={(e) => setValues({ auto_pause_minutes: Number(e.target.value) })}
-                                    className="w-16 rounded border-slate-300 text-xs"
+                                    className="w-16 rounded border-line text-xs"
                                 />
                                 min idle
                             </label>
@@ -530,9 +530,9 @@ function DisplaySection({ team, users, setTeam }) {
         >
             <div className="flex flex-wrap items-end gap-6 text-sm">
                 <label className="flex flex-col gap-1">
-                    <span className="text-xs font-medium text-slate-500">Time zone</span>
+                    <span className="text-xs font-medium text-subtle">Time zone</span>
                     <select
-                        className="rounded border-slate-300 text-sm"
+                        className="rounded border-line text-sm"
                         value={team.display_timezone || 'Asia/Karachi'}
                         onChange={(e) => {
                             const next = { ...team, display_timezone: e.target.value };
@@ -546,7 +546,7 @@ function DisplaySection({ team, users, setTeam }) {
                     </select>
                 </label>
                 <label className="flex flex-col gap-1">
-                    <span className="text-xs font-medium text-slate-500">Time format</span>
+                    <span className="text-xs font-medium text-subtle">Time format</span>
                     <div className="flex items-center gap-4">
                         {[['12', '12-hour (1:30 PM)'], ['24', '24-hour (13:30)']].map(([val, label]) => (
                             <label key={val} className="flex items-center gap-1.5">
@@ -574,7 +574,7 @@ function DisplaySection({ team, users, setTeam }) {
                 editor={(override, setValues) => (
                     <div className="flex flex-wrap items-center gap-4 text-xs">
                         <select
-                            className="rounded border-slate-300 text-xs"
+                            className="rounded border-line text-xs"
                             value={override.display_timezone || team.display_timezone || 'Asia/Karachi'}
                             onChange={(e) => setValues({ display_timezone: e.target.value, time_format: override.time_format || team.time_format || '12' })}
                         >
@@ -583,7 +583,7 @@ function DisplaySection({ team, users, setTeam }) {
                             ))}
                         </select>
                         <select
-                            className="rounded border-slate-300 text-xs"
+                            className="rounded border-line text-xs"
                             value={override.time_format || team.time_format || '12'}
                             onChange={(e) => setValues({ display_timezone: override.display_timezone || team.display_timezone || 'Asia/Karachi', time_format: e.target.value })}
                         >
@@ -629,7 +629,7 @@ function CurrencySection({ team, setTeam }) {
                 value={team.currency_symbol}
                 onChange={(e) => setTeam({ ...team, currency_symbol: e.target.value })}
                 onBlur={() => patchTeam(team)}
-                className="w-24 rounded border-slate-300 text-sm"
+                className="w-24 rounded border-line text-sm"
             />
         </SectionShell>
     );
@@ -740,15 +740,15 @@ function AttendanceSlackSection({ team, setTeam }) {
             title="Attendance Slack alerts"
             blurb={<>Post a short message to a Slack channel when someone clocks in or out. Turn each on independently.<br />Connect your own Slack below; the bot must be a member of the channel you choose.</>}
         >
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="rounded-lg border border-line bg-surface-2 p-4">
                 <div className="flex items-center justify-between gap-3">
                     <div>
-                        <p className="text-sm font-semibold text-slate-900">Slack connection</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm font-semibold text-body">Slack connection</p>
+                        <p className="text-xs text-subtle">
                             {connected ? 'Connected — your workspace bot token is saved.' : 'Not connected. Paste your Slack bot token (xoxb-…) to enable posts.'}
                         </p>
                     </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${connected ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${connected ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-muted'}`}>
                         {connected ? 'Connected' : 'Not connected'}
                     </span>
                 </div>
@@ -758,14 +758,14 @@ function AttendanceSlackSection({ team, setTeam }) {
                         value={token}
                         onChange={(e) => setToken(e.target.value)}
                         placeholder={connected ? 'Paste a new token to replace' : 'xoxb-your-bot-token'}
-                        className="w-72 rounded border-slate-300 text-sm"
+                        className="w-72 rounded border-line text-sm"
                         autoComplete="off"
                     />
                     <button type="button" onClick={connect} disabled={busy || !token.trim()} className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
                         {connected ? 'Replace' : 'Connect'}
                     </button>
                     {connected && (
-                        <button type="button" onClick={disconnect} disabled={busy} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50">
+                        <button type="button" onClick={disconnect} disabled={busy} className="rounded-md border border-line px-3 py-1.5 text-sm text-muted hover:bg-surface-2 disabled:opacity-50">
                             Disconnect
                         </button>
                     )}
@@ -783,16 +783,16 @@ function AttendanceSlackSection({ team, setTeam }) {
                 </label>
                 <div className="pt-2">
                     <label className="flex flex-col gap-1">
-                        <span className="text-xs font-medium text-slate-500">Attendance channel</span>
+                        <span className="text-xs font-medium text-subtle">Attendance channel</span>
                         <input
                             type="text"
                             value={team.slack_attendance_channel || ''}
                             onChange={(e) => setTeam({ ...team, slack_attendance_channel: e.target.value })}
                             onBlur={() => patchTeam(team)}
                             placeholder="#attendance"
-                            className="w-64 rounded border-slate-300 text-sm"
+                            className="w-64 rounded border-line text-sm"
                         />
-                        <span className="text-xs text-slate-500">Channel name (e.g. #attendance) or ID. Leave blank to use the server default.</span>
+                        <span className="text-xs text-subtle">Channel name (e.g. #attendance) or ID. Leave blank to use the server default.</span>
                     </label>
                 </div>
             </div>
@@ -804,11 +804,11 @@ function IndividualSettings({ category, users, flagKey, defaultValues, editor })
     const updateOverrides = useContext(OverridesDispatchContext);
     return (
         <div className="space-y-3 pt-6">
-            <h3 className="text-base font-semibold text-slate-900">Individual settings</h3>
-            <p className="text-xs text-slate-500">If enabled, the individual setting will be used instead of the team setting.</p>
-            <div className="divide-y divide-slate-200 border-t border-slate-200">
+            <h3 className="text-base font-semibold text-body">Individual settings</h3>
+            <p className="text-xs text-subtle">If enabled, the individual setting will be used instead of the team setting.</p>
+            <div className="divide-y divide-line border-t border-line">
                 {users.length === 0 && (
-                    <p className="py-4 text-sm text-slate-500">No team members yet.</p>
+                    <p className="py-4 text-sm text-subtle">No team members yet.</p>
                 )}
                 {users.map((user) => {
                     // Super Admins aren't tracked, so monitoring overrides never
@@ -828,10 +828,10 @@ function IndividualSettings({ category, users, flagKey, defaultValues, editor })
                         <div key={user.id} className="space-y-2 py-3">
                             <div className="flex items-center gap-3">
                                 <Toggle checked={enabled} onChange={setEnabled} disabled={isExempt} />
-                                <span className="flex-1 text-sm text-slate-700">{user.name}</span>
+                                <span className="flex-1 text-sm text-muted">{user.name}</span>
                                 {isExempt && (
                                     <span
-                                        className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600"
+                                        className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-medium text-muted"
                                         title="Super Admins aren't monitored, so team/individual tracking settings don't apply to them."
                                     >
                                         Exempt · Super Admin
@@ -839,7 +839,7 @@ function IndividualSettings({ category, users, flagKey, defaultValues, editor })
                                 )}
                             </div>
                             {!isExempt && enabled && editor && (
-                                <div className="ml-12 rounded-md bg-slate-50 px-3 py-2">
+                                <div className="ml-12 rounded-md bg-surface-2 px-3 py-2">
                                     {editor(user.overrides || {}, setValues)}
                                 </div>
                             )}
@@ -897,20 +897,20 @@ function AttendanceSection({ team, setTeam }) {
         >
             <div className="space-y-5 text-sm">
                 <div>
-                    <label className="mb-1 block font-semibold text-slate-900">Tracking start date</label>
-                    <p className="mb-2 text-xs text-slate-500">Days before this show as “Not tracked”, never Absent. Leave blank to track the whole history.</p>
-                    <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="rounded-md border-slate-300 text-sm" />
+                    <label className="mb-1 block font-semibold text-body">Tracking start date</label>
+                    <p className="mb-2 text-xs text-subtle">Days before this show as “Not tracked”, never Absent. Leave blank to track the whole history.</p>
+                    <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="rounded-md border-line text-sm" />
                 </div>
 
                 <div>
-                    <label className="mb-1 block font-semibold text-slate-900">Weekly off days</label>
+                    <label className="mb-1 block font-semibold text-body">Weekly off days</label>
                     <div className="flex flex-wrap gap-1.5">
                         {WEEKDAYS.map(({ n, label }) => (
                             <button
                                 key={n}
                                 type="button"
                                 onClick={() => toggleDay(n)}
-                                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${weekOff.includes(n) ? 'bg-orange-500 text-slate-950' : 'border border-slate-300 text-slate-600 hover:bg-slate-100'}`}
+                                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${weekOff.includes(n) ? 'bg-orange-500 text-body' : 'border border-line text-muted hover:bg-surface-2'}`}
                             >
                                 {label}
                             </button>
@@ -919,17 +919,17 @@ function AttendanceSection({ team, setTeam }) {
                 </div>
 
                 <div>
-                    <label className="mb-1 block font-semibold text-slate-900">Public holidays</label>
+                    <label className="mb-1 block font-semibold text-body">Public holidays</label>
                     <div className="flex items-center gap-2">
-                        <input type="date" value={newHoliday} onChange={(e) => setNewHoliday(e.target.value)} className="rounded-md border-slate-300 text-sm" />
-                        <button type="button" onClick={addHoliday} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100">Add</button>
+                        <input type="date" value={newHoliday} onChange={(e) => setNewHoliday(e.target.value)} className="rounded-md border-line text-sm" />
+                        <button type="button" onClick={addHoliday} className="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-muted hover:bg-surface-2">Add</button>
                     </div>
                     {holidays.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
                             {holidays.map((d) => (
-                                <span key={d} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700">
+                                <span key={d} className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-1 text-xs text-muted">
                                     {d}
-                                    <button type="button" onClick={() => setHolidays(holidays.filter((h) => h !== d))} className="text-slate-400 hover:text-rose-500">×</button>
+                                    <button type="button" onClick={() => setHolidays(holidays.filter((h) => h !== d))} className="text-subtle hover:text-rose-500">×</button>
                                 </span>
                             ))}
                         </div>
@@ -939,8 +939,8 @@ function AttendanceSection({ team, setTeam }) {
                 <label className="flex items-center gap-3">
                     <Toggle checked={autoAbsent} onChange={setAutoAbsent} />
                     <span>
-                        <span className="block font-semibold text-slate-900">Auto-mark Absent</span>
-                        <span className="block text-xs text-slate-500">When off, a working day with no clock-in shows a neutral “No record” instead of Absent.</span>
+                        <span className="block font-semibold text-body">Auto-mark Absent</span>
+                        <span className="block text-xs text-subtle">When off, a working day with no clock-in shows a neutral “No record” instead of Absent.</span>
                     </span>
                 </label>
 
@@ -948,7 +948,7 @@ function AttendanceSection({ team, setTeam }) {
                     type="button"
                     onClick={save}
                     disabled={saving}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-orange-400 disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-body hover:bg-orange-400 disabled:opacity-50"
                 >
                     {saving ? 'Saving…' : 'Save attendance policy'}
                 </button>
@@ -986,19 +986,19 @@ export default function SettingsIndex({ auth, team: initialTeam, users: initialU
     const activeLabel = (CATEGORIES.find((c) => c.key === active) || {}).label || 'This feature';
 
     return (
-        <AuthenticatedLayout user={auth.user} header={<h2 className="text-xl font-semibold text-slate-900">Settings</h2>}>
+        <AuthenticatedLayout user={auth.user} header={<h2 className="text-xl font-semibold text-body">Settings</h2>}>
             <Head title="Settings" />
 
             <OverridesDispatchContext.Provider value={updateOverrides}>
             <div className="min-h-screen bg-slate-950">
             <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-                <div className="overflow-hidden rounded-lg bg-white shadow">
-                    <div className="border-b border-slate-200 bg-slate-100 px-6 py-4">
-                        <h1 className="text-lg font-semibold text-slate-800">Settings</h1>
+                <div className="overflow-hidden rounded-lg bg-surface shadow">
+                    <div className="border-b border-line bg-surface-2 px-6 py-4">
+                        <h1 className="text-lg font-semibold text-body">Settings</h1>
                     </div>
 
                     <div className="grid grid-cols-1 gap-0 md:grid-cols-[280px_1fr]">
-                        <nav className="border-b border-slate-200 md:border-b-0 md:border-r">
+                        <nav className="border-b border-line md:border-b-0 md:border-r">
                             {items.map((item) => {
                                 const Icon = item.icon;
                                 const isActive = active === item.key;
@@ -1010,17 +1010,17 @@ export default function SettingsIndex({ auth, team: initialTeam, users: initialU
                                         className={[
                                             'flex w-full items-center justify-between gap-3 border-l-2 px-5 py-3 text-left text-sm transition',
                                             isActive
-                                                ? 'border-emerald-500 bg-slate-50 font-medium text-slate-900'
-                                                : 'border-transparent text-slate-600 hover:bg-slate-50',
+                                                ? 'border-emerald-500 bg-surface-2 font-medium text-body'
+                                                : 'border-transparent text-muted hover:bg-surface-2',
                                         ].join(' ')}
                                     >
                                         <span className="flex items-center gap-3">
-                                            <Icon className="h-4 w-4 text-slate-400" />
+                                            <Icon className="h-4 w-4 text-subtle" />
                                             {item.label}
                                         </span>
                                         {isLocked(item.key)
-                                            ? <Lock className="h-3.5 w-3.5 text-slate-400" />
-                                            : <span className="text-xs text-slate-500">{item.summary}</span>}
+                                            ? <Lock className="h-3.5 w-3.5 text-subtle" />
+                                            : <span className="text-xs text-subtle">{item.summary}</span>}
                                     </button>
                                 );
                             })}
