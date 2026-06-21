@@ -2,13 +2,19 @@ import { Head, Link, router, usePage } from '@inertiajs/react';
 
 // Operator shell — fixed dark (zinc), separate from the customer app's themed
 // AuthenticatedLayout. A platform_user has no tenant / permissions / org.
-const NAV = [
-    { label: 'Dashboard', href: '/dashboard' },
-    { label: 'Tenants', href: '/tenants' },
-    { label: 'Plans', href: '/plans' },
-    { label: 'Website', href: '/site' },
-    { label: 'Developer', href: '/developer' },
-];
+// Nav is role-aware: Support sees read/help only; Admin+ manage; Owner runs staff.
+function navFor(role) {
+    const isAdmin = role === 'owner' || role === 'admin';
+    return [
+        { label: 'Dashboard', href: '/dashboard' },
+        { label: 'Tenants', href: '/tenants' },
+        isAdmin && { label: 'Plans', href: '/plans' },
+        isAdmin && { label: 'Website', href: '/site' },
+        isAdmin && { label: 'Developer', href: '/developer' },
+        role === 'owner' && { label: 'Staff', href: '/staff' },
+        { label: 'Account', href: '/account' },
+    ].filter(Boolean);
+}
 
 function isActive(current, href) {
     if (href === '/dashboard') return current === href || current === '/';
@@ -17,6 +23,7 @@ function isActive(current, href) {
 
 export default function PlatformLayout({ children, title, header }) {
     const platformUser = usePage().props.platformUser;
+    const NAV = navFor(platformUser?.role);
     const current = typeof window !== 'undefined' ? window.location.pathname : '';
 
     return (

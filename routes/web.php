@@ -2,9 +2,12 @@
 
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\BrandingController;
+use App\Http\Controllers\Platform\AccountController as PlatformAccountController;
 use App\Http\Controllers\Platform\AuthController as PlatformAuthController;
+use App\Http\Controllers\Platform\InvitationController as PlatformInvitationController;
 use App\Http\Controllers\Platform\PortalController as PlatformPortalController;
 use App\Http\Controllers\Platform\SiteBuilderController;
+use App\Http\Controllers\Platform\StaffController as PlatformStaffController;
 use App\Http\Controllers\PlatformController;
 use App\Http\Middleware\SharePlatformUser;
 use App\Http\Controllers\ClientController;
@@ -51,44 +54,65 @@ Route::domain(config('platform.host'))->group(function () {
     Route::get('/login', [PlatformAuthController::class, 'showLogin'])->name('platform.login');
     Route::post('/login', [PlatformAuthController::class, 'login'])->middleware('throttle:8,1');
 
+    // Invitation accept — guest (the invitee has no account yet); authorized by
+    // the single-use token. Throttled so the token space can't be brute-forced.
+    Route::get('/invite/{token}', [PlatformInvitationController::class, 'show'])
+        ->middleware('throttle:20,1')->name('platform.invite.show');
+    Route::post('/invite/{token}', [PlatformInvitationController::class, 'accept'])
+        ->middleware('throttle:20,1')->name('platform.invite.accept');
+
     Route::middleware(['auth:platform', SharePlatformUser::class])->group(function () {
         Route::post('/logout', [PlatformAuthController::class, 'logout'])->name('platform.logout');
         Route::get('/', fn () => redirect()->route('platform.dashboard'));
         Route::get('/dashboard', [PlatformPortalController::class, 'dashboard'])->name('platform.dashboard');
 
-        // Tenants — landlord view across every org (Organization is not org-scoped).
+        // The signed-in operator's own account (any role).
+        Route::get('/account', [PlatformAccountController::class, 'edit'])->name('platform.account');
+        Route::put('/account', [PlatformAccountController::class, 'update'])->name('platform.account.update');
+
+        // Tenants — all roles can view; Support can also resume + impersonate to
+        // help a customer (the gentle, non-destructive actions).
         Route::get('/tenants', [PlatformController::class, 'index'])->name('platform.index');
         Route::get('/tenants/{organization}', [PlatformController::class, 'show'])->name('platform.show');
-        Route::post('/tenants/{organization}/suspend', [PlatformController::class, 'suspend'])->name('platform.suspend');
         Route::post('/tenants/{organization}/resume', [PlatformController::class, 'resume'])->name('platform.resume');
-        Route::post('/tenants/{organization}/payment', [PlatformController::class, 'recordPayment'])->name('platform.payment');
-        Route::put('/tenants/{organization}/entitlements', [PlatformController::class, 'updateTenant'])->name('platform.tenant.update');
         Route::post('/tenants/{organization}/impersonate', [PlatformController::class, 'impersonate'])->name('platform.impersonate');
 
-        // Global plan editor.
-        Route::get('/plans', [PlatformController::class, 'plans'])->name('platform.plans');
-        Route::put('/plans/{plan}', [PlatformController::class, 'updatePlan'])->name('platform.plans.update');
+        // Admin+ — the management surface: suspend/billing/entitlements, plans,
+        // the website builder, and the developer panel.
+        Route::middleware('platform.role:admin')->group(function () {
+            Route::post('/tenants/{organization}/suspend', [PlatformController::class, 'suspend'])->name('platform.suspend');
+            Route::post('/tenants/{organization}/payment', [PlatformController::class, 'recordPayment'])->name('platform.payment');
+            Route::put('/tenants/{organization}/entitlements', [PlatformController::class, 'updateTenant'])->name('platform.tenant.update');
 
-        // No-code marketing-site builder.
-        Route::prefix('site')->group(function () {
-            Route::get('/', [SiteBuilderController::class, 'index'])->name('platform.site.index');
-            Route::put('/theme', [SiteBuilderController::class, 'updateTheme'])->name('platform.site.theme');
-            Route::post('/logo', [SiteBuilderController::class, 'setLogo'])->name('platform.site.logo');
-            Route::post('/image', [SiteBuilderController::class, 'uploadImage'])->name('platform.site.image');
-            Route::post('/pages', [SiteBuilderController::class, 'createPage'])->name('platform.site.pages.create');
-            Route::get('/pages/{page}', [SiteBuilderController::class, 'edit'])->name('platform.site.edit');
-            Route::put('/pages/{page}', [SiteBuilderController::class, 'saveDraft'])->name('platform.site.save');
-            Route::post('/pages/{page}/publish', [SiteBuilderController::class, 'publish'])->name('platform.site.publish');
-            Route::delete('/pages/{page}', [SiteBuilderController::class, 'destroyPage'])->name('platform.site.pages.destroy');
+            Route::get('/plans', [PlatformController::class, 'plans'])->name('platform.plans');
+            Route::put('/plans/{plan}', [PlatformController::class, 'updatePlan'])->name('platform.plans.update');
+
+            Route::prefix('site')->group(function () {
+                Route::get('/', [SiteBuilderController::class, 'index'])->name('platform.site.index');
+                Route::put('/theme', [SiteBuilderController::class, 'updateTheme'])->name('platform.site.theme');
+                Route::post('/logo', [SiteBuilderController::class, 'setLogo'])->name('platform.site.logo');
+                Route::post('/image', [SiteBuilderController::class, 'uploadImage'])->name('platform.site.image');
+                Route::post('/pages', [SiteBuilderController::class, 'createPage'])->name('platform.site.pages.create');
+                Route::get('/pages/{page}', [SiteBuilderController::class, 'edit'])->name('platform.site.edit');
+                Route::put('/pages/{page}', [SiteBuilderController::class, 'saveDraft'])->name('platform.site.save');
+                Route::post('/pages/{page}/publish', [SiteBuilderController::class, 'publish'])->name('platform.site.publish');
+                Route::delete('/pages/{page}', [SiteBuilderController::class, 'destroyPage'])->name('platform.site.pages.destroy');
+            });
+
+            Route::prefix('developer')->group(function () {
+                Route::get('/', [DeveloperController::class, 'index'])->name('developer.index');
+                Route::post('/run', [DeveloperController::class, 'run'])->name('developer.run');
+                Route::put('/env', [DeveloperController::class, 'updateEnv'])->name('developer.env.update');
+                Route::get('/logs', [DeveloperController::class, 'logs'])->name('developer.logs');
+            });
         });
 
-        // Developer / system panel — edits platform-wide .env secrets shared
-        // across every tenant. Behind the platform guard (re-checked in controller).
-        Route::prefix('developer')->group(function () {
-            Route::get('/', [DeveloperController::class, 'index'])->name('developer.index');
-            Route::post('/run', [DeveloperController::class, 'run'])->name('developer.run');
-            Route::put('/env', [DeveloperController::class, 'updateEnv'])->name('developer.env.update');
-            Route::get('/logs', [DeveloperController::class, 'logs'])->name('developer.logs');
+        // Owner-only — manage operator staff (invite / revoke).
+        Route::middleware('platform.role:owner')->group(function () {
+            Route::get('/staff', [PlatformStaffController::class, 'index'])->name('platform.staff');
+            Route::post('/staff/invite', [PlatformStaffController::class, 'invite'])->name('platform.staff.invite');
+            Route::delete('/staff/{platformUser}', [PlatformStaffController::class, 'revoke'])->name('platform.staff.revoke');
+            Route::delete('/staff/invitations/{invitation}', [PlatformStaffController::class, 'revokeInvitation'])->name('platform.staff.invitation.revoke');
         });
     });
 });

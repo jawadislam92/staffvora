@@ -1,10 +1,12 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import PlatformLayout from '@/Layouts/PlatformLayout';
 import { ArrowLeft } from 'lucide-react';
 
 const money = (cents, currency) => new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format((cents || 0) / 100);
 
 export default function PlatformShow({ organization, subscription, plans, payments, entitlements }) {
+    const role = usePage().props.platformUser?.role;
+    const canManage = role === 'owner' || role === 'admin';
     const form = useForm({ amount: '', currency: 'USD', months: 1, plan: subscription?.plan_key || '', reference: '' });
 
     const record = (e) => {
@@ -38,7 +40,7 @@ export default function PlatformShow({ organization, subscription, plans, paymen
                                 <button onClick={impersonate} className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800">View as owner</button>
                                 {organization.status === 'suspended'
                                     ? <button onClick={() => setStatus('resume')} className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">Resume</button>
-                                    : <button onClick={() => setStatus('suspend')} className="rounded-md border border-rose-500/40 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-500/10">Suspend</button>}
+                                    : canManage && <button onClick={() => setStatus('suspend')} className="rounded-md border border-rose-500/40 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-500/10">Suspend</button>}
                             </div>
                         </div>
 
@@ -55,6 +57,7 @@ export default function PlatformShow({ organization, subscription, plans, paymen
                         </div>
                     </div>
 
+                    {canManage && (
                     <form onSubmit={record} className="rounded-lg border border-slate-800 bg-slate-900 p-5">
                         <h3 className="mb-3 font-semibold text-slate-100">Record a bank-transfer payment</h3>
                         <div className="grid gap-3 sm:grid-cols-5">
@@ -82,8 +85,9 @@ export default function PlatformShow({ organization, subscription, plans, paymen
                             {form.processing ? 'Recording…' : 'Record payment & activate'}
                         </button>
                     </form>
+                    )}
 
-                    {entitlements && (
+                    {canManage && entitlements && (
                         <TenantControls organization={organization} plans={plans} entitlements={entitlements} />
                     )}
 

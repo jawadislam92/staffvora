@@ -93,6 +93,7 @@ class Kernel extends HttpKernel
         'permission' => PermissionMiddleware::class,
         'tenant' => \App\Http\Middleware\SetCurrentOrganization::class,
         'platform' => \App\Http\Middleware\EnsurePlatformAdmin::class,
+        'platform.role' => \App\Http\Middleware\EnsurePlatformRole::class,
         'signed' => ValidateSignature::class,
         'throttle' => ThrottleRequests::class,
         'verified' => EnsureEmailIsVerified::class,

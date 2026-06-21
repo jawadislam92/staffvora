@@ -21,7 +21,7 @@ export default function Dashboard({ stats }) {
             </div>
 
             <p className="mt-8 text-sm text-zinc-500">
-                Next: tenant management, plans, the website builder and staff invitations move into this portal.
+                Manage tenants, plans and the website from the sidebar. Owners can invite staff under <span className="text-zinc-400">Staff</span>.
             </p>
         </PlatformLayout>
     );
