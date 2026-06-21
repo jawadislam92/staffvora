@@ -154,6 +154,20 @@ html { background-color: var(--bg); color: var(--text); }
     transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease;
 }
 
+/* Scroll-reveal: sections fade up as they enter the viewport. Only active once
+   JS adds `.reveal-on` (so no-JS / crawlers see everything), and disabled under
+   reduced-motion. */
+.site-root.reveal-on main > * {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.7s cubic-bezier(0.22, 0.61, 0.36, 1);
+    will-change: opacity, transform;
+}
+.site-root.reveal-on main > *.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+    .site-root.reveal-on main > * { opacity: 1; transform: none; transition: none; }
+}
+
 /* Blog post body — owner-authored HTML rendered with readable, on-brand type. */
 .site-root .site-prose { color: var(--muted); font-size: 1.06rem; line-height: 1.75; }
 .site-root .site-prose > :first-child { margin-top: 0; }

@@ -6,7 +6,14 @@ function PostCard({ post }) {
         <Link href={`/blog/${post.slug}`} className="group flex flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-sm transition hover:-translate-y-1">
             {post.cover
                 ? <img src={post.cover} alt="" className="aspect-[16/9] w-full object-cover" />
-                : <div className="aspect-[16/9] w-full" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' }} />}
+                : (
+                    <div className="flex aspect-[16/9] w-full items-center justify-center" style={{ background: 'linear-gradient(135deg, var(--mint), var(--paper))' }}>
+                        <svg viewBox="0 0 40 40" className="h-10 w-10 opacity-40" aria-hidden="true">
+                            <circle cx="19" cy="20" r="14" fill="none" stroke="var(--a)" strokeWidth="3" strokeLinecap="round" strokeDasharray="66 14" />
+                            <circle cx="31" cy="12" r="3.2" fill="var(--g-from)" />
+                        </svg>
+                    </div>
+                )}
             <div className="flex flex-1 flex-col p-6">
                 {post.category && <span className="mb-2 text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--a)' }}>{post.category}</span>}
                 <h3 className="text-lg font-bold leading-snug text-[var(--brand)] transition group-hover:opacity-80">{post.title}</h3>

@@ -91,7 +91,32 @@ export function siteEffectiveBrand(brand, theme) {
 export default function SiteShell({ brand, theme, nav, jsonLd, isAuthed, meta = {}, children }) {
     const [mode, setMode] = useState(initialMode);
     const [ready, setReady] = useState(false);
-    useEffect(() => { setReady(true); }, []);
+
+    // Enable colour transitions after first paint, and reveal each section as it
+    // scrolls into view (a gentle fade-up). Both are skipped under reduced-motion,
+    // and the reveal only hides content once JS has added `.reveal-on`, so no-JS /
+    // crawlers always see everything.
+    useEffect(() => {
+        setReady(true);
+        if (typeof window === 'undefined') return undefined;
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const root = document.querySelector('.site-root');
+        if (reduce || !root) return undefined;
+
+        root.classList.add('reveal-on');
+        const items = root.querySelectorAll('main > *');
+        const io = new IntersectionObserver((entries) => {
+            entries.forEach((e) => {
+                if (e.isIntersecting) {
+                    e.target.classList.add('in');
+                    io.unobserve(e.target);
+                }
+            });
+        }, { rootMargin: '0px 0px -8% 0px', threshold: 0.04 });
+        items.forEach((el) => io.observe(el));
+
+        return () => io.disconnect();
+    }, []);
 
     const palette = mode === 'dark' ? (brand?.colors_dark || {}) : (brand?.colors || {});
     const vars = applyAccentOverride(paletteVars(palette), theme?.accent_color, theme?.highlight_color, brand?.colors?.accent);

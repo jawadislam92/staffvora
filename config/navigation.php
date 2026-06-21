@@ -38,6 +38,7 @@ return [
             ['label' => 'Security', 'url' => '/security', 'page' => 'security'],
             ['label' => 'Help', 'url' => '/help'],
         ]],
+        ['label' => 'Contact', 'url' => '/contact', 'page' => 'contact'],
     ],
 
     'footer' => [

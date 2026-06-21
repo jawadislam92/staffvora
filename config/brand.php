@@ -48,25 +48,25 @@ return [
     | hero and deep-indigo sections building down the page.
     */
     'colors' => [
-        'accent' => '#4F46E5',      // Indigo — actions, links, focus (--a)
-        'accent_deep' => '#4338CA', // hover/pressed
-        'grad_from' => '#8B5CF6',   // Violet — button / band gradient start
-        'grad_to' => '#4F46E5',     // Indigo — gradient end
-        'highlight' => '#A78BFA',   // Violet-300 — on dark surfaces (--hl)
-        'brand' => '#1E1B4B',       // Heading / strong text colour (--brand)
-        'deep' => '#1E1B4B',        // Deep band BACKGROUND (Stats, CTA) — stays dark in both modes
-        'ink' => '#15132E',         // darkest
-        'mint' => '#EDE9FE',        // soft lavender tint
-        'paper' => '#F5F3FF',       // light lavender surface / band
+        'accent' => '#7C3AED',      // Violet — actions, links, focus (--a)
+        'accent_deep' => '#6D28D9', // hover/pressed
+        'grad_from' => '#22D3EE',   // Cyan — button / band gradient start
+        'grad_to' => '#A855F7',     // Purple — gradient end (cyan→purple = vibrant aurora)
+        'highlight' => '#C4B5FD',   // Violet-300 — on dark surfaces (--hl)
+        'brand' => '#2A1257',       // Heading / strong text colour (--brand)
+        'deep' => '#2A1257',        // Deep band BACKGROUND (Stats, CTA) — stays dark in both modes
+        'ink' => '#1A0A3C',         // darkest
+        'mint' => '#F3E8FF',        // soft violet tint
+        'paper' => '#FAF5FF',       // lightest violet surface / band
         'canvas' => '#FFFFFF',      // page background
         'surface' => '#FFFFFF',     // cards
-        'surface_2' => '#F5F3FF',   // subtle raised (logo bar, pricing toggles)
-        'border' => '#E9E7F5',
-        'text' => '#1E1B2E',
-        'muted' => '#56536E',       // body / secondary
-        'subtle' => '#9794AE',
-        'pink' => '#FCE7F3',        // hero gradient tint
-        'lavender' => '#EDE9FE',    // hero gradient tint
+        'surface_2' => '#F6F2FE',   // subtle raised (logo bar, pricing toggles)
+        'border' => '#ECE6F7',
+        'text' => '#271F3D',
+        'muted' => '#59506F',       // body / secondary
+        'subtle' => '#968CAE',
+        'pink' => '#FCE7F3',        // hero wash tint (pink glow)
+        'lavender' => '#CFFAFE',    // hero wash tint (cyan glow — the aurora mix)
     ],
 
     /*
@@ -77,25 +77,25 @@ return [
     | colours brighten so they stay vivid on a dark canvas.
     */
     'colors_dark' => [
-        'accent' => '#818CF8',      // Indigo-400 — brighter for dark surfaces
-        'accent_deep' => '#6366F1',
-        'grad_from' => '#A78BFA',   // Violet-300
-        'grad_to' => '#818CF8',     // Indigo-400
-        'highlight' => '#C4B5FD',   // Violet-200
-        'brand' => '#EFEDFB',       // Headings → near-white lavender
-        'deep' => '#1B1838',        // Deep band background (a lift above canvas)
-        'ink' => '#08070F',
-        'mint' => '#232046',        // soft lavender tint (dark)
-        'paper' => '#171530',       // raised band tint (dark)
-        'canvas' => '#0E0C1C',      // page background (indigo-tinted near-black)
-        'surface' => '#191730',     // cards
-        'surface_2' => '#221F3D',   // subtle raised
-        'border' => '#2E2A4E',
-        'text' => '#E7E4F6',
-        'muted' => '#ABA6CC',       // body / secondary
-        'subtle' => '#807BA3',
-        'pink' => '#2A1E3A',        // hero gradient tint (dark)
-        'lavender' => '#201C42',    // hero gradient tint (dark)
+        'accent' => '#A78BFA',      // Violet-400 — brighter for dark surfaces
+        'accent_deep' => '#8B5CF6',
+        'grad_from' => '#22D3EE',   // Cyan — stays vivid on dark
+        'grad_to' => '#C084FC',     // Purple-400
+        'highlight' => '#DDD6FE',   // Violet-200
+        'brand' => '#F3EEFF',       // Headings → near-white violet
+        'deep' => '#241046',        // Deep band background (a lift above canvas)
+        'ink' => '#0A0418',
+        'mint' => '#281C44',        // soft violet tint (dark)
+        'paper' => '#181030',       // raised band tint (dark)
+        'canvas' => '#0E0A1C',      // page background (violet-tinted near-black)
+        'surface' => '#191230',     // cards
+        'surface_2' => '#231A3C',   // subtle raised
+        'border' => '#322747',
+        'text' => '#ECE6FA',
+        'muted' => '#ABA0CC',       // body / secondary
+        'subtle' => '#7E73A0',
+        'pink' => '#2E1F3C',        // hero wash tint (dark, pink glow)
+        'lavender' => '#103A4A',    // hero wash tint (dark, cyan glow)
     ],
 
     // Web font (Google Fonts). Loaded once in the blade shell.

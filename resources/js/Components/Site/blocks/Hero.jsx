@@ -1,4 +1,5 @@
 import { Link } from '@inertiajs/react';
+import HeroParticles from '../HeroParticles';
 
 const isApp = (u) => ['/login', '/register', '/dashboard'].includes(u || '');
 function Cta({ cta, variant }) {
@@ -84,7 +85,10 @@ export default function Hero({ data }) {
             {/* full-bleed vibrant gradient backdrop */}
             <div className="absolute inset-0 -z-10" style={{ background: 'radial-gradient(820px 560px at 6% -6%, color-mix(in srgb, var(--g-from) 38%, var(--canvas)), transparent 58%), radial-gradient(760px 560px at 102% 4%, color-mix(in srgb, var(--pink) 80%, var(--canvas)), transparent 56%), radial-gradient(700px 520px at 70% 108%, color-mix(in srgb, var(--a) 22%, var(--canvas)), transparent 60%), var(--canvas)' }} />
 
-            <div className={`mx-auto items-center gap-10 px-6 pb-16 pt-14 sm:px-10 lg:gap-16 lg:pb-24 lg:pt-24 ${center ? 'max-w-3xl text-center' : 'grid max-w-[1600px] pb-20 lg:grid-cols-[1fr_1.1fr] lg:pb-28'}`}>
+            {/* interactive constellation background (home hero only) */}
+            {!center && <div className="absolute inset-0 -z-0 opacity-80"><HeroParticles /></div>}
+
+            <div className={`relative z-10 mx-auto items-center gap-10 px-6 pb-16 pt-14 sm:px-10 lg:gap-16 lg:pb-24 lg:pt-24 ${center ? 'max-w-3xl text-center' : 'grid max-w-[1600px] pb-20 lg:grid-cols-[1fr_1.1fr] lg:pb-28'}`}>
                 <div className={center ? '' : 'text-center lg:text-left'}>
                     {data.eyebrow && (
                         <span className="inline-flex items-center gap-2 rounded-full border bg-[var(--surface)] px-4 py-1.5 text-sm font-medium backdrop-blur" style={{ color: 'var(--a)', borderColor: 'color-mix(in srgb, var(--a) 25%, var(--canvas))' }}>
