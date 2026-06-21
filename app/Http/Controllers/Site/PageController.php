@@ -7,6 +7,7 @@ use App\Models\SiteMedia;
 use App\Models\SitePage;
 use App\Models\SiteTheme;
 use App\Support\DefaultSiteContent;
+use App\Support\SiteNavigation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
@@ -39,8 +40,33 @@ class PageController extends Controller
         return Inertia::render('Site/Show', [
             'page' => $page->publicPayload(),
             'theme' => SiteTheme::current()->publicPayload(),
+            'brand' => $this->brandPayload(),
+            'nav' => SiteNavigation::resolve(),
             'isAuthed' => (bool) $request->user(),
         ]);
+    }
+
+    /**
+     * The brand identity + palette the marketing site renders from — the single
+     * swap point (config/brand.php). Emitted as CSS vars on the page root so no
+     * block hardcodes a hex (SITE_BUILD_SPEC §3).
+     */
+    private function brandPayload(): array
+    {
+        $b = config('brand');
+
+        return [
+            'name' => $b['name'] ?? 'Tracksuite',
+            'tagline' => $b['tagline'] ?? null,
+            'legal_name' => $b['legal_name'] ?? null,
+            'colors' => $b['colors'] ?? [],
+            'socials' => array_filter($b['socials'] ?? []),
+            'support_email' => $b['support_email'] ?? null,
+            'whatsapp' => $b['whatsapp'] ?? null,
+            'phone' => $b['phone'] ?? null,
+            'address' => $b['address'] ?? null,
+            'demo_url' => $b['demo_url'] ?? null,
+        ];
     }
 
     /** Serve a builder-uploaded image by id, cached a month, ETag-validated. */

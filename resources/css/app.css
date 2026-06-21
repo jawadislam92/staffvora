@@ -77,6 +77,15 @@
 }
 html { background-color: var(--bg); color: var(--text); }
 
+/* Marketing site type — public pages render in Hanken Grotesk (the brand face),
+   scoped to `.site-root` so the dark app keeps its own font. Palette vars
+   (--a, --brand, --paper, …) are set inline on .site-root from config/brand.php
+   (see Pages/Site/Show.jsx). */
+.site-root {
+    font-family: 'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
 /* Native form controls follow the active theme by default, so the legacy
    white-card pages (Settings, Users, Developer, Profile) match the dark app
    shell instead of rendering as bright white boxes. Inputs that set their own

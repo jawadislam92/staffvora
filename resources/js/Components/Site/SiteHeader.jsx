@@ -1,62 +1,80 @@
 import { useState } from 'react';
 import { Link } from '@inertiajs/react';
+import SiteLogo from './SiteLogo';
 
-// Internal app routes use Inertia <Link>; marketing links use plain <a>.
 const isAppRoute = (url) => ['/login', '/register', '/dashboard'].includes(url);
 
-function NavLink({ url, label, className, style }) {
+function Nav({ url, label, className }) {
     return isAppRoute(url)
-        ? <Link href={url} className={className} style={style}>{label}</Link>
-        : <a href={url} className={className} style={style}>{label}</a>;
+        ? <Link href={url} className={className}>{label}</Link>
+        : <a href={url} className={className}>{label}</a>;
 }
 
-export default function SiteHeader({ theme, isAuthed }) {
+// A top-level nav entry: a plain link, or a hover dropdown when it has children.
+function HeaderItem({ item }) {
+    if (!item.children) {
+        return <Nav url={item.url} label={item.label} className="text-sm font-medium text-[var(--muted)] transition hover:text-[var(--brand)]" />;
+    }
+    return (
+        <div className="group relative">
+            <button type="button" className="inline-flex items-center gap-1 text-sm font-medium text-[var(--muted)] transition hover:text-[var(--brand)]">
+                {item.label}
+                <svg className="h-4 w-4 opacity-60 transition group-hover:rotate-180" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg>
+            </button>
+            <div className="invisible absolute left-1/2 top-full z-50 -translate-x-1/2 pt-3 opacity-0 transition group-hover:visible group-hover:opacity-100">
+                <div className="min-w-[230px] rounded-2xl border border-[var(--line)] bg-white p-2 shadow-xl shadow-black/[0.04]">
+                    {item.children.map((c, i) => (
+                        <Nav key={i} url={c.url} label={c.label} className="block rounded-xl px-3 py-2 text-sm font-medium text-[var(--muted)] transition hover:bg-[var(--paper)] hover:text-[var(--brand)]" />
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export default function SiteHeader({ nav = [], brand, isAuthed }) {
     const [open, setOpen] = useState(false);
-    const links = theme?.nav_links || [];
-    const cta = isAuthed
-        ? { url: '/dashboard', label: 'Go to dashboard' }
-        : { url: '/register', label: 'Start free' };
+    const name = brand?.name || 'Tracksuite';
+    const cta = isAuthed ? { url: '/dashboard', label: 'Go to dashboard' } : { url: '/register', label: 'Start free trial' };
 
     return (
-        <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-white/80 backdrop-blur-xl">
-            <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3.5">
-                <a href="/" className="flex items-center gap-2.5">
-                    {theme?.logo_url ? (
-                        <img src={theme.logo_url} alt="" className="h-8 w-8 object-contain" />
-                    ) : (
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-white" style={{ background: 'var(--a)' }}>
-                            {(theme?.site_name || 'T').charAt(0)}
-                        </span>
-                    )}
-                    <span className="text-lg font-bold tracking-tight text-zinc-900">{theme?.site_name || 'Tracksuite'}</span>
-                </a>
+        <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-[var(--canvas)]/85 backdrop-blur-xl">
+            <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-5 py-3.5 sm:px-6">
+                <a href="/" aria-label={name}><SiteLogo name={name} size={28} textClass="text-lg" /></a>
 
-                <nav className="hidden items-center gap-7 md:flex">
-                    {links.map((l, i) => (
-                        <NavLink key={i} url={l.url} label={l.label} className="text-sm font-medium text-zinc-600 transition hover:text-zinc-900" />
-                    ))}
+                <nav className="hidden items-center gap-7 lg:flex">
+                    {nav.map((item, i) => <HeaderItem key={i} item={item} />)}
                 </nav>
 
-                <div className="hidden items-center gap-3 md:flex">
-                    {!isAuthed && (
-                        <Link href="/login" className="text-sm font-semibold text-zinc-600 transition hover:text-zinc-900">Sign in</Link>
-                    )}
-                    <NavLink url={cta.url} label={cta.label} style={{ background: 'var(--a)' }} className="rounded-full px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90" />
+                <div className="hidden items-center gap-4 lg:flex">
+                    {!isAuthed && <Link href="/login" className="text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--brand)]">Sign in</Link>}
+                    <Nav url={cta.url} label={cta.label} className="rounded-full bg-[var(--a)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--a-deep)]" />
                 </div>
 
-                <button type="button" onClick={() => setOpen((o) => !o)} className="rounded-lg p-2 text-zinc-700 md:hidden" aria-label="Menu">
-                    <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+                <button type="button" onClick={() => setOpen((o) => !o)} className="rounded-lg p-2 text-[var(--brand)] lg:hidden" aria-label="Menu" aria-expanded={open}>
+                    <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d={open ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'} /></svg>
                 </button>
             </div>
 
             {open && (
-                <div className="border-t border-zinc-200 bg-white px-6 py-4 md:hidden">
-                    <div className="flex flex-col gap-3">
-                        {links.map((l, i) => (
-                            <NavLink key={i} url={l.url} label={l.label} className="text-sm font-medium text-zinc-700" />
+                <div className="border-t border-[var(--line)] bg-white px-5 py-4 lg:hidden">
+                    <div className="flex flex-col gap-1">
+                        {nav.map((item, i) => (
+                            <div key={i}>
+                                {item.children ? (
+                                    <>
+                                        <div className="px-1 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-[var(--subtle)]">{item.label}</div>
+                                        {item.children.map((c, j) => <Nav key={j} url={c.url} label={c.label} className="block rounded-lg px-1 py-2 text-sm font-medium text-[var(--muted)]" />)}
+                                    </>
+                                ) : (
+                                    <Nav url={item.url} label={item.label} className="block rounded-lg px-1 py-2.5 text-sm font-medium text-[var(--brand)]" />
+                                )}
+                            </div>
                         ))}
-                        {!isAuthed && <Link href="/login" className="text-sm font-semibold text-zinc-700">Sign in</Link>}
-                        <NavLink url={cta.url} label={cta.label} style={{ background: 'var(--a)' }} className="mt-1 rounded-full px-4 py-2 text-center text-sm font-semibold text-white" />
+                        <div className="mt-3 flex flex-col gap-2 border-t border-[var(--line)] pt-4">
+                            {!isAuthed && <Link href="/login" className="px-1 text-sm font-semibold text-[var(--muted)]">Sign in</Link>}
+                            <Nav url={cta.url} label={cta.label} className="rounded-full bg-[var(--a)] px-5 py-2.5 text-center text-sm font-semibold text-white" />
+                        </div>
                     </div>
                 </div>
             )}
