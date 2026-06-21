@@ -95,17 +95,25 @@ class PageController extends Controller
         return $graph;
     }
 
-    /** XML sitemap of every published marketing page (for search engines). */
+    /** XML sitemap of every published marketing page + blog post (for search engines). */
     public function sitemap()
     {
-        $pages = SitePage::where('status', 'published')->get(['slug', 'updated_at']);
+        $entries = SitePage::where('status', 'published')->get(['slug', 'updated_at'])
+            ->map(fn (SitePage $p) => [
+                'loc' => $p->slug === 'home' ? url('/') : url('/'.$p->slug),
+                'lastmod' => $p->updated_at->toAtomString(),
+                'priority' => $p->slug === 'home' ? '1.0' : '0.7',
+            ]);
 
-        $urls = $pages->map(function (SitePage $p) {
-            $loc = $p->slug === 'home' ? url('/') : url('/'.$p->slug);
+        if (config('features.blog', false)) {
+            $entries->push(['loc' => url('/blog'), 'lastmod' => now()->toAtomString(), 'priority' => '0.6']);
+            foreach (\App\Models\BlogPost::live()->get() as $post) {
+                $entries->push(['loc' => $post->url(), 'lastmod' => $post->updated_at->toAtomString(), 'priority' => '0.6']);
+            }
+        }
 
-            return '  <url><loc>'.e($loc).'</loc><lastmod>'.$p->updated_at->toAtomString().'</lastmod>'
-                .'<changefreq>weekly</changefreq><priority>'.($p->slug === 'home' ? '1.0' : '0.7').'</priority></url>';
-        })->implode("\n");
+        $urls = $entries->map(fn ($e) => '  <url><loc>'.e($e['loc']).'</loc><lastmod>'.$e['lastmod']
+            .'</lastmod><changefreq>weekly</changefreq><priority>'.$e['priority'].'</priority></url>')->implode("\n");
 
         $xml = '<?xml version="1.0" encoding="UTF-8"?>'."\n"
             .'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'."\n".$urls."\n".'</urlset>';

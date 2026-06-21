@@ -10,6 +10,7 @@ function navFor(role) {
         { label: 'Tenants', href: '/tenants' },
         isAdmin && { label: 'Plans', href: '/plans' },
         isAdmin && { label: 'Website', href: '/site' },
+        isAdmin && { label: 'Blog', href: '/blog' },
         isAdmin && { label: 'Developer', href: '/developer' },
         role === 'owner' && { label: 'Staff', href: '/staff' },
         { label: 'Account', href: '/account' },

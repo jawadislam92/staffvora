@@ -145,6 +145,22 @@ html { background-color: var(--bg); color: var(--text); }
     transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease;
 }
 
+/* Blog post body — owner-authored HTML rendered with readable, on-brand type. */
+.site-root .site-prose { color: var(--muted); font-size: 1.06rem; line-height: 1.75; }
+.site-root .site-prose > :first-child { margin-top: 0; }
+.site-root .site-prose h2 { color: var(--brand); font-size: 1.6rem; font-weight: 800; letter-spacing: -0.01em; margin: 2rem 0 0.75rem; }
+.site-root .site-prose h3 { color: var(--brand); font-size: 1.25rem; font-weight: 700; margin: 1.6rem 0 0.5rem; }
+.site-root .site-prose p { margin: 0 0 1.1rem; }
+.site-root .site-prose a { color: var(--a); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.site-root .site-prose strong { color: var(--brand); font-weight: 700; }
+.site-root .site-prose ul, .site-root .site-prose ol { margin: 0 0 1.1rem 1.3rem; }
+.site-root .site-prose ul { list-style: disc; }
+.site-root .site-prose ol { list-style: decimal; }
+.site-root .site-prose li { margin: 0.35rem 0; }
+.site-root .site-prose img { border-radius: 0.75rem; border: 1px solid var(--line); margin: 1.5rem 0; }
+.site-root .site-prose blockquote { border-left: 3px solid var(--a); padding-left: 1rem; margin: 1.5rem 0; color: var(--brand); font-style: italic; }
+.site-root .site-prose code { background: var(--surface-2); padding: 0.1rem 0.35rem; border-radius: 0.3rem; font-size: 0.9em; }
+
 /* Native form controls follow the active theme by default, so the legacy
    white-card pages (Settings, Users, Developer, Profile) match the dark app
    shell instead of rendering as bright white boxes. Inputs that set their own

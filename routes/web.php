@@ -99,6 +99,17 @@ Route::domain(config('platform.host'))->group(function () {
                 Route::delete('/pages/{page}', [SiteBuilderController::class, 'destroyPage'])->name('platform.site.pages.destroy');
             });
 
+            Route::prefix('blog')->group(function () {
+                Route::get('/', [\App\Http\Controllers\Platform\BlogController::class, 'index'])->name('platform.blog.index');
+                Route::get('/new', [\App\Http\Controllers\Platform\BlogController::class, 'create'])->name('platform.blog.create');
+                Route::post('/', [\App\Http\Controllers\Platform\BlogController::class, 'store'])->name('platform.blog.store');
+                Route::get('/{post}', [\App\Http\Controllers\Platform\BlogController::class, 'edit'])->name('platform.blog.edit');
+                Route::put('/{post}', [\App\Http\Controllers\Platform\BlogController::class, 'update'])->name('platform.blog.update');
+                Route::post('/{post}/publish', [\App\Http\Controllers\Platform\BlogController::class, 'publish'])->name('platform.blog.publish');
+                Route::post('/{post}/unpublish', [\App\Http\Controllers\Platform\BlogController::class, 'unpublish'])->name('platform.blog.unpublish');
+                Route::delete('/{post}', [\App\Http\Controllers\Platform\BlogController::class, 'destroy'])->name('platform.blog.destroy');
+            });
+
             Route::prefix('developer')->group(function () {
                 Route::get('/', [DeveloperController::class, 'index'])->name('developer.index');
                 Route::post('/run', [DeveloperController::class, 'run'])->name('developer.run');
@@ -330,6 +341,11 @@ require __DIR__.'/auth.php';
 // SEO: XML sitemap of every published marketing page (declared before the
 // catch-all so the literal path wins).
 Route::get('/sitemap.xml', [SitePageController::class, 'sitemap'])->name('site.sitemap');
+
+// Marketing blog (index + posts) — literal paths before the slug catch-all.
+Route::get('/blog', [\App\Http\Controllers\Site\BlogController::class, 'index'])->name('site.blog');
+Route::get('/blog/{slug}', [\App\Http\Controllers\Site\BlogController::class, 'show'])
+    ->where('slug', '[a-z0-9][a-z0-9-]*')->name('site.blog.show');
 
 // Published marketing pages by slug (e.g. /pricing, /privacy, /solutions/agencies).
 // Declared LAST so it can never shadow an app route — only unmatched lowercase

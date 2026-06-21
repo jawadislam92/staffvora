@@ -40,6 +40,38 @@ class DefaultSiteContent
         if ($created) {
             SiteNavigation::forgetCache();
         }
+
+        self::ensureStarterPost();
+    }
+
+    /** Seed one published post so the blog isn't empty on launch (idempotent). */
+    private static function ensureStarterPost(): void
+    {
+        if (! config('features.blog', false) || \App\Models\BlogPost::count() > 0) {
+            return;
+        }
+
+        \App\Models\BlogPost::create([
+            'slug' => 'measure-the-work-not-the-worker',
+            'title' => 'Why we measure the work, not the worker',
+            'excerpt' => 'Time tracking earned a bad reputation. Here’s how we think about visibility that respects your team — and still gives you the numbers you need to run a business.',
+            'category' => 'Perspective',
+            'author_name' => config('brand.name', 'Tracksuite').' Team',
+            'status' => 'published',
+            'published_at' => now(),
+            'meta_description' => 'Our take on humane time tracking: accountability without surveillance, and why employee-visible data builds more trust than secret monitoring.',
+            'body' => '<p>Most time trackers were built for one job: to watch people. Screenshots every few seconds, secret activity scores, a red flag the moment someone steps away. It "works" — and it quietly tells your team you don’t trust them.</p>'
+                .'<h2>Visibility, not surveillance</h2>'
+                .'<p>We started Tracksuite from a simple belief: a manager needs to understand the <strong>work</strong>, not police the <strong>worker</strong>. You need to know what got done, where time went, and whether a project is on track. You don’t need to know that someone took a ten-minute coffee break.</p>'
+                .'<p>So everything we show a manager, the employee can see too. Screenshots are opt-in and visible to the person being tracked. Attendance never brands someone "absent" for a day they hadn’t started. Super-admins are exempt from monitoring by default.</p>'
+                .'<h2>Why transparency wins</h2>'
+                .'<ul><li><strong>Trust compounds.</strong> Teams that know exactly what’s measured stop gaming the metric and start doing the work.</li>'
+                .'<li><strong>The data is honest.</strong> When people aren’t hiding from the tracker, your reports actually reflect reality.</li>'
+                .'<li><strong>It scales.</strong> Clear, fair rules beat a manager eyeballing screenshots all day.</li></ul>'
+                .'<h2>You still get the numbers</h2>'
+                .'<p>Humane doesn’t mean fuzzy. You get accurate hours, attendance and shift coverage, project and client breakdowns, and exports your finance team will accept. The difference is <em>how</em> you get them — out in the open, with your team’s buy-in.</p>'
+                .'<p>That’s the whole idea: measure the work, not the worker.</p>',
+        ]);
     }
 
     private static function ensureTheme(): void

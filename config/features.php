@@ -20,7 +20,7 @@ return [
     'tools' => false,        // free calculators (index + route reserved, registry empty)
     'guides' => false,
     'glossary' => false,
-    'blog' => false,
+    'blog' => true,
     'industries' => false,
     'comparisons' => false,  // "vs / alternative" pages
     'customer_stories' => false,
