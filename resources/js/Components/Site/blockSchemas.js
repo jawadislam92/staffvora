@@ -119,6 +119,15 @@ export const SCHEMAS = {
             { key: 'caption', type: 'text', label: 'Caption' },
         ],
     },
+    pricing_table: {
+        label: 'Pricing table',
+        fields: [
+            { key: 'anchor', type: 'text', label: 'Anchor id (e.g. pricing)' },
+            { key: 'heading', type: 'text', label: 'Heading' },
+            { key: 'subhead', type: 'text', label: 'Subheading' },
+            { key: 'note', type: 'text', label: 'Small note under the table' },
+        ],
+    },
 };
 
 export const BLOCK_TYPES = Object.keys(SCHEMAS).map((type) => ({ type, label: SCHEMAS[type].label }));
@@ -135,6 +144,7 @@ const DEFAULTS = {
     cta_band: { heading: 'Ready to start?', text: '', primary_cta: { label: 'Start free', url: '/register' } },
     rich_text: { html: '<h2>Heading</h2><p>Your text…</p>' },
     image: { image_url: null, alt: '', caption: '' },
+    pricing_table: { anchor: 'pricing', heading: 'Simple, transparent pricing', subhead: 'Start free. Upgrade when your team grows.', note: '' },
 };
 
 export function newBlock(type) {

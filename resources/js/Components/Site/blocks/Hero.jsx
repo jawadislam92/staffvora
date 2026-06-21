@@ -78,38 +78,43 @@ function HeroCollage() {
 }
 
 export default function Hero({ data }) {
+    const center = data.variant === 'center';
     return (
         <section className="relative isolate overflow-hidden">
             {/* full-bleed vibrant gradient backdrop */}
             <div className="absolute inset-0 -z-10" style={{ background: 'radial-gradient(820px 560px at 6% -6%, color-mix(in srgb, var(--g-from) 38%, white), transparent 58%), radial-gradient(760px 560px at 102% 4%, color-mix(in srgb, var(--pink) 80%, white), transparent 56%), radial-gradient(700px 520px at 70% 108%, color-mix(in srgb, var(--a) 22%, white), transparent 60%), var(--canvas)' }} />
 
-            <div className="mx-auto grid max-w-[1600px] items-center gap-10 px-6 pb-20 pt-14 sm:px-10 lg:grid-cols-[1fr_1.1fr] lg:gap-16 lg:pb-28 lg:pt-24">
-                <div className="text-center lg:text-left">
+            <div className={`mx-auto items-center gap-10 px-6 pb-16 pt-14 sm:px-10 lg:gap-16 lg:pb-24 lg:pt-24 ${center ? 'max-w-3xl text-center' : 'grid max-w-[1600px] pb-20 lg:grid-cols-[1fr_1.1fr] lg:pb-28'}`}>
+                <div className={center ? '' : 'text-center lg:text-left'}>
                     {data.eyebrow && (
                         <span className="inline-flex items-center gap-2 rounded-full border bg-white/70 px-4 py-1.5 text-sm font-medium backdrop-blur" style={{ color: 'var(--a)', borderColor: 'color-mix(in srgb, var(--a) 25%, white)' }}>
                             <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: 'var(--a)' }} />
                             {data.eyebrow}
                         </span>
                     )}
-                    <h1 className="mx-auto mt-6 max-w-2xl text-[2.6rem] font-extrabold leading-[1.04] tracking-tight text-[var(--brand)] sm:text-6xl lg:mx-0">
+                    <h1 className={`mt-6 text-[2.6rem] font-extrabold leading-[1.04] tracking-tight text-[var(--brand)] sm:text-6xl ${center ? 'mx-auto max-w-3xl' : 'mx-auto max-w-2xl lg:mx-0'}`}>
                         {data.heading}
                         {data.heading_highlight && (
                             <span className="block" style={{ background: 'linear-gradient(120deg,var(--g-from),var(--g-to))', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>{data.heading_highlight}</span>
                         )}
                     </h1>
-                    {data.subhead && <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-[var(--muted)] lg:mx-0">{data.subhead}</p>}
-                    <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start">
-                        <Cta cta={data.primary_cta} variant="primary" />
-                        <Cta cta={data.secondary_cta} variant="secondary" />
-                    </div>
+                    {data.subhead && <p className={`mt-6 text-lg leading-relaxed text-[var(--muted)] ${center ? 'mx-auto max-w-2xl' : 'mx-auto max-w-xl lg:mx-0'}`}>{data.subhead}</p>}
+                    {(data.primary_cta?.label || data.secondary_cta?.label) && (
+                        <div className={`mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row ${center ? '' : 'lg:justify-start'}`}>
+                            <Cta cta={data.primary_cta} variant="primary" />
+                            <Cta cta={data.secondary_cta} variant="secondary" />
+                        </div>
+                    )}
                     {data.note && <p className="mt-4 text-sm text-[var(--subtle)]">{data.note}</p>}
                 </div>
 
-                <div className="relative">
-                    {data.image_url
-                        ? <div className="overflow-hidden rounded-2xl border border-white/70 shadow-2xl"><img src={data.image_url} alt="" className="w-full" /></div>
-                        : <HeroCollage />}
-                </div>
+                {!center && (
+                    <div className="relative">
+                        {data.image_url
+                            ? <div className="overflow-hidden rounded-2xl border border-white/70 shadow-2xl"><img src={data.image_url} alt="" className="w-full" /></div>
+                            : <HeroCollage />}
+                    </div>
+                )}
             </div>
         </section>
     );

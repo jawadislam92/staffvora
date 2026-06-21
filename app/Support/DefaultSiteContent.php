@@ -17,6 +17,57 @@ class DefaultSiteContent
     {
         self::ensureTheme();
         self::ensureHome();
+        self::ensurePricing();
+    }
+
+    private static function b(string $type, array $data): array
+    {
+        return ['id' => 'b'.bin2hex(random_bytes(4)), 'type' => $type, 'data' => $data];
+    }
+
+    /** The Pricing page — a centered hero + the live-plan PricingTable + FAQ + CTA. */
+    private static function ensurePricing(): void
+    {
+        if (SitePage::where('slug', 'pricing')->exists()) {
+            return;
+        }
+
+        $blocks = [
+            self::b('hero', [
+                'variant' => 'center',
+                'eyebrow' => 'Pricing',
+                'heading' => 'Simple, transparent pricing.',
+                'heading_highlight' => 'No surprises.',
+                'subhead' => 'Start free, upgrade when your team grows. Every plan includes the full tracker, attendance and reports.',
+                'note' => 'No credit card required · 14-day Pro trial',
+            ]),
+            self::b('pricing_table', ['anchor' => 'pricing', 'heading' => '', 'subhead' => '', 'note' => '']),
+            self::b('faq', [
+                'heading' => 'Pricing FAQ',
+                'items' => [
+                    ['q' => 'Is there a free plan?', 'a' => 'Yes — Free covers a small team with core time tracking, attendance and reports. No credit card needed.'],
+                    ['q' => 'How does the trial work?', 'a' => 'New workspaces start on a 14-day Pro trial with every feature unlocked. After it ends you can stay on Free or choose a paid plan.'],
+                    ['q' => 'Can I pay annually?', 'a' => 'Yes — annual billing saves you about two months compared with paying monthly.'],
+                    ['q' => 'Can I cancel anytime?', 'a' => 'Absolutely. There are no lock-in contracts — change or cancel your plan whenever you like.'],
+                    ['q' => 'Do you support local payment methods?', 'a' => 'For Pakistan-based teams we accept bank transfer and local wallets like JazzCash and Easypaisa. [REPLACE: confirm methods]'],
+                ],
+            ]),
+            self::b('cta_band', ['heading' => 'Try every feature free for 14 days', 'text' => 'Create your workspace in seconds — no card, no commitment.', 'primary_cta' => ['label' => 'Start free trial', 'url' => '/register']]),
+        ];
+
+        SitePage::create([
+            'slug' => 'pricing',
+            'title' => 'Pricing',
+            'meta_title' => 'Pricing — Tracksuite',
+            'meta_description' => 'Simple, transparent time-tracking pricing. Start free and upgrade as your team grows.',
+            'status' => 'published',
+            'show_in_nav' => true,
+            'blocks' => $blocks,
+            'published_blocks' => $blocks,
+            'sort' => 1,
+        ]);
+
+        \App\Support\SiteNavigation::forgetCache();
     }
 
     private static function ensureTheme(): void

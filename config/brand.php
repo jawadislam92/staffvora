@@ -69,4 +69,8 @@ return [
 
     // Web font (Google Fonts). Loaded once in the blade shell.
     'font' => 'Hanken Grotesk',
+
+    // Pricing: USD comes from the live Plans; PKR is shown via this rate until
+    // the owner sets real local prices. REPLACE with real PKR pricing.
+    'pkr_rate' => 280,
 ];

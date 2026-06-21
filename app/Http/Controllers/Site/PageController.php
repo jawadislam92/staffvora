@@ -42,8 +42,25 @@ class PageController extends Controller
             'theme' => SiteTheme::current()->publicPayload(),
             'brand' => $this->brandPayload(),
             'nav' => SiteNavigation::resolve(),
+            'plans' => $this->plansPayload(),
             'isAuthed' => (bool) $request->user(),
         ]);
+    }
+
+    /** Public plan tiers for the PricingTable block — wired to the live catalogue. */
+    private function plansPayload(): array
+    {
+        \App\Models\Plan::ensureSeeded();
+
+        return \App\Models\Plan::where('is_public', true)->orderBy('sort')->get()
+            ->map(fn (\App\Models\Plan $p) => [
+                'key' => $p->key,
+                'name' => $p->name,
+                'price_cents' => (int) $p->price_cents,
+                'currency' => $p->currency ?: 'USD',
+                'max_users' => $p->max_users,
+                'contact' => $p->key === 'enterprise',
+            ])->values()->all();
     }
 
     /**
@@ -66,6 +83,7 @@ class PageController extends Controller
             'phone' => $b['phone'] ?? null,
             'address' => $b['address'] ?? null,
             'demo_url' => $b['demo_url'] ?? null,
+            'pkr_rate' => $b['pkr_rate'] ?? 280,
         ];
     }
 

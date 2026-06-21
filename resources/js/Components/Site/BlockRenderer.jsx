@@ -9,6 +9,7 @@ import Faq from './blocks/Faq';
 import CtaBand from './blocks/CtaBand';
 import RichText from './blocks/RichText';
 import ImageBlock from './blocks/ImageBlock';
+import PricingTable from './blocks/PricingTable';
 
 // type → component. The builder only offers types that exist here.
 export const BLOCK_REGISTRY = {
@@ -23,15 +24,16 @@ export const BLOCK_REGISTRY = {
     cta_band: CtaBand,
     rich_text: RichText,
     image: ImageBlock,
+    pricing_table: PricingTable,
 };
 
-export default function BlockRenderer({ blocks = [], theme }) {
+export default function BlockRenderer({ blocks = [], theme, brand, plans }) {
     return (
         <>
             {blocks.map((block) => {
                 const Cmp = BLOCK_REGISTRY[block.type];
                 if (!Cmp) return null;
-                return <Cmp key={block.id} data={block.data || {}} theme={theme} />;
+                return <Cmp key={block.id} data={block.data || {}} theme={theme} brand={brand} plans={plans} />;
             })}
         </>
     );

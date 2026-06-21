@@ -9,7 +9,7 @@ import BlockRenderer from '@/Components/Site/BlockRenderer';
  * from config/brand.php (passed as `brand`), so no block hardcodes a hex — and
  * the builder's theme.accent_color/highlight can still override the accent.
  */
-export default function Show({ page, theme, brand, nav, isAuthed }) {
+export default function Show({ page, theme, brand, nav, plans, isAuthed }) {
     const c = brand?.colors || {};
     const meta = page?.meta || {};
 
@@ -50,7 +50,7 @@ export default function Show({ page, theme, brand, nav, isAuthed }) {
 
             <SiteHeader nav={nav?.header || []} brand={brand} theme={theme} isAuthed={isAuthed} />
             <main>
-                <BlockRenderer blocks={page?.blocks || []} theme={theme} brand={brand} />
+                <BlockRenderer blocks={page?.blocks || []} theme={theme} brand={brand} plans={plans} />
             </main>
             <SiteFooter nav={nav?.footer || []} brand={brand} theme={theme} />
         </div>
