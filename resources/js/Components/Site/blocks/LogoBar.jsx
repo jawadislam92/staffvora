@@ -13,7 +13,7 @@ export default function LogoBar({ data }) {
                         ))}
                     </div>
                 ) : (
-                    <p className="mt-3 text-center text-xs text-[var(--subtle)]/60">Add customer logos in the builder</p>
+                    <p className="mt-3 text-center text-xs text-[var(--subtle)]">Add customer logos in the builder</p>
                 )}
             </div>
         </section>

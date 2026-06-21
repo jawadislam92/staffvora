@@ -86,6 +86,15 @@ html { background-color: var(--bg); color: var(--text); }
     -webkit-font-smoothing: antialiased;
 }
 
+/* Sticky site header background. Tailwind can't apply an opacity modifier to a
+   var() colour, so `bg-[var(--canvas)]/85` rendered FULLY TRANSPARENT and the nav
+   washed out over gradient sections. Solid canvas by default (always readable),
+   with a frosted translucent layer only where backdrop-blur is supported. */
+.site-root .site-header { background-color: var(--canvas); }
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .site-root .site-header { background-color: color-mix(in srgb, var(--canvas) 90%, transparent); }
+}
+
 /* Dimensional ("3D") primary button — gradient fill + coloured drop shadow + a
    1px inner top highlight, with a lift on hover. Used across the marketing site
    for the main CTAs (header, hero, CTA bands). */

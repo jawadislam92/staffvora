@@ -39,7 +39,7 @@ export default function SiteHeader({ nav = [], brand, isAuthed, mode = 'light', 
     const cta = isAuthed ? { url: '/dashboard', label: 'Go to dashboard' } : { url: '/register', label: 'Start free trial' };
 
     return (
-        <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-[var(--canvas)]/85 backdrop-blur-xl">
+        <header className="site-header sticky top-0 z-40 border-b border-[var(--line)] backdrop-blur-xl">
             <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-6 px-5 py-3.5 sm:px-10">
                 <div className="flex items-center gap-9">
                     <a href="/" aria-label={name}><SiteLogo name={name} size={28} textClass="text-lg" /></a>
