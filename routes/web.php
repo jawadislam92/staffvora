@@ -81,6 +81,7 @@ Route::domain(config('platform.host'))->group(function () {
         // the website builder, and the developer panel.
         Route::middleware('platform.role:admin')->group(function () {
             Route::post('/tenants/{organization}/suspend', [PlatformController::class, 'suspend'])->name('platform.suspend');
+            Route::post('/tenants/{organization}/trial', [PlatformController::class, 'setTrial'])->name('platform.trial');
             Route::post('/tenants/{organization}/payment', [PlatformController::class, 'recordPayment'])->name('platform.payment');
             Route::put('/tenants/{organization}/entitlements', [PlatformController::class, 'updateTenant'])->name('platform.tenant.update');
 

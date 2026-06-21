@@ -38,12 +38,14 @@ class Organization extends Model
         'trial_ends_at',
         'entitlement_overrides',
         'custom_price_cents',
+        'discount_percent',
     ];
 
     protected $casts = [
         'trial_ends_at' => 'datetime',
         'entitlement_overrides' => 'array',
         'custom_price_cents' => 'integer',
+        'discount_percent' => 'integer',
     ];
 
     /** The "main person" who owns this account. */
@@ -141,10 +143,22 @@ class Organization extends Model
         return $value === null ? null : (int) $value;
     }
 
-    /** The price this tenant actually pays: a negotiated custom price wins. */
+    /** The base price before discount: a negotiated custom price wins over the plan. */
     public function priceCents(): ?int
     {
         return $this->custom_price_cents ?? $this->activePlan()?->price_cents;
+    }
+
+    /** The price this tenant actually pays: base price minus any percentage discount. */
+    public function effectivePriceCents(): ?int
+    {
+        $base = $this->priceCents();
+        if ($base === null) {
+            return null;
+        }
+        $pct = max(0, min(100, (int) ($this->discount_percent ?? 0)));
+
+        return $pct > 0 ? (int) round($base * (100 - $pct) / 100) : $base;
     }
 
     /** The display/white-label name, falling back to the legal name. */

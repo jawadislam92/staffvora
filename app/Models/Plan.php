@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Model;
 class Plan extends Model
 {
     protected $fillable = [
-        'key', 'name', 'price_cents', 'currency', 'interval', 'max_users', 'features', 'entitlements', 'is_public', 'sort',
+        'key', 'name', 'price_cents', 'currency', 'interval', 'max_users', 'trial_days', 'features', 'entitlements', 'is_public', 'sort',
     ];
 
     protected $casts = [
@@ -23,6 +23,7 @@ class Plan extends Model
         'is_public' => 'boolean',
         'price_cents' => 'integer',
         'max_users' => 'integer',
+        'trial_days' => 'integer',
     ];
 
     /** @deprecated use entitlement(); kept for any old call sites. */

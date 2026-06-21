@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import PlatformLayout from '@/Layouts/PlatformLayout';
 import { ArrowLeft } from 'lucide-react';
@@ -8,6 +9,8 @@ export default function PlatformShow({ organization, subscription, plans, paymen
     const role = usePage().props.platformUser?.role;
     const canManage = role === 'owner' || role === 'admin';
     const form = useForm({ amount: '', currency: 'USD', months: 1, plan: subscription?.plan_key || '', reference: '' });
+    const [trialDate, setTrialDate] = useState('');
+    const trial = (action, days) => router.post(route('platform.trial', organization.id), { action, days: days || null, date: action === 'set' ? trialDate : null }, { preserveScroll: true });
 
     const record = (e) => {
         e.preventDefault();
@@ -52,10 +55,29 @@ export default function PlatformShow({ organization, subscription, plans, paymen
                                     <div className="flex justify-between"><dt className="text-slate-400">Status</dt><dd className="capitalize">{subscription.status}</dd></div>
                                     <div className="flex justify-between"><dt className="text-slate-400">Trial ends</dt><dd>{subscription.trial_ends_at || '—'}</dd></div>
                                     <div className="flex justify-between"><dt className="text-slate-400">Period ends</dt><dd>{subscription.current_period_end || '—'}</dd></div>
+                                    <div className="flex justify-between"><dt className="text-slate-400">You charge</dt><dd>{organization.effective_price_cents != null ? <>{money(organization.effective_price_cents, organization.currency)}/mo{organization.discount_percent ? <span className="text-emerald-400"> · {organization.discount_percent}% off</span> : null}</> : '—'}</dd></div>
                                 </dl>
                             ) : <p className="text-slate-400">No subscription.</p>}
                         </div>
                     </div>
+
+                    {canManage && (
+                    <div className="rounded-lg border border-slate-800 bg-slate-900 p-5 text-sm">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <h3 className="font-semibold text-slate-100">Trial</h3>
+                            <span className="text-slate-400">Ends: <span className="font-semibold text-slate-200">{organization.trial_ends_at || '—'}</span></span>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                            {[7, 14, 30].map((d) => (
+                                <button key={d} onClick={() => trial('extend', d)} className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800">+{d} days</button>
+                            ))}
+                            <button onClick={() => { if (confirm('End this trial now?')) trial('end'); }} className="rounded-md border border-rose-500/40 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-500/10">End trial now</button>
+                            <span className="mx-1 text-slate-600">·</span>
+                            <input type="date" value={trialDate} onChange={(e) => setTrialDate(e.target.value)} className="rounded-md border-slate-700 bg-slate-950 text-xs text-slate-100" />
+                            <button onClick={() => trial('set')} disabled={!trialDate} className="rounded-md bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-400 disabled:opacity-40">Set date</button>
+                        </div>
+                    </div>
+                    )}
 
                     {canManage && (
                     <form onSubmit={record} className="rounded-lg border border-slate-800 bg-slate-900 p-5">
@@ -131,6 +153,7 @@ function TenantControls({ organization, plans, entitlements }) {
     const form = useForm({
         overrides: initOverrides,
         custom_price_cents: entitlements.custom_price_cents ?? '',
+        discount_percent: organization.discount_percent ?? '',
         plan: '',
     });
 
@@ -139,7 +162,11 @@ function TenantControls({ organization, plans, entitlements }) {
     const save = (e) => {
         e.preventDefault();
         form
-            .transform((data) => ({ ...data, custom_price_cents: data.custom_price_cents === '' ? null : Number(data.custom_price_cents) }))
+            .transform((data) => ({
+                ...data,
+                custom_price_cents: data.custom_price_cents === '' ? null : Number(data.custom_price_cents),
+                discount_percent: data.discount_percent === '' ? null : Number(data.discount_percent),
+            }))
             .put(route('platform.tenant.update', organization.id), { preserveScroll: true });
     };
 
@@ -153,13 +180,22 @@ function TenantControls({ organization, plans, entitlements }) {
                 Grant or limit this one customer beyond their plan — the &ldquo;contact us for a bit more&rdquo; case. Blank = inherit the plan. The server enforces every value.
             </p>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <label className="text-xs text-muted">Custom price (cents / month)
                     <input
                         type="number" min="0"
                         value={form.data.custom_price_cents}
                         onChange={(e) => form.setData('custom_price_cents', e.target.value)}
                         placeholder="inherit plan price"
+                        className="mt-1 w-full rounded-md border-line bg-app text-sm text-body"
+                    />
+                </label>
+                <label className="text-xs text-muted">Discount (%)
+                    <input
+                        type="number" min="0" max="100"
+                        value={form.data.discount_percent}
+                        onChange={(e) => form.setData('discount_percent', e.target.value)}
+                        placeholder="0"
                         className="mt-1 w-full rounded-md border-line bg-app text-sm text-body"
                     />
                 </label>

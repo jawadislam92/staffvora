@@ -66,6 +66,11 @@ class PlatformController extends Controller
                 'created_at' => $organization->created_at?->toDateString(),
                 'users' => $organization->users()->withoutGlobalScope(OrganizationScope::class)->count(),
                 'owner' => $organization->owner?->only(['name', 'email']),
+                'trial_ends_at' => $organization->trial_ends_at?->toDateString(),
+                'discount_percent' => $organization->discount_percent,
+                'base_price_cents' => $organization->priceCents(),
+                'effective_price_cents' => $organization->effectivePriceCents(),
+                'currency' => $organization->activePlan()?->currency ?? 'USD',
             ],
             'subscription' => $sub ? [
                 'plan_key' => $sub->plan->key,
@@ -108,6 +113,7 @@ class PlatformController extends Controller
         $data = $request->validate([
             'overrides' => ['nullable', 'array'],
             'custom_price_cents' => ['nullable', 'integer', 'min:0', 'max:100000000'],
+            'discount_percent' => ['nullable', 'integer', 'min:0', 'max:100'],
             'plan' => ['nullable', 'string', 'exists:plans,key'],
         ]);
 
@@ -129,6 +135,7 @@ class PlatformController extends Controller
         $organization->update([
             'entitlement_overrides' => $clean ?: null,
             'custom_price_cents' => $data['custom_price_cents'] ?? null,
+            'discount_percent' => ($data['discount_percent'] ?? 0) ?: null,
         ]);
 
         $this->forgetTenantCaches($organization->id);
@@ -147,6 +154,7 @@ class PlatformController extends Controller
                 'price_cents' => $p->price_cents,
                 'currency' => $p->currency,
                 'max_users' => $p->max_users,
+                'trial_days' => $p->trial_days,
                 'is_public' => $p->is_public,
                 'entitlements' => collect(Entitlements::keys())
                     ->mapWithKeys(fn ($k) => [$k => $p->entitlement($k)])
@@ -161,6 +169,7 @@ class PlatformController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:60'],
             'price_cents' => ['required', 'integer', 'min:0', 'max:100000000'],
+            'trial_days' => ['nullable', 'integer', 'min:0', 'max:365'],
             'is_public' => ['required', 'boolean'],
             'entitlements' => ['required', 'array'],
         ]);
@@ -179,6 +188,7 @@ class PlatformController extends Controller
         $plan->update([
             'name' => $data['name'],
             'price_cents' => $data['price_cents'],
+            'trial_days' => $data['trial_days'] ?? null,
             'is_public' => $data['is_public'],
             'max_users' => $clean['max_users'] ?? null,
             'entitlements' => $clean,
@@ -208,6 +218,39 @@ class PlatformController extends Controller
         $organization->update(['status' => Organization::STATUS_ACTIVE]);
 
         return back()->with('success', "{$organization->name} resumed.");
+    }
+
+    /**
+     * Trial controls: extend by N days, end the trial now, or set an exact end
+     * date. Keeps the org and its subscription in step.
+     */
+    public function setTrial(Request $request, Organization $organization, CurrentOrganization $current)
+    {
+        $data = $request->validate([
+            'action' => ['required', 'in:extend,end,set'],
+            'days' => ['nullable', 'integer', 'min:1', 'max:365'],
+            'date' => ['nullable', 'date'],
+        ]);
+
+        if ($data['action'] === 'end') {
+            $organization->update(['trial_ends_at' => now(), 'status' => Organization::STATUS_ACTIVE]);
+            $current->runFor($organization, fn () => $organization->subscription?->update(['trial_ends_at' => now()]));
+
+            return back()->with('success', "Trial ended for {$organization->name}.");
+        }
+
+        $base = $organization->trial_ends_at && $organization->trial_ends_at->isFuture()
+            ? $organization->trial_ends_at->copy()
+            : Carbon::now();
+
+        $end = $data['action'] === 'extend'
+            ? $base->addDays((int) ($data['days'] ?? 14))
+            : Carbon::parse($data['date'])->endOfDay();
+
+        $organization->update(['trial_ends_at' => $end, 'status' => Organization::STATUS_TRIAL]);
+        $current->runFor($organization, fn () => $organization->subscription?->update(['trial_ends_at' => $end]));
+
+        return back()->with('success', "{$organization->name}'s trial now ends {$end->toDateString()}.");
     }
 
     public function recordPayment(Request $request, Organization $organization, PaymentProvider $provider, CurrentOrganization $current)

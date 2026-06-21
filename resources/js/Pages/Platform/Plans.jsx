@@ -15,6 +15,7 @@ function PlanEditor({ plan, registry }) {
     const form = useForm({
         name: plan.name,
         price_cents: plan.price_cents,
+        trial_days: plan.trial_days ?? '',
         is_public: plan.is_public,
         entitlements: { ...plan.entitlements },
     });
@@ -22,7 +23,9 @@ function PlanEditor({ plan, registry }) {
     const setEnt = (key, value) => form.setData('entitlements', { ...form.data.entitlements, [key]: value });
     const save = (e) => {
         e.preventDefault();
-        form.put(route('platform.plans.update', plan.id), { preserveScroll: true });
+        form
+            .transform((d) => ({ ...d, trial_days: d.trial_days === '' ? null : Number(d.trial_days) }))
+            .put(route('platform.plans.update', plan.id), { preserveScroll: true });
     };
 
     const groups = groupKeys(registry);
@@ -38,12 +41,21 @@ function PlanEditor({ plan, registry }) {
                 <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-subtle">{plan.key}</span>
             </div>
 
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="mt-3 grid grid-cols-3 gap-3">
                 <label className="text-xs text-muted">Price ($/seat/mo)
                     <input
                         type="number" step="0.01" min="0"
                         value={(form.data.price_cents / 100).toString()}
                         onChange={(e) => form.setData('price_cents', Math.round(parseFloat(e.target.value || '0') * 100))}
+                        className="mt-1 w-full rounded-md border-line bg-app text-sm text-body"
+                    />
+                </label>
+                <label className="text-xs text-muted">Trial (days)
+                    <input
+                        type="number" min="0" max="365"
+                        value={form.data.trial_days}
+                        onChange={(e) => form.setData('trial_days', e.target.value)}
+                        placeholder="none"
                         className="mt-1 w-full rounded-md border-line bg-app text-sm text-body"
                     />
                 </label>

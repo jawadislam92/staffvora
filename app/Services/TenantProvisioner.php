@@ -39,6 +39,11 @@ class TenantProvisioner
         ?string $slug = null,
         int $trialDays = 14,
     ): array {
+        // The signup trial length comes from the Pro plan's configurable trial_days
+        // (set in the plan editor), falling back to the caller's default.
+        Plan::ensureSeeded();
+        $trialDays = Plan::where('key', 'pro')->first()?->trial_days ?? $trialDays;
+
         $org = Organization::create([
             'name' => $orgName,
             'slug' => $this->uniqueSlug($slug ?: $orgName),
