@@ -13,6 +13,9 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
             });
             return pakistanDate; // Returns YYYY-MM-DD format
         })(),
+        entry_mode: 'range',
+        start_time: '',
+        end_time: '',
         hours: '0',
         minutes: '0',
         description: '',
@@ -170,39 +173,54 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
         return true;
     };
 
+    // Minutes spanned by the start–end range (rolls past midnight for overnight).
+    const rangeMinutes = () => {
+        if (!form.data.start_time || !form.data.end_time) return null;
+        const [sh, sm] = form.data.start_time.split(':').map(Number);
+        const [eh, em] = form.data.end_time.split(':').map(Number);
+        let mins = (eh * 60 + em) - (sh * 60 + sm);
+        if (mins <= 0) mins += 24 * 60;
+        return mins;
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
-        
-        // Check if work type is selected
+
         if (!form.data.work_type) {
             alert('Please select a work type.');
             return;
         }
-        
-        // Check if at least some time is entered
-        const hours = Number(form.data.hours) || 0;
-        const minutes = Number(form.data.minutes) || 0;
-        
-        if (hours === 0 && minutes === 0) {
-            alert('Please enter at least some time (hours or minutes).');
-            return;
+
+        if (form.data.entry_mode === 'range') {
+            if (!form.data.start_time || !form.data.end_time) {
+                alert('Please enter both a start and end time.');
+                return;
+            }
+        } else {
+            const hours = Number(form.data.hours) || 0;
+            const minutes = Number(form.data.minutes) || 0;
+            if (hours === 0 && minutes === 0) {
+                alert('Please enter at least some time (hours or minutes).');
+                return;
+            }
         }
 
         // Validate client selection
         const isClientValid = validateClient(form.data.clientSearch);
         const isTrackerValid = validateTracker(form.data.trackerSearch || form.data.tracker);
-
         if (!isClientValid || !isTrackerValid) {
             return; // Don't submit if validation fails
         }
-        
-        // Calculate total hours as decimal (hours + minutes/60)
-        const totalHours = hours + (minutes / 60);
-        
-        // Round to 2 decimal places for precision
-        const roundedTotal = Math.round(totalHours * 100) / 100;
-        
-        form.post(route('work-hours.store', { hours: roundedTotal }));
+
+        // The server reads entry_mode + start/end (range) or hours/minutes (duration).
+        form.post(route('work-hours.store'));
+    };
+
+    const fmtDuration = (mins) => {
+        if (mins == null) return null;
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return `${h}h ${m.toString().padStart(2, '0')}m`;
     };
 
     const workTypes = [
@@ -626,6 +644,22 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                     )}
                                 </div>
 
+                                {/* Range vs Duration toggle */}
+                                <div className="mb-4 inline-flex rounded-lg border border-line bg-surface-2 p-1 text-sm">
+                                    {[['range', 'Start–End time'], ['duration', 'Duration']].map(([val, lbl]) => (
+                                        <button
+                                            key={val}
+                                            type="button"
+                                            onClick={() => form.setData('entry_mode', val)}
+                                            className={`rounded-md px-3 py-1.5 font-semibold transition ${
+                                                form.data.entry_mode === val ? 'bg-accent text-white' : 'text-muted hover:text-body'
+                                            }`}
+                                        >
+                                            {lbl}
+                                        </button>
+                                    ))}
+                                </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                                     {/* Date */}
                                     <div>
@@ -642,102 +676,116 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                         />
                                     </div>
 
-                                    {/* Hours */}
-                                    <div>
-                                        <label htmlFor="hours" className="block text-sm font-medium text-muted mb-3 font-semibold">
-                                            Hours <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="number"
-                                            id="hours"
-                                            min="0"
-                                            max="24"
-                                            step="1"
-                                            value={form.data.hours}
-                                            onChange={(e) => {
-                                                let value = parseInt(e.target.value);
-                                                if (isNaN(value) || value < 0) value = 0;
-                                                if (value > 24) value = 24;
-                                                form.setData('hours', value.toString());
-                                            }}
-                                            onWheel={(e) => e.target.blur()}
-                                            onFocus={(e) => e.target.addEventListener('wheel', (event) => event.preventDefault(), { passive: false })}
-                                            onBlur={(e) => e.target.removeEventListener('wheel', (event) => event.preventDefault())}
-                                            placeholder="Enter hours (0-24)"
-                                            className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body placeholder-slate-400"
-                                            required
-                                        />
-                                    </div>
-
-                                    {/* Minutes */}
-                                    <div>
-                                        <label htmlFor="minutes" className="block text-sm font-medium text-muted mb-3 font-semibold">
-                                            Minutes
-                                        </label>
-                                        <input
-                                            type="number"
-                                            id="minutes"
-                                            min="0"
-                                            max="59"
-                                            step="1"
-                                            value={form.data.minutes}
-                                            onChange={(e) => {
-                                                let value = parseInt(e.target.value);
-                                                if (isNaN(value) || value < 0) value = 0;
-                                                if (value > 59) value = 59;
-                                                form.setData('minutes', value.toString());
-                                            }}
-                                            onWheel={(e) => e.target.blur()}
-                                            onFocus={(e) => e.target.addEventListener('wheel', (event) => event.preventDefault(), { passive: false })}
-                                            onBlur={(e) => e.target.removeEventListener('wheel', (event) => event.preventDefault())}
-                                            placeholder="Enter minutes (0-59)"
-                                            className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body placeholder-slate-400"
-                                        />
-                                    </div>
+                                    {form.data.entry_mode === 'range' ? (
+                                        <>
+                                            {/* Start time */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-muted mb-3 font-semibold">
+                                                    Start time <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="time"
+                                                    value={form.data.start_time}
+                                                    onChange={(e) => form.setData('start_time', e.target.value)}
+                                                    className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body"
+                                                    required
+                                                />
+                                            </div>
+                                            {/* End time */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-muted mb-3 font-semibold">
+                                                    End time <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="time"
+                                                    value={form.data.end_time}
+                                                    onChange={(e) => form.setData('end_time', e.target.value)}
+                                                    className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body"
+                                                    required
+                                                />
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            {/* Hours */}
+                                            <div>
+                                                <label htmlFor="hours" className="block text-sm font-medium text-muted mb-3 font-semibold">
+                                                    Hours <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    id="hours"
+                                                    min="0"
+                                                    max="24"
+                                                    step="1"
+                                                    value={form.data.hours}
+                                                    onChange={(e) => {
+                                                        let value = parseInt(e.target.value);
+                                                        if (isNaN(value) || value < 0) value = 0;
+                                                        if (value > 24) value = 24;
+                                                        form.setData('hours', value.toString());
+                                                    }}
+                                                    placeholder="Enter hours (0-24)"
+                                                    className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body placeholder-slate-400"
+                                                    required
+                                                />
+                                            </div>
+                                            {/* Minutes */}
+                                            <div>
+                                                <label htmlFor="minutes" className="block text-sm font-medium text-muted mb-3 font-semibold">
+                                                    Minutes
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    id="minutes"
+                                                    min="0"
+                                                    max="59"
+                                                    step="1"
+                                                    value={form.data.minutes}
+                                                    onChange={(e) => {
+                                                        let value = parseInt(e.target.value);
+                                                        if (isNaN(value) || value < 0) value = 0;
+                                                        if (value > 59) value = 59;
+                                                        form.setData('minutes', value.toString());
+                                                    }}
+                                                    placeholder="Enter minutes (0-59)"
+                                                    className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body placeholder-slate-400"
+                                                />
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
-                                {/* Total Time Display */}
-                                <div className={`mb-6 p-4 backdrop-blur-xl rounded-xl border ${
-                                    hasTimeEntered() 
-                                        ? 'bg-gradient-to-r from-green-500/20 to-blue-500/20 border-line' 
-                                        : 'bg-gradient-to-r from-red-500/20 to-orange-500/20 border-red-400/30'
-                                }`}>
-                                    <div className="flex items-center gap-3">
-                                        <svg className={`w-6 h-6 ${hasTimeEntered() ? 'text-blue-500' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        <div className="text-body">
-                                            <div className={`text-sm font-medium ${hasTimeEntered() ? 'text-muted' : 'text-red-600'}`}>
-                                                Total Time {!hasTimeEntered() && '(Required)'}
-                                            </div>
-                                            <div className={`text-2xl font-bold ${!hasTimeEntered() ? 'text-red-600' : 'text-body'}`}>
-                                                {(() => {
-                                                    const hours = parseInt(form.data.hours) || 0;
-                                                    const minutes = parseInt(form.data.minutes) || 0;
-                                                    if (hours === 0 && minutes === 0) {
-                                                        return 'No time entered';
-                                                    }
-                                                    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-                                                })()}
-                                            </div>
-                                            {hasTimeEntered() && (
-                                                <div className="text-xs text-subtle">
-                                                    {(() => {
-                                                        const hours = parseInt(form.data.hours) || 0;
-                                                        const minutes = parseInt(form.data.minutes) || 0;
-                                                        const totalHours = hours + (minutes / 60);
-                                                        return `${totalHours.toFixed(2)} decimal hours`;
-                                                    })()}
+                                {/* Time summary (works for both range and duration) */}
+                                {(() => {
+                                    const mins = form.data.entry_mode === 'range'
+                                        ? rangeMinutes()
+                                        : ((parseInt(form.data.hours) || 0) * 60 + (parseInt(form.data.minutes) || 0));
+                                    const ok = mins != null && mins > 0;
+                                    const overnight = form.data.entry_mode === 'range' && ok
+                                        && form.data.start_time && form.data.end_time
+                                        && form.data.end_time <= form.data.start_time;
+                                    return (
+                                        <div className={`mb-6 p-4 rounded-xl border ${ok ? 'bg-surface-2 border-line' : 'bg-surface-2 border-red-400/30'}`}>
+                                            <div className="flex items-center gap-3">
+                                                <svg className={`w-6 h-6 ${ok ? 'text-accent' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                <div>
+                                                    <div className={`text-sm font-medium ${ok ? 'text-muted' : 'text-red-600'}`}>Total time {!ok && '(required)'}</div>
+                                                    <div className={`text-2xl font-bold ${ok ? 'text-body' : 'text-red-600'}`}>
+                                                        {ok ? fmtDuration(mins) : (form.data.entry_mode === 'range' ? 'Enter a start and end time' : 'No time entered')}
+                                                    </div>
+                                                    {ok && (
+                                                        <div className="text-xs text-subtle">
+                                                            {(mins / 60).toFixed(2)} decimal hours{overnight ? ' · spans midnight' : ''}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            )}
-                                            {!hasTimeEntered() && (
-                                                <div className="text-xs text-red-600">
-                                                    Please enter at least some hours or minutes
-                                                </div>
-                                            )}
+                                            </div>
                                         </div>
-                                    </div>
-                                </div>
+                                    );
+                                })()}
 
                                 {/* Description */}
                                 <div className="mb-6">

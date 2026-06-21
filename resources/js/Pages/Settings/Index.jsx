@@ -1054,17 +1054,47 @@ export default function SettingsIndex({ auth, team: initialTeam, users: initialU
                             {active === 'weekly_limit' && <WeeklyLimitSection team={team} users={users} setTeam={setTeam} />}
                             {active === 'auto_pause' && <AutoPauseSection team={team} users={users} setTeam={setTeam} minMinutes={minMinutes} />}
                             {active === 'offline_time' && (
-                                <BooleanSection
-                                    title="Allow adding Offline Time"
-                                    blurb="When enabled, employees can manually add work entries outside the tracker."
-                                    field="allow_offline_time"
-                                    category="offline_time"
-                                    team={team}
-                                    users={users}
-                                    setTeam={setTeam}
-                                    label="Allow"
-                                    offLabel="Do not allow"
-                                />
+                                <div className="space-y-6">
+                                    <BooleanSection
+                                        title="Allow adding Offline Time"
+                                        blurb="When enabled, employees can manually add work entries outside the tracker."
+                                        field="allow_offline_time"
+                                        category="offline_time"
+                                        team={team}
+                                        users={users}
+                                        setTeam={setTeam}
+                                        label="Allow"
+                                        offLabel="Do not allow"
+                                    />
+                                    {team.allow_offline_time && (
+                                        <div className="rounded-lg border border-line bg-surface p-4">
+                                            <h3 className="text-sm font-semibold text-body">Manual time as a start–end range</h3>
+                                            <p className="mt-1 max-w-prose text-xs text-muted">
+                                                Employees can log offline time as a clock range (e.g. 2:08–3:05&nbsp;pm), not just a duration. Choose what happens when a range overlaps another entry on their own diary.
+                                            </p>
+                                            <div className="mt-3 flex flex-wrap gap-2">
+                                                {[['warn', 'Warn but allow'], ['block', 'Block overlap'], ['allow', 'Allow silently']].map(([val, lbl]) => (
+                                                    <button
+                                                        key={val}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const next = { ...team, manual_time_overlap_policy: val };
+                                                            setTeam(next);
+                                                            patchTeam(next);
+                                                        }}
+                                                        className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                                                            (team.manual_time_overlap_policy || 'warn') === val
+                                                                ? 'border-accent bg-accent text-white'
+                                                                : 'border-line bg-surface-2 text-muted hover:bg-surface'
+                                                        }`}
+                                                    >
+                                                        {lbl}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             )}
                             {active === 'notify_screenshot' && (
                                 <BooleanSection

@@ -648,7 +648,10 @@ export default function WorkHoursList({
                                                     />
                                                 </td>
                                                 <td className="px-4 py-3 text-sm font-semibold text-emerald-400">{entry.id}</td>
-                                                <td className="px-4 py-3 text-sm text-slate-100 font-medium">{entry.date}</td>
+                                                <td className="px-4 py-3 text-sm text-slate-100 font-medium">
+                                                    {entry.date}
+                                                    {entry.time_range && <div className="text-xs font-normal text-slate-500">{entry.time_range}</div>}
+                                                </td>
                                                 <td className="px-4 py-3 text-sm text-slate-300">{entry.client?.name || 'No Client'}</td>
                                                 <td className="px-4 py-3 text-sm">
                                                     <span className="inline-flex px-2 py-1 text-xs font-medium bg-purple-500/15 text-purple-300 rounded-full border border-purple-500/20">

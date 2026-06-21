@@ -11,8 +11,10 @@ use App\Models\User;
 use App\Models\WorkHour;
 use App\Services\SlackReportService;
 use App\Services\TrackingSessionService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class WorkHourController extends Controller
@@ -236,26 +238,119 @@ class WorkHourController extends Controller
 
         $validated = $request->validate([
             'date' => 'required|date',
-            'hours' => 'required|integer|min:0|max:24',
-            'minutes' => 'required|integer|min:0|max:59',
             'description' => 'required|string|max:5000',
             'work_type' => ['required', Rule::in(self::WORK_TYPES)],
             'client_id' => 'nullable|integer|exists:clients,id',
             'tracker' => 'nullable|string|max:255',
+            'entry_mode' => ['nullable', Rule::in(['range', 'duration'])],
         ]);
 
-        if ((int) $validated['hours'] === 0 && (int) $validated['minutes'] === 0) {
-            return back()->withErrors(['hours' => 'Please enter at least some time.']);
-        }
+        $time = $this->resolveTimeFields($request); // throws ValidationException on bad/overlapping input
 
-        $validated['user_id'] = $request->user()->id;
-        $validated['hours'] = $validated['hours'] + ($validated['minutes'] / 60);
-        $validated['source'] = 'manual';
-        unset($validated['minutes']);
-        WorkHour::create($validated);
+        WorkHour::create([
+            'user_id' => $request->user()->id,
+            'date' => $validated['date'],
+            'description' => $validated['description'],
+            'work_type' => $validated['work_type'],
+            'client_id' => $validated['client_id'] ?? null,
+            'tracker' => $validated['tracker'] ?? null,
+            'hours' => $time['hours'],
+            'started_at' => $time['started_at'],
+            'ended_at' => $time['ended_at'],
+            'source' => 'manual',
+        ]);
 
         return redirect()->route('work-hours.index')
-            ->with('success', 'Work hour entry created successfully.');
+            ->with('success', 'Work hour entry created successfully.'.($time['warning'] ? ' '.$time['warning'] : ''));
+    }
+
+    /**
+     * Resolve the time portion of a manual entry from either a start–end range
+     * or a plain duration. Range mode computes `hours` from the wall-clock
+     * start/end in the org timezone, splits overnight ranges (end <= start rolls
+     * to the next day), and applies the org's overlap policy. Returns
+     * ['hours', 'started_at', 'ended_at', 'warning'] or throws on bad input.
+     *
+     * @return array{hours: float, started_at: ?Carbon, ended_at: ?Carbon, warning: ?string}
+     */
+    private function resolveTimeFields(Request $request, ?int $ignoreId = null): array
+    {
+        if ($request->input('entry_mode') === 'range') {
+            $data = $request->validate([
+                'start_time' => 'required|date_format:H:i',
+                'end_time' => 'required|date_format:H:i',
+            ]);
+
+            // Wall-clock datetimes (no timezone conversion) — like the `date`
+            // column, started_at/ended_at hold exactly what the employee typed,
+            // so storage, overlap comparison and display all stay consistent.
+            $start = Carbon::parse($request->input('date').' '.$data['start_time']);
+            $end = Carbon::parse($request->input('date').' '.$data['end_time']);
+            if ($end->lessThanOrEqualTo($start)) {
+                $end->addDay(); // overnight: e.g. 11:30pm–1:00am
+            }
+
+            $minutes = $start->diffInMinutes($end);
+            if ($minutes <= 0) {
+                throw ValidationException::withMessages(['end_time' => 'End time must be after start time.']);
+            }
+            if ($minutes > 24 * 60) {
+                throw ValidationException::withMessages(['end_time' => 'A single entry cannot span more than 24 hours.']);
+            }
+
+            return [
+                'hours' => round($minutes / 60, 2),
+                'started_at' => $start,
+                'ended_at' => $end,
+                'warning' => $this->overlapWarning($request->user()->id, $start, $end, $ignoreId),
+            ];
+        }
+
+        // Duration mode (hours + minutes) — unchanged behaviour, no endpoints.
+        $data = $request->validate([
+            'hours' => 'required|integer|min:0|max:24',
+            'minutes' => 'required|integer|min:0|max:59',
+        ]);
+        if ((int) $data['hours'] === 0 && (int) $data['minutes'] === 0) {
+            throw ValidationException::withMessages(['hours' => 'Please enter at least some time.']);
+        }
+
+        return [
+            'hours' => $data['hours'] + ($data['minutes'] / 60),
+            'started_at' => null,
+            'ended_at' => null,
+            'warning' => null,
+        ];
+    }
+
+    /**
+     * Apply the org's manual-time overlap policy to a new/edited range. `allow`
+     * never blocks; `block` rejects an overlap; `warn` allows it but returns a
+     * message to surface. Compares against the user's other ranged entries.
+     */
+    private function overlapWarning(int $userId, Carbon $start, Carbon $end, ?int $ignoreId): ?string
+    {
+        $policy = MonitoringSetting::current()->manual_time_overlap_policy ?: 'warn';
+        if ($policy === 'allow') {
+            return null;
+        }
+
+        $overlaps = WorkHour::where('user_id', $userId)
+            ->whereNotNull('started_at')->whereNotNull('ended_at')
+            ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
+            ->where('started_at', '<', $end)
+            ->where('ended_at', '>', $start)
+            ->exists();
+
+        if (! $overlaps) {
+            return null;
+        }
+
+        if ($policy === 'block') {
+            throw ValidationException::withMessages(['start_time' => 'This time range overlaps another entry on your diary.']);
+        }
+
+        return 'Heads up — this overlaps another time entry on your diary.';
     }
 
     public function edit(WorkHour $workHour)
@@ -287,24 +382,28 @@ class WorkHourController extends Controller
 
         $validated = $request->validate([
             'date' => 'required|date',
-            'hours' => 'required|integer|min:0|max:24',
-            'minutes' => 'required|integer|min:0|max:59',
             'description' => 'required|string|max:5000',
             'work_type' => ['required', Rule::in(self::WORK_TYPES)],
             'client_id' => 'nullable|integer|exists:clients,id',
             'tracker' => 'nullable|string|max:255',
+            'entry_mode' => ['nullable', Rule::in(['range', 'duration'])],
         ]);
 
-        if ((int) $validated['hours'] === 0 && (int) $validated['minutes'] === 0) {
-            return back()->withErrors(['hours' => 'Please enter at least some time.']);
-        }
+        $time = $this->resolveTimeFields($request, $workHour->id);
 
-        $validated['hours'] = $validated['hours'] + ($validated['minutes'] / 60);
-        unset($validated['minutes']);
-        $workHour->update($validated);
+        $workHour->update([
+            'date' => $validated['date'],
+            'description' => $validated['description'],
+            'work_type' => $validated['work_type'],
+            'client_id' => $validated['client_id'] ?? null,
+            'tracker' => $validated['tracker'] ?? null,
+            'hours' => $time['hours'],
+            'started_at' => $time['started_at'],
+            'ended_at' => $time['ended_at'],
+        ]);
 
         return redirect()->route('work-hours.index')
-            ->with('success', 'Work hour entry updated successfully.');
+            ->with('success', 'Work hour entry updated successfully.'.($time['warning'] ? ' '.$time['warning'] : ''));
     }
 
     public function destroy(Request $request, WorkHour $workHour)
