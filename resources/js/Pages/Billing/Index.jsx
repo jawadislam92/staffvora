@@ -1,6 +1,6 @@
-import { Head } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Check, Minus, CreditCard } from 'lucide-react';
+import { Check, Minus, CreditCard, ShieldCheck } from 'lucide-react';
 
 const money = (cents, currency) =>
     cents === 0 ? null : new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format(cents / 100);
@@ -20,11 +20,11 @@ function StatusBanner({ subscription }) {
     return <div className={`rounded-lg border px-5 py-4 text-sm font-medium ${tone}`}>{label}</div>;
 }
 
-function PlanCard({ plan, currentKey }) {
+function PlanCard({ plan, currentKey, onChoose }) {
     const isCurrent = plan.key === currentKey;
     const price = money(plan.price_cents, plan.currency);
     return (
-        <div className={`rounded-lg border p-5 ${isCurrent ? 'border-orange-500 bg-slate-900' : 'border-slate-800 bg-slate-900/60'}`}>
+        <div className={`flex flex-col rounded-lg border p-5 ${isCurrent ? 'border-orange-500 bg-slate-900' : 'border-slate-800 bg-slate-900/60'}`}>
             <div className="flex items-center justify-between">
                 <h3 className="font-bold text-slate-100">{plan.name}</h3>
                 {isCurrent && <span className="rounded-full bg-orange-500 px-2 py-0.5 text-xs font-semibold text-slate-950">Current</span>}
@@ -52,17 +52,32 @@ function PlanCard({ plan, currentKey }) {
                     </li>
                 ))}
             </ul>
+
+            <div className="mt-auto pt-4">
+                {isCurrent
+                    ? <div className="rounded-md border border-slate-700 px-3 py-2 text-center text-xs font-semibold text-slate-400">Your current plan</div>
+                    : plan.key === 'enterprise'
+                        ? <div className="rounded-md border border-slate-700 px-3 py-2 text-center text-xs font-semibold text-slate-300">Talk to us</div>
+                        : <button type="button" onClick={() => onChoose(plan.key)} className="w-full rounded-md bg-orange-500 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-orange-400">{plan.price_cents > 0 ? 'Choose plan' : 'Switch to Free'}</button>}
+            </div>
         </div>
     );
 }
 
 export default function BillingIndex({ auth, subscription, seatsUsed, seatLimit, plans, payments, bankDetails, supportEmail }) {
+    const flash = usePage().props.flash || {};
+    const choose = (planKey) => router.post(route('billing.checkout'), { plan: planKey }, { preserveScroll: true });
+
     return (
         <AuthenticatedLayout user={auth.user} header={<h2 className="text-xl font-semibold text-slate-100">Billing &amp; plan</h2>}>
             <Head title="Billing" />
             <div className="min-h-screen bg-slate-950">
                 <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
                     <StatusBanner subscription={subscription} />
+
+                    {(flash.info || flash.success) && (
+                        <div className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-5 py-3 text-sm text-sky-200">{flash.info || flash.success}</div>
+                    )}
 
                     <div className="flex flex-wrap gap-4 text-sm text-slate-300">
                         <span className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-2">
@@ -79,7 +94,16 @@ export default function BillingIndex({ auth, subscription, seatsUsed, seatLimit,
                     <div>
                         <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">Plans</h3>
                         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                            {plans.map((p) => <PlanCard key={p.key} plan={p} currentKey={subscription?.plan_key} />)}
+                            {plans.map((p) => <PlanCard key={p.key} plan={p} currentKey={subscription?.plan_key} onChoose={choose} />)}
+                        </div>
+                    </div>
+
+                    {/* Payment security — we never see or store card details. */}
+                    <div className="flex items-start gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] p-5">
+                        <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
+                        <div className="text-sm leading-6 text-slate-300">
+                            <p className="font-semibold text-slate-100">Your payment is secure.</p>
+                            <p className="mt-0.5">We <strong className="text-slate-200">never see or store your card details</strong>. When card payments are enabled, they’re handled entirely by a PCI-DSS-compliant payment provider — your card information goes straight to them through their secure checkout and never touches our servers.</p>
                         </div>
                     </div>
 

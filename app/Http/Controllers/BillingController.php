@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Plan;
 use App\Models\User;
 use App\Tenancy\Entitlements;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 /**
@@ -56,6 +57,27 @@ class BillingController extends Controller
                 : [],
             'bankDetails' => config('billing.bank_transfer_instructions'),
             'supportEmail' => config('billing.support_email'),
+            // Whether self-serve card checkout is wired (a gateway is configured).
+            'cardCheckout' => (bool) config('billing.gateway'),
         ]);
+    }
+
+    /**
+     * Card-checkout entry point. We NEVER collect or store card data ourselves —
+     * card details go straight to the gateway's PCI-DSS-compliant hosted checkout.
+     * Until a gateway is connected this is a no-op that points to the manual path,
+     * so no card capture can happen here by design.
+     */
+    public function checkout(Request $request)
+    {
+        $request->validate(['plan' => ['required', 'string', 'exists:plans,key']]);
+
+        if (! config('billing.gateway')) {
+            return back()->with('info', 'Online card payments are coming soon. For now, pick a plan by bank transfer or contact us and we’ll set you up.');
+        }
+
+        // When a gateway is connected, build its hosted-checkout session here and
+        // redirect — e.g. return Inertia::location($provider->checkoutUrl($plan)).
+        return back()->with('info', 'Redirecting to secure checkout…');
     }
 }

@@ -40,6 +40,17 @@ class ContactController extends Controller
             // Non-fatal: still confirm to the visitor; the message is logged.
         }
 
+        // Auto-acknowledge the lead (best-effort; log driver until SMTP is set up).
+        try {
+            $brandName = config('brand.name', 'Tracksuite');
+            Mail::raw(
+                "Hi {$data['name']},\n\nThanks for reaching out to {$brandName} — we've received your message and will get back to you within one business day.\n\nFor your reference, here's what you sent:\n\"{$data['message']}\"\n\n— The {$brandName} team",
+                fn ($m) => $m->to($data['email'], $data['name'])->subject("We got your message — {$brandName}")
+            );
+        } catch (\Throwable $e) {
+            // ignore
+        }
+
         return back()->with('success', 'Thanks — we will get back to you shortly.');
     }
 }
