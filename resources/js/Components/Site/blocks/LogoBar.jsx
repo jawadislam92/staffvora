@@ -1,7 +1,7 @@
 export default function LogoBar({ data }) {
     const logos = data.logos || [];
     return (
-        <section className="border-y border-[var(--line)] bg-white/50 py-10">
+        <section className="border-y border-[var(--line)] bg-[var(--surface-2)] py-10">
             <div className="mx-auto max-w-[1500px] px-6 sm:px-10">
                 {data.caption && <p className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-[var(--subtle)]">{data.caption}</p>}
                 {logos.length > 0 ? (

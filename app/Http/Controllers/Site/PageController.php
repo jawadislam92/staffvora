@@ -77,6 +77,7 @@ class PageController extends Controller
             'tagline' => $b['tagline'] ?? null,
             'legal_name' => $b['legal_name'] ?? null,
             'colors' => $b['colors'] ?? [],
+            'colors_dark' => $b['colors_dark'] ?? [],
             'socials' => array_filter($b['socials'] ?? []),
             'support_email' => $b['support_email'] ?? null,
             'whatsapp' => $b['whatsapp'] ?? null,

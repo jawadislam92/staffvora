@@ -8,7 +8,7 @@ export default function TeamGrid({ data }) {
                 {data.subhead && <p className="mx-auto mt-3 max-w-2xl text-center text-lg text-[var(--muted)]">{data.subhead}</p>}
                 <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                     {members.map((m, i) => (
-                        <div key={i} className="rounded-2xl border border-[var(--line)] bg-white p-6 text-center shadow-sm">
+                        <div key={i} className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 text-center shadow-sm">
                             {m.avatar_url
                                 ? <img src={m.avatar_url} alt="" className="mx-auto h-20 w-20 rounded-full object-cover" />
                                 : <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full text-2xl font-bold text-white" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' }}>{(m.name || '?').charAt(0)}</span>}

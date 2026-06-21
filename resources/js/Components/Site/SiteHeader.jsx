@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from '@inertiajs/react';
 import SiteLogo from './SiteLogo';
+import ThemeToggle from './ThemeToggle';
 
 const isAppRoute = (url) => ['/login', '/register', '/dashboard'].includes(url);
 
@@ -22,7 +23,7 @@ function HeaderItem({ item }) {
                 <svg className="h-4 w-4 opacity-60 transition group-hover:rotate-180" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg>
             </button>
             <div className="invisible absolute left-1/2 top-full z-50 -translate-x-1/2 pt-3 opacity-0 transition group-hover:visible group-hover:opacity-100">
-                <div className="min-w-[230px] rounded-2xl border border-[var(--line)] bg-white p-2 shadow-xl shadow-black/[0.04]">
+                <div className="min-w-[230px] rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2 shadow-xl shadow-black/[0.04]">
                     {item.children.map((c, i) => (
                         <Nav key={i} url={c.url} label={c.label} className="block rounded-xl px-3 py-2 text-sm font-medium text-[var(--muted)] transition hover:bg-[var(--paper)] hover:text-[var(--brand)]" />
                     ))}
@@ -32,7 +33,7 @@ function HeaderItem({ item }) {
     );
 }
 
-export default function SiteHeader({ nav = [], brand, isAuthed }) {
+export default function SiteHeader({ nav = [], brand, isAuthed, mode = 'light', onToggleTheme }) {
     const [open, setOpen] = useState(false);
     const name = brand?.name || 'Tracksuite';
     const cta = isAuthed ? { url: '/dashboard', label: 'Go to dashboard' } : { url: '/register', label: 'Start free trial' };
@@ -48,17 +49,21 @@ export default function SiteHeader({ nav = [], brand, isAuthed }) {
                 </div>
 
                 <div className="hidden items-center gap-4 lg:flex">
+                    <ThemeToggle mode={mode} onToggle={onToggleTheme} />
                     {!isAuthed && <Link href="/login" className="text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--brand)]">Sign in</Link>}
                     <Nav url={cta.url} label={cta.label} className="btn-primary rounded-full px-5 py-2.5 text-sm font-semibold" />
                 </div>
 
-                <button type="button" onClick={() => setOpen((o) => !o)} className="rounded-lg p-2 text-[var(--brand)] lg:hidden" aria-label="Menu" aria-expanded={open}>
+                <div className="flex items-center gap-2 lg:hidden">
+                    <ThemeToggle mode={mode} onToggle={onToggleTheme} />
+                    <button type="button" onClick={() => setOpen((o) => !o)} className="rounded-lg p-2 text-[var(--brand)]" aria-label="Menu" aria-expanded={open}>
                     <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d={open ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'} /></svg>
-                </button>
+                    </button>
+                </div>
             </div>
 
             {open && (
-                <div className="border-t border-[var(--line)] bg-white px-5 py-4 lg:hidden">
+                <div className="border-t border-[var(--line)] bg-[var(--surface)] px-5 py-4 lg:hidden">
                     <div className="flex flex-col gap-1">
                         {nav.map((item, i) => (
                             <div key={i}>

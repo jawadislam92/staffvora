@@ -106,7 +106,7 @@ html { background-color: var(--bg); color: var(--text); }
 
 /* Secondary (outline) button. */
 .site-root .btn-ghost {
-    background: #fff;
+    background: var(--surface);
     color: var(--brand);
     border: 1px solid var(--line);
     transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
@@ -124,12 +124,25 @@ html { background-color: var(--bg); color: var(--text); }
     var(--canvas); }
 .site-root .wash-tint { background: linear-gradient(180deg, var(--paper), var(--canvas)); }
 .site-root .band-deep {
-    background: radial-gradient(900px 500px at 80% -20%, color-mix(in srgb, var(--g-from) 55%, var(--brand)), transparent 60%), var(--brand);
+    background: radial-gradient(900px 500px at 80% -20%, color-mix(in srgb, var(--g-from) 55%, var(--deep)), transparent 60%), var(--deep);
     color: #fff;
 }
 .site-root .band-cta {
-    background: linear-gradient(120deg, var(--g-from), var(--g-to) 60%, var(--brand));
+    background: linear-gradient(120deg, var(--g-from), var(--g-to) 60%, var(--deep));
     color: #fff;
+}
+
+/* Day↔night switch: animate the recolour once the page is mounted (data-ready),
+   so the very first paint snaps straight to the visitor's chosen palette without
+   a transition flash. Targets token-driven surfaces/borders/text — buttons keep
+   their own transitions (they don't use bg-[ / border-[ / text-[ classes). */
+.site-root[data-ready] { transition: background-color 0.4s ease, color 0.4s ease; }
+.site-root[data-ready] [class*="bg-["],
+.site-root[data-ready] [class*="border-["],
+.site-root[data-ready] [class*="text-["],
+.site-root[data-ready] .wash-hero,
+.site-root[data-ready] .wash-tint {
+    transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease;
 }
 
 /* Native form controls follow the active theme by default, so the legacy

@@ -30,7 +30,7 @@ export default function PricingTable({ data, brand, plans = [] }) {
 
                 {/* toggles */}
                 <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-                    <div className="inline-flex rounded-full border border-[var(--line)] bg-white p-1 text-sm">
+                    <div className="inline-flex rounded-full border border-[var(--line)] bg-[var(--surface)] p-1 text-sm">
                         {[['Monthly', false], ['Annual · save 17%', true]].map(([label, val]) => (
                             <button key={label} type="button" onClick={() => setAnnual(val)}
                                 className={`rounded-full px-4 py-1.5 font-semibold transition ${annual === val ? 'text-white' : 'text-[var(--muted)]'}`}
@@ -39,7 +39,7 @@ export default function PricingTable({ data, brand, plans = [] }) {
                             </button>
                         ))}
                     </div>
-                    <div className="inline-flex rounded-full border border-[var(--line)] bg-white p-1 text-sm">
+                    <div className="inline-flex rounded-full border border-[var(--line)] bg-[var(--surface)] p-1 text-sm">
                         {['USD', 'PKR'].map((c) => (
                             <button key={c} type="button" onClick={() => setCur(c)}
                                 className={`rounded-full px-4 py-1.5 font-semibold transition ${cur === c ? 'text-white' : 'text-[var(--muted)]'}`}
@@ -59,8 +59,8 @@ export default function PricingTable({ data, brand, plans = [] }) {
                         const feats = FEATURES[p.key] || [seats];
                         return (
                             <div key={p.key}
-                                className={`relative flex flex-col rounded-2xl border bg-white p-7 ${popular ? 'border-transparent shadow-2xl' : 'border-[var(--line)] shadow-sm'}`}
-                                style={popular ? { boxShadow: '0 30px 60px -25px color-mix(in srgb, var(--a) 50%, transparent)', backgroundImage: 'linear-gradient(white,white), linear-gradient(135deg,var(--g-from),var(--g-to))', backgroundOrigin: 'border-box', backgroundClip: 'padding-box, border-box', borderWidth: 2 } : undefined}>
+                                className={`relative flex flex-col rounded-2xl border bg-[var(--surface)] p-7 ${popular ? 'border-transparent shadow-2xl' : 'border-[var(--line)] shadow-sm'}`}
+                                style={popular ? { boxShadow: '0 30px 60px -25px color-mix(in srgb, var(--a) 50%, transparent)', backgroundImage: 'linear-gradient(var(--surface),var(--surface)), linear-gradient(135deg,var(--g-from),var(--g-to))', backgroundOrigin: 'border-box', backgroundClip: 'padding-box, border-box', borderWidth: 2 } : undefined}>
                                 {popular && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' }}>Most popular</span>}
                                 <h3 className="text-lg font-bold text-[var(--brand)]">{p.name}</h3>
                                 <div className="mt-4 flex items-end gap-1">

@@ -30,7 +30,7 @@ export default function SiteFooter({ nav = [], brand }) {
                         <div className="mt-6 flex gap-2.5">
                             {SOCIALS.filter((s) => socials[s.key]).map((s) => (
                                 <a key={s.key} href={socials[s.key]} target="_blank" rel="noreferrer" aria-label={s.label}
-                                    className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-[var(--muted)] ring-1 ring-[var(--line)] transition hover:text-[var(--brand)]">
+                                    className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--surface)] text-[var(--muted)] ring-1 ring-[var(--line)] transition hover:text-[var(--brand)]">
                                     <svg className="h-[18px] w-[18px]" fill="currentColor" viewBox="0 0 24 24"><path d={s.d} /></svg>
                                 </a>
                             ))}

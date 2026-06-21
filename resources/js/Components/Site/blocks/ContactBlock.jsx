@@ -1,6 +1,6 @@
 import { useForm } from '@inertiajs/react';
 
-const inputCls = 'w-full rounded-xl border border-[var(--line)] bg-white px-4 py-2.5 text-[var(--text)] placeholder-[var(--subtle)] focus:border-[var(--a)] focus:ring-1 focus:ring-[var(--a)]';
+const inputCls = 'w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-[var(--text)] placeholder-[var(--subtle)] focus:border-[var(--a)] focus:ring-1 focus:ring-[var(--a)]';
 
 function Field({ label, value, onChange, type = 'text', error, placeholder }) {
     return (
@@ -15,7 +15,7 @@ function Field({ label, value, onChange, type = 'text', error, placeholder }) {
 function Method({ icon, label, value, href }) {
     if (!value) return null;
     const inner = (
-        <div className="flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-white p-4 transition hover:border-[color-mix(in_srgb,var(--a)_40%,var(--line))]">
+        <div className="flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4 transition hover:border-[color-mix(in_srgb,var(--a)_40%,var(--line))]">
             <span className="flex h-10 w-10 items-center justify-center rounded-full text-white" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' }}>{icon}</span>
             <div>
                 <div className="text-xs font-medium text-[var(--subtle)]">{label}</div>
@@ -34,7 +34,7 @@ export default function ContactBlock({ data, brand }) {
     return (
         <section className="py-16 sm:py-24">
             <div className="mx-auto grid max-w-[1300px] gap-8 px-6 sm:px-10 lg:grid-cols-[1.2fr_1fr]">
-                <div className="rounded-2xl border border-[var(--line)] bg-white p-8 shadow-sm">
+                <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-8 shadow-sm">
                     {form.wasSuccessful ? (
                         <div className="py-12 text-center">
                             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full text-2xl text-white" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' }}>✓</div>

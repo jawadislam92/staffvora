@@ -9,9 +9,9 @@ export default function FeatureSplit({ data }) {
         <div className="relative">
             <div className="absolute -inset-5 rounded-[2.2rem] opacity-30 blur-2xl" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--pink))' }} />
             {data.image_url ? (
-                <img src={data.image_url} alt="" className="relative w-full rounded-2xl border border-white/70 shadow-2xl" />
+                <img src={data.image_url} alt="" className="relative w-full rounded-2xl border border-[var(--line)] shadow-2xl" />
             ) : (
-                <div className="relative overflow-hidden rounded-2xl border border-white/80 bg-white p-5 shadow-2xl ring-1 ring-black/5">
+                <div className="relative overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 shadow-2xl ring-1 ring-black/5">
                     <div className="mb-4 flex items-center justify-between">
                         <div className="text-sm font-bold text-[var(--brand)]">Activity &amp; screenshots</div>
                         <span className="rounded-full bg-[var(--mint)] px-2.5 py-1 text-[11px] font-semibold" style={{ color: 'var(--a)' }}>Visible to the team</span>
@@ -38,7 +38,7 @@ export default function FeatureSplit({ data }) {
             <div className="mx-auto max-w-[1500px] px-6 sm:px-10">
                 <div className={`grid items-center gap-14 lg:grid-cols-2 ${right ? '' : 'lg:[direction:rtl]'}`}>
                     <div className="lg:[direction:ltr]">
-                        {data.eyebrow && <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-wider shadow-sm ring-1 ring-[var(--line)]" style={{ color: 'var(--a)' }}>{data.eyebrow}</span>}
+                        {data.eyebrow && <span className="inline-flex rounded-full bg-[var(--surface)] px-3 py-1 text-xs font-bold uppercase tracking-wider shadow-sm ring-1 ring-[var(--line)]" style={{ color: 'var(--a)' }}>{data.eyebrow}</span>}
                         {data.heading && <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-[var(--brand)] sm:text-[2.4rem]">{data.heading}</h2>}
                         {data.text && <p className="mt-4 text-lg leading-relaxed text-[var(--muted)]">{data.text}</p>}
                         {bullets.length > 0 && (

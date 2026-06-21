@@ -9,7 +9,7 @@ export default function Testimonials({ data }) {
                 {data.heading && <h2 className="text-center text-3xl font-extrabold tracking-tight text-[var(--brand)] sm:text-[2.6rem]">{data.heading}</h2>}
                 <div className="mx-auto mt-14 grid max-w-5xl gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {items.map((t, i) => (
-                        <figure key={i} className="flex flex-col rounded-2xl border border-[var(--line)] bg-white p-7 shadow-sm">
+                        <figure key={i} className="flex flex-col rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-7 shadow-sm">
                             <div className="flex gap-0.5" style={{ color: 'var(--a)' }}>
                                 {[...Array(Math.max(0, Math.min(5, t.rating || 5)))].map((_, j) => <SiteIcon key={j} name="star" className="h-4 w-4 fill-current" />)}
                             </div>

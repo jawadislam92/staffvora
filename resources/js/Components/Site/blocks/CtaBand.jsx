@@ -13,8 +13,8 @@ export default function CtaBand({ data }) {
                 {data.text && <p className="mx-auto mt-4 max-w-xl text-lg text-white/90">{data.text}</p>}
                 {cta?.label && (
                     isApp(cta.url)
-                        ? <Link href={cta.url} className="mt-9 inline-flex rounded-full bg-white px-8 py-4 text-base font-semibold text-[var(--brand)] shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl">{cta.label}</Link>
-                        : <a href={cta.url} className="mt-9 inline-flex rounded-full bg-white px-8 py-4 text-base font-semibold text-[var(--brand)] shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl">{cta.label}</a>
+                        ? <Link href={cta.url} className="mt-9 inline-flex rounded-full bg-white px-8 py-4 text-base font-semibold text-[var(--deep)] shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl">{cta.label}</Link>
+                        : <a href={cta.url} className="mt-9 inline-flex rounded-full bg-white px-8 py-4 text-base font-semibold text-[var(--deep)] shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl">{cta.label}</a>
                 )}
             </div>
         </section>
