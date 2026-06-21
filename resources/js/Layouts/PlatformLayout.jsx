@@ -1,12 +1,21 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 
 // Operator shell — fixed dark (zinc), separate from the customer app's themed
-// AuthenticatedLayout. Nav grows as the console moves in (milestone 2).
+// AuthenticatedLayout. A platform_user has no tenant / permissions / org.
 const NAV = [
     { label: 'Dashboard', href: '/dashboard' },
+    { label: 'Tenants', href: '/tenants' },
+    { label: 'Plans', href: '/plans' },
+    { label: 'Website', href: '/site' },
+    { label: 'Developer', href: '/developer' },
 ];
 
-export default function PlatformLayout({ children, title }) {
+function isActive(current, href) {
+    if (href === '/dashboard') return current === href || current === '/';
+    return current === href || current.startsWith(href + '/');
+}
+
+export default function PlatformLayout({ children, title, header }) {
     const platformUser = usePage().props.platformUser;
     const current = typeof window !== 'undefined' ? window.location.pathname : '';
 
@@ -26,7 +35,7 @@ export default function PlatformLayout({ children, title }) {
                         {NAV.map((n) => (
                             <Link key={n.href} href={n.href}
                                 className={`block rounded-lg px-3 py-2 text-sm font-medium transition ${
-                                    current === n.href ? 'bg-orange-500 text-white' : 'text-zinc-300 hover:bg-zinc-800'
+                                    isActive(current, n.href) ? 'bg-orange-500 text-white' : 'text-zinc-300 hover:bg-zinc-800'
                                 }`}>
                                 {n.label}
                             </Link>
@@ -41,7 +50,10 @@ export default function PlatformLayout({ children, title }) {
                         </button>
                     </div>
                 </aside>
-                <main className="flex-1 p-8">{children}</main>
+                <main className="flex-1 p-8">
+                    {header && <div className="mb-6">{header}</div>}
+                    {children}
+                </main>
             </div>
         </div>
     );

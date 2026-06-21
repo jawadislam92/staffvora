@@ -13,6 +13,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
 
 /**
@@ -241,6 +242,13 @@ class PlatformController extends Controller
         return back()->with('success', 'Payment recorded and subscription extended.');
     }
 
+    /**
+     * Start impersonation from the operator portal (platform guard, platform
+     * host). We can't log into the customer `web` guard here — it lives on a
+     * different host with its own session cookie — so we mint a 60-second
+     * RELATIVE signed URL and redirect the browser to the customer host, where
+     * enterImpersonation() establishes the web session.
+     */
     public function impersonate(Request $request, Organization $organization)
     {
         $target = $organization->owner
@@ -248,22 +256,41 @@ class PlatformController extends Controller
 
         abort_unless($target, 404, 'This organization has no user to impersonate.');
 
-        $request->session()->put('impersonator_id', $request->user()->id);
-        Auth::login($target);
+        $relative = URL::temporarySignedRoute(
+            'impersonate.enter',
+            now()->addSeconds(60),
+            ['user' => $target->id],
+            absolute: false,
+        );
+
+        // config('app.url') is the customer (apex) host; the signed path rides on it.
+        return redirect()->away(rtrim(config('app.url'), '/').$relative);
+    }
+
+    /**
+     * Land the impersonation hand-off on the customer host. Authorized purely by
+     * the signature (the operator may have no web-guard session here). Logs the
+     * target customer in under the `web` guard.
+     */
+    public function enterImpersonation(Request $request)
+    {
+        $target = User::withoutOrganizationScope()->find($request->integer('user'));
+        abort_unless($target, 404);
+
+        Auth::guard('web')->login($target);
+        $request->session()->put('platform_impersonator', true);
 
         return redirect()->route('dashboard')->with('success', "Now viewing as {$target->name}.");
     }
 
     /**
-     * Return to the platform admin account. Lives outside the platform gate
-     * because the impersonated user is (correctly) not a platform admin.
+     * Return from impersonation: end the customer web session and send the
+     * operator back to the portal (the platform-host session is untouched).
      */
     public function stopImpersonating(Request $request)
     {
-        $id = $request->session()->pull('impersonator_id');
-        if ($id) {
-            Auth::loginUsingId($id);
-        }
+        $request->session()->forget(['platform_impersonator', 'impersonator_id']);
+        Auth::guard('web')->logout();
 
         return redirect()->route('platform.index');
     }

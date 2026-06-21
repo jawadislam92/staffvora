@@ -1,10 +1,10 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import PlatformLayout from '@/Layouts/PlatformLayout';
 import { ArrowLeft } from 'lucide-react';
 
 const money = (cents, currency) => new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'USD' }).format((cents || 0) / 100);
 
-export default function PlatformShow({ auth, organization, subscription, plans, payments, entitlements }) {
+export default function PlatformShow({ organization, subscription, plans, payments, entitlements }) {
     const form = useForm({ amount: '', currency: 'USD', months: 1, plan: subscription?.plan_key || '', reference: '' });
 
     const record = (e) => {
@@ -17,10 +17,9 @@ export default function PlatformShow({ auth, organization, subscription, plans, 
     };
 
     return (
-        <AuthenticatedLayout user={auth.user} header={<h2 className="text-xl font-semibold text-slate-100">{organization.name}</h2>}>
+        <PlatformLayout title={organization.name} header={<h2 className="text-xl font-semibold text-white">{organization.name}</h2>}>
             <Head title={organization.name} />
-            <div className="min-h-screen bg-slate-950">
-                <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-4xl space-y-6">
                     <Link href={route('platform.index')} className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200">
                         <ArrowLeft className="h-4 w-4" /> All tenants
                     </Link>
@@ -99,8 +98,7 @@ export default function PlatformShow({ auth, organization, subscription, plans, 
                         </div>
                     )}
                 </div>
-            </div>
-        </AuthenticatedLayout>
+        </PlatformLayout>
     );
 }
 

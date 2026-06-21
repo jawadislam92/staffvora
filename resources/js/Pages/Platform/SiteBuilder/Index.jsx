@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { Head, Link, router, useForm } from '@inertiajs/react';
+import PlatformLayout from '@/Layouts/PlatformLayout';
 
 const input = 'w-full rounded-lg border-line bg-surface-2 text-body text-sm focus:border-accent focus:ring-accent';
 const lbl = 'block text-xs font-semibold text-muted mb-1';
@@ -25,7 +25,6 @@ function LinkListEditor({ value, onChange }) {
 }
 
 export default function Index({ pages, theme }) {
-    const user = usePage().props.auth.user;
     const [t, setT] = useState(theme || {});
     const [savingTheme, setSavingTheme] = useState(false);
     const newPage = useForm({ title: '', slug: '' });
@@ -49,7 +48,7 @@ export default function Index({ pages, theme }) {
     const deletePage = (p) => { if (confirm(`Delete the “${p.title}” page?`)) router.delete(route('platform.site.pages.destroy', p.id)); };
 
     return (
-        <AuthenticatedLayout user={user} header="Website">
+        <PlatformLayout title="Website builder" header={<h2 className="text-xl font-semibold text-white">Website</h2>}>
             <Head title="Website builder" />
             <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-6">
                 <p className="text-sm text-muted">Edit your public marketing site — pages, text, images, colours, links and contact details — without touching code. Changes go live when you <span className="font-semibold text-body">Publish</span>.</p>
@@ -150,6 +149,6 @@ export default function Index({ pages, theme }) {
                     <button type="button" onClick={saveTheme} disabled={savingTheme} className="rounded-lg bg-accent px-6 py-2.5 text-sm font-semibold text-white shadow-lg hover:opacity-90 disabled:opacity-50">{savingTheme ? 'Saving…' : 'Save website settings'}</button>
                 </div>
             </div>
-        </AuthenticatedLayout>
+        </PlatformLayout>
     );
 }

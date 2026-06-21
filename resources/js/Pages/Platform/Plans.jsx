@@ -1,5 +1,5 @@
 import { Head, Link, useForm } from '@inertiajs/react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import PlatformLayout from '@/Layouts/PlatformLayout';
 import { ArrowLeft, Check } from 'lucide-react';
 
 // Group registry keys by their `group` field, preserving registry order.
@@ -98,14 +98,13 @@ function PlanEditor({ plan, registry }) {
     );
 }
 
-export default function Plans({ auth, plans, registry }) {
+export default function Plans({ plans, registry }) {
     return (
-        <AuthenticatedLayout user={auth.user} header={<h2 className="text-xl font-semibold text-body">Plans &amp; pricing</h2>}>
+        <PlatformLayout title="Plans" header={<h2 className="text-xl font-semibold text-white">Plans &amp; pricing</h2>}>
             <Head title="Plans" />
-            <div className="min-h-screen bg-app">
-                <div className="mx-auto max-w-5xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
-                    <Link href={route('platform.index')} className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-body">
-                        <ArrowLeft className="h-4 w-4" /> Platform
+            <div className="mx-auto max-w-5xl space-y-5">
+                    <Link href={route('platform.index')} className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white">
+                        <ArrowLeft className="h-4 w-4" /> Tenants
                     </Link>
                     <p className="text-sm text-muted">
                         Tune what each plan unlocks and its price. Changes apply to every tenant on that plan; per-tenant exceptions live on each tenant&apos;s page.
@@ -116,7 +115,6 @@ export default function Plans({ auth, plans, registry }) {
                         ))}
                     </div>
                 </div>
-            </div>
-        </AuthenticatedLayout>
+        </PlatformLayout>
     );
 }

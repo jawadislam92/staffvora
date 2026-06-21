@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
 import {
     DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors,
@@ -8,7 +8,7 @@ import {
     SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import PlatformLayout from '@/Layouts/PlatformLayout';
 import { SCHEMAS, BLOCK_TYPES, newBlock, blankItem } from '@/Components/Site/blockSchemas';
 
 const input = 'w-full rounded-lg border-line bg-surface-2 text-body text-sm focus:border-accent focus:ring-accent';
@@ -143,7 +143,6 @@ function BlockCard({ block, onChange, onDuplicate, onDelete }) {
 }
 
 export default function Editor({ page }) {
-    const user = usePage().props.auth.user;
     const [blocks, setBlocks] = useState(page.blocks || []);
     const [title, setTitle] = useState(page.title || '');
     const [metaTitle, setMetaTitle] = useState(page.meta_title || '');
@@ -170,7 +169,7 @@ export default function Editor({ page }) {
     const liveUrl = page.slug === 'home' ? '/' : `/${page.slug}`;
 
     return (
-        <AuthenticatedLayout user={user} header={`Edit page — ${page.title}`}>
+        <PlatformLayout title={`Edit ${page.title}`} header={<h2 className="text-xl font-semibold text-white">Edit page — {page.title}</h2>}>
             <Head title={`Edit ${page.title}`} />
             <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
                 <div className="mb-4 flex items-center justify-between">
@@ -211,6 +210,6 @@ export default function Editor({ page }) {
                     )}
                 </div>
             </div>
-        </AuthenticatedLayout>
+        </PlatformLayout>
     );
 }

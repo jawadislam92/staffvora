@@ -178,14 +178,9 @@ export default function Authenticated({ user, header, children }) {
         user?.is_super_admin && { label: 'Billing', href: route('billing.index'), icon: CreditCard, active: ['billing.index'] },
     ].filter(Boolean), [user?.is_super_admin, user?.permissions]);
 
-    // Platform (landlord) console — only for us. Developer lives here now: it
-    // edits platform-wide .env secrets, so it must never be a tenant tool.
-    const platformItems = useMemo(() => [
-        user?.is_platform_admin && { label: 'Platform', href: route('platform.index'), icon: Building2, active: ['platform.index', 'platform.show'] },
-        user?.is_platform_admin && { label: 'Plans', href: route('platform.plans'), icon: CreditCard, active: ['platform.plans'] },
-        user?.is_platform_admin && { label: 'Website', href: route('platform.site.index'), icon: Globe, active: ['platform.site.index', 'platform.site.edit'] },
-        user?.is_platform_admin && { label: 'Developer', href: route('developer.index'), icon: Wrench, active: ['developer.index'] },
-    ].filter(Boolean), [user?.is_platform_admin]);
+    // Operator (landlord) tools — Platform / Plans / Website / Developer — now
+    // live in the separate operator portal at the platform host, behind their own
+    // accounts + auth guard. They are intentionally NOT reachable from a tenant.
 
     // The labelled, collapsible sections (the primary/daily links stay pinned
     // above them and are never part of the accordion).
@@ -193,8 +188,7 @@ export default function Authenticated({ user, header, children }) {
         { label: 'Performance', items: performanceItems },
         { label: 'Management', items: managementItems },
         { label: 'System', items: systemItems },
-        { label: 'Platform', items: platformItems },
-    ].filter((s) => s.items.length), [performanceItems, managementItems, systemItems, platformItems]);
+    ].filter((s) => s.items.length), [performanceItems, managementItems, systemItems]);
 
     // Which section holds the page you're on (null when a pinned/daily item is active).
     const activeSection = useMemo(

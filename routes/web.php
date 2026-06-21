@@ -55,6 +55,41 @@ Route::domain(config('platform.host'))->group(function () {
         Route::post('/logout', [PlatformAuthController::class, 'logout'])->name('platform.logout');
         Route::get('/', fn () => redirect()->route('platform.dashboard'));
         Route::get('/dashboard', [PlatformPortalController::class, 'dashboard'])->name('platform.dashboard');
+
+        // Tenants — landlord view across every org (Organization is not org-scoped).
+        Route::get('/tenants', [PlatformController::class, 'index'])->name('platform.index');
+        Route::get('/tenants/{organization}', [PlatformController::class, 'show'])->name('platform.show');
+        Route::post('/tenants/{organization}/suspend', [PlatformController::class, 'suspend'])->name('platform.suspend');
+        Route::post('/tenants/{organization}/resume', [PlatformController::class, 'resume'])->name('platform.resume');
+        Route::post('/tenants/{organization}/payment', [PlatformController::class, 'recordPayment'])->name('platform.payment');
+        Route::put('/tenants/{organization}/entitlements', [PlatformController::class, 'updateTenant'])->name('platform.tenant.update');
+        Route::post('/tenants/{organization}/impersonate', [PlatformController::class, 'impersonate'])->name('platform.impersonate');
+
+        // Global plan editor.
+        Route::get('/plans', [PlatformController::class, 'plans'])->name('platform.plans');
+        Route::put('/plans/{plan}', [PlatformController::class, 'updatePlan'])->name('platform.plans.update');
+
+        // No-code marketing-site builder.
+        Route::prefix('site')->group(function () {
+            Route::get('/', [SiteBuilderController::class, 'index'])->name('platform.site.index');
+            Route::put('/theme', [SiteBuilderController::class, 'updateTheme'])->name('platform.site.theme');
+            Route::post('/logo', [SiteBuilderController::class, 'setLogo'])->name('platform.site.logo');
+            Route::post('/image', [SiteBuilderController::class, 'uploadImage'])->name('platform.site.image');
+            Route::post('/pages', [SiteBuilderController::class, 'createPage'])->name('platform.site.pages.create');
+            Route::get('/pages/{page}', [SiteBuilderController::class, 'edit'])->name('platform.site.edit');
+            Route::put('/pages/{page}', [SiteBuilderController::class, 'saveDraft'])->name('platform.site.save');
+            Route::post('/pages/{page}/publish', [SiteBuilderController::class, 'publish'])->name('platform.site.publish');
+            Route::delete('/pages/{page}', [SiteBuilderController::class, 'destroyPage'])->name('platform.site.pages.destroy');
+        });
+
+        // Developer / system panel — edits platform-wide .env secrets shared
+        // across every tenant. Behind the platform guard (re-checked in controller).
+        Route::prefix('developer')->group(function () {
+            Route::get('/', [DeveloperController::class, 'index'])->name('developer.index');
+            Route::post('/run', [DeveloperController::class, 'run'])->name('developer.run');
+            Route::put('/env', [DeveloperController::class, 'updateEnv'])->name('developer.env.update');
+            Route::get('/logs', [DeveloperController::class, 'logs'])->name('developer.logs');
+        });
     });
 });
 
@@ -213,16 +248,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('permission:reports.send_slack')
         ->name('team.slack-digest');
 
-    // Developer / system panel. PLATFORM operator only — it edits platform-wide
-    // .env secrets shared across every tenant, so it's gated by the `platform`
-    // middleware (and re-checked in the controller). A tenant owner cannot reach it.
-    Route::prefix('developer')->middleware('platform')->group(function () {
-        Route::get('/', [DeveloperController::class, 'index'])->name('developer.index');
-        Route::post('/run', [DeveloperController::class, 'run'])->name('developer.run');
-        Route::put('/env', [DeveloperController::class, 'updateEnv'])->name('developer.env.update');
-        Route::get('/logs', [DeveloperController::class, 'logs'])->name('developer.logs');
-    });
-
     // Tracking / monitoring settings (scrin.io-style). Super Admin only by
     // default via the monitoring.settings permission.
     Route::prefix('settings')->middleware('permission:monitoring.settings')->group(function () {
@@ -261,36 +286,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 });
 
-// Platform (landlord) console — the SaaS operator, across every tenant.
-Route::middleware(['auth', 'verified', 'platform'])->prefix('platform')->group(function () {
-    Route::get('/', [PlatformController::class, 'index'])->name('platform.index');
-    // Plan editor — declared before the /{organization} wildcard so "plans"
-    // isn't treated as a tenant slug.
-    Route::get('/plans', [PlatformController::class, 'plans'])->name('platform.plans');
-    Route::put('/plans/{plan}', [PlatformController::class, 'updatePlan'])->name('platform.plans.update');
+// Cross-host impersonation hand-off. The operator portal (platform host) mints a
+// short-lived RELATIVE signed URL pointing here; this logs the customer in on the
+// customer host under the `web` guard, keeping the two hosts' session cookies
+// isolated. The signature (not a login session) is what authorizes the hand-off.
+Route::get('/impersonate/enter', [PlatformController::class, 'enterImpersonation'])
+    ->middleware('signed:relative')->name('impersonate.enter');
 
-    // No-code marketing-site builder (declared before the /{organization} wildcard).
-    Route::prefix('site')->group(function () {
-        Route::get('/', [SiteBuilderController::class, 'index'])->name('platform.site.index');
-        Route::put('/theme', [SiteBuilderController::class, 'updateTheme'])->name('platform.site.theme');
-        Route::post('/logo', [SiteBuilderController::class, 'setLogo'])->name('platform.site.logo');
-        Route::post('/image', [SiteBuilderController::class, 'uploadImage'])->name('platform.site.image');
-        Route::post('/pages', [SiteBuilderController::class, 'createPage'])->name('platform.site.pages.create');
-        Route::get('/pages/{page}', [SiteBuilderController::class, 'edit'])->name('platform.site.edit');
-        Route::put('/pages/{page}', [SiteBuilderController::class, 'saveDraft'])->name('platform.site.save');
-        Route::post('/pages/{page}/publish', [SiteBuilderController::class, 'publish'])->name('platform.site.publish');
-        Route::delete('/pages/{page}', [SiteBuilderController::class, 'destroyPage'])->name('platform.site.pages.destroy');
-    });
-
-    Route::get('/{organization}', [PlatformController::class, 'show'])->name('platform.show');
-    Route::post('/{organization}/suspend', [PlatformController::class, 'suspend'])->name('platform.suspend');
-    Route::post('/{organization}/resume', [PlatformController::class, 'resume'])->name('platform.resume');
-    Route::post('/{organization}/payment', [PlatformController::class, 'recordPayment'])->name('platform.payment');
-    Route::put('/{organization}/entitlements', [PlatformController::class, 'updateTenant'])->name('platform.tenant.update');
-    Route::post('/{organization}/impersonate', [PlatformController::class, 'impersonate'])->name('platform.impersonate');
-});
-
-// Return from impersonation — auth only (the impersonated user isn't a platform admin).
+// Return from impersonation — auth only (the impersonated user is the customer).
 Route::post('/stop-impersonating', [PlatformController::class, 'stopImpersonating'])
     ->middleware('auth')->name('platform.stop-impersonating');
 

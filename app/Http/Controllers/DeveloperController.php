@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -332,11 +333,11 @@ class DeveloperController extends Controller
 
     private function authorizeDeveloper(Request $request): void
     {
-        // PLATFORM admins only — this page edits platform-wide .env secrets
+        // Operator portal only — this page edits platform-wide .env secrets
         // (Slack / Anthropic / S3) shared across every tenant. A tenant owner
-        // (who is a super_admin of their own org) must never reach it. The route
-        // also carries the `platform` middleware; this is defence in depth.
-        abort_unless($request->user()?->isPlatformAdmin(), 403, 'Developer tools are restricted to the platform operator.');
+        // must never reach it. The route is on the platform host behind the
+        // `auth:platform` guard; this re-check is defence in depth.
+        abort_unless(Auth::guard('platform')->check(), 403, 'Developer tools are restricted to the platform operator.');
     }
 
     /** @return array<string, mixed> */

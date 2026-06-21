@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import PlatformLayout from '@/Layouts/PlatformLayout';
 import {
     Activity,
     AlertTriangle,
@@ -93,7 +93,7 @@ function buildEnvDraft(groups) {
     return draft;
 }
 
-export default function DeveloperIndex({ auth, system, health, schedule, envGroups, lastOutput, lastAction }) {
+export default function DeveloperIndex({ system, health, schedule, envGroups, lastOutput, lastAction }) {
     const flash = usePage().props.flash || {};
     const [busy, setBusy] = useState(false);
     const [logLines, setLogLines] = useState([]);
@@ -147,11 +147,10 @@ export default function DeveloperIndex({ auth, system, health, schedule, envGrou
     useEffect(() => { loadLogs(); }, []);
 
     return (
-        <AuthenticatedLayout user={auth.user} header={<h2 className="text-xl font-semibold text-body">Developer</h2>}>
+        <PlatformLayout title="Developer" header={<h2 className="text-xl font-semibold text-white">Developer</h2>}>
             <Head title="Developer" />
 
-            <div className="min-h-screen bg-slate-950">
-            <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-7xl space-y-4">
                 {(flash.success || flash.error) && (
                     <div
                         className={[
@@ -365,7 +364,6 @@ export default function DeveloperIndex({ auth, system, health, schedule, envGrou
                     </pre>
                 </Card>
             </div>
-            </div>
-        </AuthenticatedLayout>
+        </PlatformLayout>
     );
 }
