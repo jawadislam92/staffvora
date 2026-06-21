@@ -12,6 +12,16 @@ class Authenticate extends Middleware
      */
     protected function redirectTo(Request $request): ?string
     {
-        return $request->expectsJson() ? null : route('login');
+        if ($request->expectsJson()) {
+            return null;
+        }
+
+        // The operator portal has its own login; never bounce platform-host
+        // visitors to the customer login.
+        if ($request->getHost() === config('platform.host')) {
+            return route('platform.login');
+        }
+
+        return route('login');
     }
 }

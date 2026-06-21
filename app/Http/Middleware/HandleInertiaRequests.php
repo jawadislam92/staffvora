@@ -36,7 +36,10 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
-        $user = $request->user();
+        // Explicitly the customer (web) guard: the platform portal's `auth:platform`
+        // middleware flips the default guard to `platform`, and a PlatformUser
+        // isn't a customer User — sharing it here would call User-only methods.
+        $user = $request->user('web');
         $lastActionToday = null;
         $authUser = null;
 

@@ -2,8 +2,11 @@
 
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\BrandingController;
+use App\Http\Controllers\Platform\AuthController as PlatformAuthController;
+use App\Http\Controllers\Platform\PortalController as PlatformPortalController;
 use App\Http\Controllers\Platform\SiteBuilderController;
 use App\Http\Controllers\PlatformController;
+use App\Http\Middleware\SharePlatformUser;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DesktopDownloadController;
@@ -38,6 +41,22 @@ use Inertia\Inertia;
 | contains the "web" middleware group. Now create something great!
 |
 */
+
+// ── Operator / landlord portal (platform.satimetracker.com) ──────────────────
+// Bound to its own host + the `platform` auth guard, fully separate from the
+// customer site. Declared FIRST so platform paths win on the platform host;
+// these routes never match on the customer host (Route::domain), so customers
+// can't reach the portal.
+Route::domain(config('platform.host'))->group(function () {
+    Route::get('/login', [PlatformAuthController::class, 'showLogin'])->name('platform.login');
+    Route::post('/login', [PlatformAuthController::class, 'login'])->middleware('throttle:8,1');
+
+    Route::middleware(['auth:platform', SharePlatformUser::class])->group(function () {
+        Route::post('/logout', [PlatformAuthController::class, 'logout'])->name('platform.logout');
+        Route::get('/', fn () => redirect()->route('platform.dashboard'));
+        Route::get('/dashboard', [PlatformPortalController::class, 'dashboard'])->name('platform.dashboard');
+    });
+});
 
 // Public marketing home — rendered from the builder-driven content (Site\PageController).
 Route::get('/', [SitePageController::class, 'home'])->name('home');

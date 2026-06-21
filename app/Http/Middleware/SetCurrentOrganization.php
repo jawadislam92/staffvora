@@ -20,7 +20,8 @@ class SetCurrentOrganization
 
     public function handle(Request $request, Closure $next): Response
     {
-        $user = $request->user();
+        // Customer (web) guard only — never bind a tenant from a platform-portal user.
+        $user = $request->user('web');
 
         if ($user && $user->organization_id) {
             $this->current->set($user->organization_id);

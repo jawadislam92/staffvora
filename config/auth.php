@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\PlatformUser;
 use App\Models\User;
 
 return [
@@ -42,6 +43,13 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // Operator/landlord portal (platform.satimetracker.com) — fully separate
+        // from the customer `web` guard, its own table + session.
+        'platform' => [
+            'driver' => 'session',
+            'provider' => 'platform_users',
+        ],
     ],
 
     /*
@@ -65,6 +73,11 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => User::class,
+        ],
+
+        'platform_users' => [
+            'driver' => 'eloquent',
+            'model' => PlatformUser::class,
         ],
 
         // 'users' => [
