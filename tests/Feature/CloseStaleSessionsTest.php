@@ -6,11 +6,26 @@ use App\Models\TrackingSession;
 use App\Models\User;
 use App\Models\WorkHour;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class CloseStaleSessionsTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Freeze time mid-day so back-dated sessions never straddle a day boundary
+        // (the day-split would otherwise make synced hours wall-clock dependent).
+        Carbon::setTestNow(Carbon::parse('2026-06-15 12:00:00'));
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
+    }
 
     public function test_stale_active_sessions_are_closed_and_hours_synced(): void
     {

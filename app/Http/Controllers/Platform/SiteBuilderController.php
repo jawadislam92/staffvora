@@ -28,6 +28,9 @@ class SiteBuilderController extends Controller
         return Inertia::render('Platform/SiteBuilder/Index', [
             'pages' => SitePage::orderBy('sort')->orderBy('id')->get(['id', 'slug', 'title', 'status', 'updated_at']),
             'theme' => SiteTheme::current(),
+            'palettes' => \App\Support\SitePalettes::options(),
+            'fonts' => \App\Support\SitePalettes::fonts(),
+            'editableColors' => \App\Support\SitePalettes::editableKeys(),
         ]);
     }
 
@@ -96,6 +99,11 @@ class SiteBuilderController extends Controller
             'tagline' => 'nullable|string|max:160',
             'accent_color' => ['nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'highlight_color' => ['nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'palette_preset' => ['nullable', 'string', 'max:40'],
+            'palette' => ['nullable', 'array'],
+            'palette.light' => ['nullable', 'array'],
+            'palette.dark' => ['nullable', 'array'],
+            'font' => ['nullable', 'string', 'max:60'],
             'nav_links' => 'present|array',
             'footer_columns' => 'present|array',
             'social_links' => 'present|array',
@@ -103,6 +111,15 @@ class SiteBuilderController extends Controller
             'contact_phone' => 'nullable|string|max:60',
             'contact_address' => 'nullable|string|max:200',
         ]);
+
+        // Keep only valid hex in custom palette overrides; drop empty entries.
+        if (! empty($data['palette'])) {
+            $hex = fn ($v) => is_string($v) && preg_match('/^#[0-9a-fA-F]{6}$/', $v);
+            foreach (['light', 'dark'] as $mode) {
+                $data['palette'][$mode] = array_filter($data['palette'][$mode] ?? [], $hex);
+            }
+            $data['palette'] = array_filter($data['palette']);
+        }
 
         SiteTheme::current()->update($data);
         SiteTheme::forgetCache();

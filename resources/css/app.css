@@ -82,7 +82,7 @@ html { background-color: var(--bg); color: var(--text); }
    (--a, --brand, --paper, …) are set inline on .site-root from config/brand.php
    (see Pages/Site/Show.jsx). */
 .site-root {
-    font-family: 'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--site-font, 'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
     -webkit-font-smoothing: antialiased;
 }
 

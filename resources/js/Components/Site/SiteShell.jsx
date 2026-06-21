@@ -118,8 +118,12 @@ export default function SiteShell({ brand, theme, nav, jsonLd, isAuthed, meta = 
         return () => io.disconnect();
     }, []);
 
+    // The palette is fully resolved server-side (config → preset → custom), so the
+    // client just emits it. The chosen font drives --site-font.
     const palette = mode === 'dark' ? (brand?.colors_dark || {}) : (brand?.colors || {});
-    const vars = applyAccentOverride(paletteVars(palette), theme?.accent_color, theme?.highlight_color, brand?.colors?.accent);
+    const font = brand?.font || 'Hanken Grotesk';
+    const fontHref = `https://fonts.googleapis.com/css2?family=${font.replace(/ /g, '+')}:wght@400;500;600;700;800&display=swap`;
+    const vars = { ...paletteVars(palette), '--site-font': `'${font}', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` };
 
     const toggleTheme = useCallback(() => {
         setMode((m) => {
@@ -143,6 +147,9 @@ export default function SiteShell({ brand, theme, nav, jsonLd, isAuthed, meta = 
         >
             <Head>
                 <title>{meta.title || fallbackTitle}</title>
+                <link rel="preconnect" href="https://fonts.googleapis.com" />
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+                <link href={fontHref} rel="stylesheet" />
                 {meta.description && <meta name="description" content={meta.description} />}
                 {meta.canonical && <link rel="canonical" href={meta.canonical} />}
                 {meta.robots && <meta name="robots" content={meta.robots} />}

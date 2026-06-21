@@ -20,6 +20,7 @@ class SiteTheme extends Model
         'footer_columns' => 'array',
         'social_links' => 'array',
         'default_meta' => 'array',
+        'palette' => 'array',
     ];
 
     /** The one-and-only theme row, created with sensible defaults on first use. */

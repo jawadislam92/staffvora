@@ -24,19 +24,34 @@ function LinkListEditor({ value, onChange }) {
     );
 }
 
-export default function Index({ pages, theme }) {
+function ColorRow({ label, value, onChange }) {
+    return (
+        <div className="mb-2 flex items-center gap-2">
+            <input type="color" value={value || '#888888'} onChange={(e) => onChange(e.target.value)} className="h-8 w-9 shrink-0 rounded border border-line bg-surface-2" />
+            <input className={input} placeholder={label} value={value || ''} onChange={(e) => onChange(e.target.value)} />
+            {value && <button type="button" onClick={() => onChange('')} className="shrink-0 px-1 text-xs text-subtle hover:text-rose-400">✕</button>}
+        </div>
+    );
+}
+
+export default function Index({ pages, theme, palettes = [], fonts = [], editableColors = {} }) {
     const [t, setT] = useState(theme || {});
     const [savingTheme, setSavingTheme] = useState(false);
     const newPage = useForm({ title: '', slug: '' });
 
     const set = (k, v) => setT((p) => ({ ...p, [k]: v }));
     const setSocial = (k, v) => setT((p) => ({ ...p, social_links: { ...(p.social_links || {}), [k]: v } }));
+    const setPalette = (mode, key, v) => setT((p) => ({
+        ...p,
+        palette: { ...(p.palette || {}), [mode]: { ...((p.palette || {})[mode] || {}), [key]: v } },
+    }));
 
     const saveTheme = () => {
         setSavingTheme(true);
         router.put(route('platform.site.theme'), {
             site_name: t.site_name, tagline: t.tagline,
             accent_color: t.accent_color, highlight_color: t.highlight_color,
+            palette_preset: t.palette_preset || null, palette: t.palette || {}, font: t.font || null,
             nav_links: t.nav_links || [], footer_columns: t.footer_columns || [],
             social_links: t.social_links || {},
             contact_email: t.contact_email, contact_phone: t.contact_phone, contact_address: t.contact_address,
@@ -79,26 +94,12 @@ export default function Index({ pages, theme }) {
                     {newPage.errors.slug && <p className="mt-1 text-xs text-rose-400">{newPage.errors.slug}</p>}
                 </div>
 
-                {/* Brand & colours */}
+                {/* Brand */}
                 <div className={card}>
-                    <h2 className="mb-3 font-semibold text-body">Brand &amp; colours</h2>
+                    <h2 className="mb-3 font-semibold text-body">Brand</h2>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div><span className={lbl}>Site name</span><input className={input} value={t.site_name || ''} onChange={(e) => set('site_name', e.target.value)} /></div>
                         <div><span className={lbl}>Tagline</span><input className={input} value={t.tagline || ''} onChange={(e) => set('tagline', e.target.value)} /></div>
-                        <div>
-                            <span className={lbl}>Accent colour</span>
-                            <div className="flex items-center gap-2">
-                                <input type="color" value={t.accent_color || '#f97316'} onChange={(e) => set('accent_color', e.target.value)} className="h-9 w-12 rounded border border-line bg-surface-2" />
-                                <input className={input} value={t.accent_color || ''} onChange={(e) => set('accent_color', e.target.value)} />
-                            </div>
-                        </div>
-                        <div>
-                            <span className={lbl}>Highlight colour</span>
-                            <div className="flex items-center gap-2">
-                                <input type="color" value={t.highlight_color || '#f59e0b'} onChange={(e) => set('highlight_color', e.target.value)} className="h-9 w-12 rounded border border-line bg-surface-2" />
-                                <input className={input} value={t.highlight_color || ''} onChange={(e) => set('highlight_color', e.target.value)} />
-                            </div>
-                        </div>
                         <div className="sm:col-span-2">
                             <span className={lbl}>Logo</span>
                             <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm font-semibold text-muted hover:bg-surface">
@@ -107,6 +108,49 @@ export default function Index({ pages, theme }) {
                             </label>
                         </div>
                     </div>
+                </div>
+
+                {/* Appearance — colour theme + font + fine-tune */}
+                <div className={card}>
+                    <h2 className="font-semibold text-body">Appearance</h2>
+                    <p className="mb-4 mt-1 text-xs text-muted">Pick a colour theme and font for your whole site (light &amp; dark). Changes go live when you Save.</p>
+
+                    <span className={lbl}>Colour theme</span>
+                    <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        {palettes.map((p) => (
+                            <button key={p.id} type="button" onClick={() => set('palette_preset', p.id)}
+                                className={`rounded-xl border p-2.5 text-left transition ${t.palette_preset === p.id ? 'border-accent ring-2 ring-accent/40' : 'border-line hover:border-accent/60'}`}>
+                                <div className="h-10 w-full rounded-lg" style={{ background: `linear-gradient(135deg, ${p.from}, ${p.to})` }} />
+                                <div className="mt-2 text-xs font-semibold text-body">{p.label}</div>
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="mt-5 max-w-xs">
+                        <span className={lbl}>Font</span>
+                        <select className={input} value={t.font || 'Hanken Grotesk'} onChange={(e) => set('font', e.target.value)}>
+                            {fonts.map((f) => <option key={f} value={f}>{f}</option>)}
+                        </select>
+                    </div>
+
+                    <details className="mt-5">
+                        <summary className="cursor-pointer text-xs font-semibold text-accent">Fine-tune individual colours (optional)</summary>
+                        <p className="mb-3 mt-2 text-xs text-muted">Override specific colours on top of the theme. Leave a field blank to keep the theme’s colour.</p>
+                        <div className="grid gap-5 sm:grid-cols-2">
+                            <div>
+                                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-subtle">Light mode</div>
+                                {Object.entries(editableColors).map(([key, label]) => (
+                                    <ColorRow key={key} label={label} value={(t.palette?.light || {})[key]} onChange={(v) => setPalette('light', key, v)} />
+                                ))}
+                            </div>
+                            <div>
+                                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-subtle">Dark mode</div>
+                                {Object.entries(editableColors).map(([key, label]) => (
+                                    <ColorRow key={key} label={label} value={(t.palette?.dark || {})[key]} onChange={(v) => setPalette('dark', key, v)} />
+                                ))}
+                            </div>
+                        </div>
+                    </details>
                 </div>
 
                 {/* Header navigation */}
