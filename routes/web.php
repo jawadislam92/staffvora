@@ -99,6 +99,12 @@ Route::domain(config('platform.host'))->group(function () {
                 Route::delete('/pages/{page}', [SiteBuilderController::class, 'destroyPage'])->name('platform.site.pages.destroy');
             });
 
+            Route::prefix('leads')->group(function () {
+                Route::get('/', [\App\Http\Controllers\Platform\LeadController::class, 'index'])->name('platform.leads.index');
+                Route::post('/{lead}/read', [\App\Http\Controllers\Platform\LeadController::class, 'markRead'])->name('platform.leads.read');
+                Route::delete('/{lead}', [\App\Http\Controllers\Platform\LeadController::class, 'destroy'])->name('platform.leads.destroy');
+            });
+
             Route::prefix('blog')->group(function () {
                 Route::get('/', [\App\Http\Controllers\Platform\BlogController::class, 'index'])->name('platform.blog.index');
                 Route::get('/new', [\App\Http\Controllers\Platform\BlogController::class, 'create'])->name('platform.blog.create');

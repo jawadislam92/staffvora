@@ -23,6 +23,9 @@ class ContactController extends Controller
             'message' => ['required', 'string', 'max:5000'],
         ]);
 
+        // Persist the lead first so it's never lost, even if email fails.
+        \App\Models\ContactSubmission::create($data + ['ip' => $request->ip()]);
+
         $to = config('brand.support_email') ?: 'hello@satimetracker.com';
 
         try {

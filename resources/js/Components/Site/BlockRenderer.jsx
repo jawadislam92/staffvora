@@ -31,13 +31,26 @@ export const BLOCK_REGISTRY = {
     team_grid: TeamGrid,
 };
 
+// Optional per-section background (set in the builder). Light tints that keep
+// text readable in both light + dark (no text-colour flip needed).
+const SECTION_BG = {
+    muted: 'bg-[var(--surface-2)]',
+    soft: 'wash-tint',
+    accent: 'sec-accent',
+};
+
 export default function BlockRenderer({ blocks = [], theme, brand, plans }) {
     return (
         <>
             {blocks.map((block) => {
                 const Cmp = BLOCK_REGISTRY[block.type];
                 if (!Cmp) return null;
-                return <Cmp key={block.id} data={block.data || {}} theme={theme} brand={brand} plans={plans} />;
+                const bg = SECTION_BG[block.data?._bg];
+                return (
+                    <div key={block.id} className={bg || undefined}>
+                        <Cmp data={block.data || {}} theme={theme} brand={brand} plans={plans} />
+                    </div>
+                );
             })}
         </>
     );

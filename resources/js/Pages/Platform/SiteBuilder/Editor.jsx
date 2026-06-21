@@ -130,6 +130,15 @@ function BlockCard({ block, onChange, onDuplicate, onDelete }) {
             </div>
             {open && schema && (
                 <div className="space-y-3 border-t border-line p-4">
+                    <div>
+                        <span className={label}>Section background</span>
+                        <select className={input} value={block.data?._bg || ''} onChange={(e) => onChange({ ...block.data, _bg: e.target.value })}>
+                            <option value="">Default (none)</option>
+                            <option value="muted">Muted</option>
+                            <option value="soft">Soft tint</option>
+                            <option value="accent">Accent tint</option>
+                        </select>
+                    </div>
                     {schema.fields.map((f) => (
                         <div key={f.key}>
                             <span className={label}>{f.label}</span>

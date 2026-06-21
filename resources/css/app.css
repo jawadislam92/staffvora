@@ -140,6 +140,8 @@ html { background-color: var(--bg); color: var(--text); }
     background: linear-gradient(120deg, var(--g-from), var(--g-to) 60%, var(--deep));
     color: #fff;
 }
+/* Per-section background option: a faint accent-tinted band (text stays readable). */
+.site-root .sec-accent { background-color: color-mix(in srgb, var(--a) 7%, var(--canvas)); }
 
 /* Day↔night switch: animate the recolour once the page is mounted (data-ready),
    so the very first paint snaps straight to the visitor's chosen palette without
