@@ -40,8 +40,9 @@ class SiteTheme extends Model
             'site_name' => $this->site_name ?: 'Tracksuite',
             'tagline' => $this->tagline,
             'logo_url' => $this->logo_path ? route('site.media.logo').'?v='.substr(md5($this->logo_path), 0, 8) : null,
-            'accent_color' => $this->accent_color ?: '#f97316',
-            'highlight_color' => $this->highlight_color ?: '#f59e0b',
+            // Raw (nullable) so the public site can tell an owner override from "unset".
+            'accent_color' => $this->accent_color,
+            'highlight_color' => $this->highlight_color,
             'nav_links' => $this->nav_links ?? [],
             'footer_columns' => $this->footer_columns ?? [],
             'social_links' => $this->social_links ?? [],

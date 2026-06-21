@@ -29,6 +29,40 @@ function paletteVars(c = {}) {
     };
 }
 
+/* --- tiny hex helpers so the builder's single accent picker can drive the
+   whole accent family (deep / gradient / highlight) without the owner needing
+   to choose five colours. --- */
+const isHex = (h) => /^#[0-9a-fA-F]{6}$/.test(h || '');
+function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function rgbToHex(r, g, b) {
+    const h = (x) => Math.min(255, Math.max(0, Math.round(x))).toString(16).padStart(2, '0');
+    return '#' + h(r) + h(g) + h(b);
+}
+function mix(hex, target, amt) {
+    const a = hexToRgb(hex), b = hexToRgb(target);
+    return rgbToHex(a.r + (b.r - a.r) * amt, a.g + (b.g - a.g) * amt, a.b + (b.b - a.b) * amt);
+}
+const lighten = (hex, amt) => mix(hex, '#ffffff', amt);
+const darken = (hex, amt) => mix(hex, '#000000', amt);
+
+// If the owner picked a custom accent in the builder (one that differs from the
+// config default), recolour the accent family from it. Equal-to-default = leave
+// config's hand-tuned violet→indigo gradient untouched.
+function applyAccentOverride(vars, accent, highlight, configAccent) {
+    if (!isHex(accent) || accent.toLowerCase() === (configAccent || '').toLowerCase()) return vars;
+    return {
+        ...vars,
+        '--a': accent,
+        '--a-deep': darken(accent, 0.14),
+        '--g-to': accent,
+        '--g-from': lighten(accent, 0.18),
+        '--hl': isHex(highlight) ? highlight : lighten(accent, 0.30),
+    };
+}
+
 // First-paint mode: a saved choice wins, otherwise the visitor's OS preference.
 // Runs in the useState initialiser, so the right palette is applied before paint.
 function initialMode() {
@@ -57,7 +91,26 @@ export default function Show({ page, theme, brand, nav, plans, isAuthed }) {
     useEffect(() => { setReady(true); }, []);
 
     const palette = mode === 'dark' ? (brand?.colors_dark || {}) : (brand?.colors || {});
-    const vars = paletteVars(palette);
+    const vars = applyAccentOverride(
+        paletteVars(palette),
+        theme?.accent_color,
+        theme?.highlight_color,
+        brand?.colors?.accent,
+    );
+
+    // Builder-editable chrome overrides config: nav, footer columns, contact
+    // details and socials all prefer the values saved in the Website settings.
+    const headerNav = (theme?.nav_links?.length ? theme.nav_links : nav?.header) || [];
+    const footerNav = (theme?.footer_columns?.length ? theme.footer_columns : nav?.footer) || [];
+    const effectiveBrand = {
+        ...brand,
+        name: theme?.site_name || brand?.name,
+        tagline: theme?.tagline || brand?.tagline,
+        support_email: theme?.contact_email || brand?.support_email,
+        phone: theme?.contact_phone || brand?.phone,
+        address: theme?.contact_address || brand?.address,
+        socials: { ...(brand?.socials || {}), ...(theme?.social_links || {}) },
+    };
 
     const toggleTheme = useCallback(() => {
         setMode((m) => {
@@ -75,21 +128,21 @@ export default function Show({ page, theme, brand, nav, plans, isAuthed }) {
             style={{ ...vars, background: 'var(--canvas)', color: 'var(--text)' }}
         >
             <Head>
-                <title>{meta.title || brand?.name || 'Tracksuite'}</title>
+                <title>{meta.title || effectiveBrand?.name || 'Tracksuite'}</title>
                 {meta.description && <meta name="description" content={meta.description} />}
                 {meta.canonical && <link rel="canonical" href={meta.canonical} />}
                 {meta.robots && <meta name="robots" content={meta.robots} />}
-                <meta property="og:title" content={meta.title || brand?.name || 'Tracksuite'} />
+                <meta property="og:title" content={meta.title || effectiveBrand?.name || 'Tracksuite'} />
                 {meta.description && <meta property="og:description" content={meta.description} />}
                 <meta property="og:type" content="website" />
                 <meta name="twitter:card" content="summary_large_image" />
             </Head>
 
-            <SiteHeader nav={nav?.header || []} brand={brand} theme={theme} isAuthed={isAuthed} mode={mode} onToggleTheme={toggleTheme} />
+            <SiteHeader nav={headerNav} brand={effectiveBrand} theme={theme} isAuthed={isAuthed} mode={mode} onToggleTheme={toggleTheme} />
             <main>
-                <BlockRenderer blocks={page?.blocks || []} theme={theme} brand={brand} plans={plans} />
+                <BlockRenderer blocks={page?.blocks || []} theme={theme} brand={effectiveBrand} plans={plans} />
             </main>
-            <SiteFooter nav={nav?.footer || []} brand={brand} theme={theme} />
+            <SiteFooter nav={footerNav} brand={effectiveBrand} theme={theme} />
         </div>
     );
 }
