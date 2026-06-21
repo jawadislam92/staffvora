@@ -1,21 +1,32 @@
 import { SiteIcon } from '../icons';
 
-// Light text panel + a dark product visual; image side is editable.
+// Tinted band with a light product visual — vibrant, full-width. Image side editable.
 export default function FeatureSplit({ data }) {
     const right = (data.image_side || 'right') === 'right';
     const bullets = data.bullets || [];
 
     const Visual = (
         <div className="relative">
-            <div className="absolute -inset-3 rounded-3xl opacity-10 blur-2xl" style={{ background: 'var(--a)' }} />
+            <div className="absolute -inset-5 rounded-[2.2rem] opacity-30 blur-2xl" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--pink))' }} />
             {data.image_url ? (
-                <img src={data.image_url} alt="" className="relative w-full rounded-2xl border border-zinc-200 shadow-xl" />
+                <img src={data.image_url} alt="" className="relative w-full rounded-2xl border border-white/70 shadow-2xl" />
             ) : (
-                <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-zinc-800 bg-[#101213] p-6 shadow-xl">
-                    <div className="grid h-full grid-cols-3 gap-3">
-                        {[...Array(9)].map((_, i) => (
-                            <div key={i} className="rounded-lg border border-white/10 bg-white/[0.03]" style={i % 4 === 0 ? { background: 'color-mix(in srgb, var(--a) 30%, #101213)' } : undefined} />
+                <div className="relative overflow-hidden rounded-2xl border border-white/80 bg-white p-5 shadow-2xl ring-1 ring-black/5">
+                    <div className="mb-4 flex items-center justify-between">
+                        <div className="text-sm font-bold text-[var(--brand)]">Activity &amp; screenshots</div>
+                        <span className="rounded-full bg-[var(--mint)] px-2.5 py-1 text-[11px] font-semibold" style={{ color: 'var(--a)' }}>Visible to the team</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                        {[...Array(6)].map((_, i) => (
+                            <div key={i} className="aspect-video rounded-lg" style={{ background: i % 4 === 1 ? 'linear-gradient(135deg,var(--g-from),var(--g-to))' : 'var(--paper)' }} />
                         ))}
+                    </div>
+                    <div className="mt-4 flex items-center gap-3 rounded-xl bg-[var(--paper)] p-3">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-full text-white" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' }}><SiteIcon name="lock" className="h-4 w-4" /></span>
+                        <div>
+                            <div className="text-xs font-semibold text-[var(--brand)]">No keylogging, ever</div>
+                            <div className="text-[11px] text-[var(--subtle)]">Screenshots are opt-in and employee-visible</div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -23,26 +34,26 @@ export default function FeatureSplit({ data }) {
     );
 
     return (
-        <section className="mx-auto max-w-7xl px-6 py-20 sm:py-24">
-            <div className={`grid items-center gap-12 lg:grid-cols-2 ${right ? '' : 'lg:[direction:rtl]'}`}>
-                <div className="lg:[direction:ltr]">
-                    {data.eyebrow && <span className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--a)' }}>{data.eyebrow}</span>}
-                    {data.heading && <h2 className="mt-3 text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">{data.heading}</h2>}
-                    {data.text && <p className="mt-4 text-lg text-zinc-600">{data.text}</p>}
-                    {bullets.length > 0 && (
-                        <ul className="mt-6 space-y-3">
-                            {bullets.map((b, i) => (
-                                <li key={i} className="flex items-start gap-3 text-zinc-700">
-                                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white" style={{ background: 'var(--a)' }}>
-                                        <SiteIcon name="check" className="h-3.5 w-3.5" />
-                                    </span>
-                                    <span className="text-[15px]">{b}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
+        <section className="wash-tint relative py-20 sm:py-28">
+            <div className="mx-auto max-w-[1500px] px-6 sm:px-10">
+                <div className={`grid items-center gap-14 lg:grid-cols-2 ${right ? '' : 'lg:[direction:rtl]'}`}>
+                    <div className="lg:[direction:ltr]">
+                        {data.eyebrow && <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-wider shadow-sm ring-1 ring-[var(--line)]" style={{ color: 'var(--a)' }}>{data.eyebrow}</span>}
+                        {data.heading && <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-[var(--brand)] sm:text-[2.4rem]">{data.heading}</h2>}
+                        {data.text && <p className="mt-4 text-lg leading-relaxed text-[var(--muted)]">{data.text}</p>}
+                        {bullets.length > 0 && (
+                            <ul className="mt-7 grid gap-3 sm:grid-cols-2">
+                                {bullets.map((b, i) => (
+                                    <li key={i} className="flex items-start gap-2.5">
+                                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' }}><SiteIcon name="check" className="h-3 w-3" /></span>
+                                        <span className="text-[15px] font-medium text-[var(--brand)]">{b}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                    <div className="lg:[direction:ltr]">{Visual}</div>
                 </div>
-                <div className="lg:[direction:ltr]">{Visual}</div>
             </div>
         </section>
     );
