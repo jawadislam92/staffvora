@@ -120,6 +120,10 @@ Route::domain(config('platform.host'))->group(function () {
 // Public marketing home — rendered from the builder-driven content (Site\PageController).
 Route::get('/', [SitePageController::class, 'home'])->name('home');
 
+// Marketing contact form handler (the /contact page itself is a CMS block-page).
+Route::post('/contact', [\App\Http\Controllers\Site\ContactController::class, 'submit'])
+    ->middleware('throttle:6,1')->name('contact.submit');
+
 // Builder-uploaded images + the marketing-site logo (public, cached).
 Route::get('/site/media/{media}', [SitePageController::class, 'media'])->name('site.media');
 Route::get('/site/logo', [SitePageController::class, 'logo'])->name('site.media.logo');

@@ -128,6 +128,24 @@ export const SCHEMAS = {
             { key: 'note', type: 'text', label: 'Small note under the table' },
         ],
     },
+    contact: {
+        label: 'Contact form',
+        fields: [
+            { key: 'form_heading', type: 'text', label: 'Form heading' },
+        ],
+    },
+    team_grid: {
+        label: 'Team grid',
+        fields: [
+            { key: 'heading', type: 'text', label: 'Heading' },
+            { key: 'subhead', type: 'text', label: 'Subheading' },
+            { key: 'members', type: 'list', label: 'People', item: [
+                { key: 'name', type: 'text', label: 'Name' },
+                { key: 'role', type: 'text', label: 'Role' },
+                { key: 'avatar_url', type: 'image', label: 'Photo' },
+            ] },
+        ],
+    },
 };
 
 export const BLOCK_TYPES = Object.keys(SCHEMAS).map((type) => ({ type, label: SCHEMAS[type].label }));
@@ -145,6 +163,8 @@ const DEFAULTS = {
     rich_text: { html: '<h2>Heading</h2><p>Your text…</p>' },
     image: { image_url: null, alt: '', caption: '' },
     pricing_table: { anchor: 'pricing', heading: 'Simple, transparent pricing', subhead: 'Start free. Upgrade when your team grows.', note: '' },
+    contact: { form_heading: 'Send us a message' },
+    team_grid: { heading: 'The people behind it', subhead: '', members: [{ name: 'Name', role: 'Role' }] },
 };
 
 export function newBlock(type) {

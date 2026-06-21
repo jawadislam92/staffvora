@@ -10,6 +10,8 @@ import CtaBand from './blocks/CtaBand';
 import RichText from './blocks/RichText';
 import ImageBlock from './blocks/ImageBlock';
 import PricingTable from './blocks/PricingTable';
+import ContactBlock from './blocks/ContactBlock';
+import TeamGrid from './blocks/TeamGrid';
 
 // type → component. The builder only offers types that exist here.
 export const BLOCK_REGISTRY = {
@@ -25,6 +27,8 @@ export const BLOCK_REGISTRY = {
     rich_text: RichText,
     image: ImageBlock,
     pricing_table: PricingTable,
+    contact: ContactBlock,
+    team_grid: TeamGrid,
 };
 
 export default function BlockRenderer({ blocks = [], theme, brand, plans }) {
