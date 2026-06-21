@@ -4,13 +4,10 @@ const isApp = (u) => ['/login', '/register', '/dashboard'].includes(u || '');
 function Cta({ cta, variant }) {
     if (!cta?.label) return null;
     const base = 'inline-flex items-center justify-center rounded-full px-7 py-3.5 text-base font-semibold transition';
-    const cls = variant === 'primary'
-        ? `${base} text-white shadow-lg hover:opacity-90`
-        : `${base} bg-white text-zinc-900 ring-1 ring-zinc-300 hover:bg-zinc-50`;
-    const style = variant === 'primary' ? { background: 'var(--a)' } : undefined;
+    const cls = variant === 'primary' ? `${base} btn-primary` : `${base} btn-ghost`;
     return isApp(cta.url)
-        ? <Link href={cta.url} className={cls} style={style}>{cta.label}</Link>
-        : <a href={cta.url} className={cls} style={style}>{cta.label}{variant === 'primary' ? ' →' : ''}</a>;
+        ? <Link href={cta.url} className={cls}>{cta.label}</Link>
+        : <a href={cta.url} className={cls}>{cta.label}{variant === 'primary' ? ' →' : ''}</a>;
 }
 
 // Dark product mock — light site + dark screenshot is the category-standard look.
@@ -54,12 +51,11 @@ function DeviceMock() {
 
 export default function Hero({ data }) {
     return (
-        <section className="relative overflow-hidden">
-            <div className="pointer-events-none absolute inset-x-0 -top-40 -z-0 mx-auto h-80 max-w-5xl rounded-full opacity-10 blur-3xl" style={{ background: 'var(--a)' }} />
+        <section className="wash-hero relative overflow-hidden">
             <div className="relative mx-auto max-w-7xl px-6 pb-8 pt-16 text-center sm:pt-24">
                 {data.eyebrow && (
                     <span className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium ring-1" style={{ color: 'var(--a)', borderColor: 'var(--a)', background: 'color-mix(in srgb, var(--a) 8%, white)', '--tw-ring-color': 'color-mix(in srgb, var(--a) 25%, white)' }}>
-                        <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+                        <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: 'var(--a)' }} />
                         {data.eyebrow}
                     </span>
                 )}

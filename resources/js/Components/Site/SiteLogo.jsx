@@ -2,8 +2,8 @@
 // the "Measured System" brand guidelines). Reads as time / completion / calm
 // focus, never a watching eye. Three tones for light, dark and single-colour use.
 export function SiteMark({ size = 28, tone = 'brand' }) {
-    const ring = tone === 'reversed' ? 'rgba(255,255,255,.32)' : tone === 'mono' ? 'rgba(28,61,47,.28)' : '#BFD7C7';
-    const arc = tone === 'reversed' ? '#86C9A4' : tone === 'mono' ? '#1C3D2F' : 'var(--a, #4F9E78)';
+    const ring = tone === 'reversed' ? 'rgba(255,255,255,.32)' : tone === 'mono' ? 'var(--brand, #1E1B4B)' : 'var(--mint, #EDE9FE)';
+    const arc = tone === 'reversed' ? 'var(--hl, #A78BFA)' : tone === 'mono' ? 'var(--brand, #1E1B4B)' : 'var(--a, #4F46E5)';
     return (
         <svg width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true" className="shrink-0">
             <circle cx="24" cy="24" r="16" stroke={ring} strokeWidth="3.5" />

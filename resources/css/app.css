@@ -86,6 +86,52 @@ html { background-color: var(--bg); color: var(--text); }
     -webkit-font-smoothing: antialiased;
 }
 
+/* Dimensional ("3D") primary button — gradient fill + coloured drop shadow + a
+   1px inner top highlight, with a lift on hover. Used across the marketing site
+   for the main CTAs (header, hero, CTA bands). */
+.site-root .btn-primary {
+    background-image: linear-gradient(135deg, var(--g-from), var(--g-to));
+    color: #fff;
+    box-shadow: 0 10px 22px -8px color-mix(in srgb, var(--a) 60%, transparent),
+                inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+}
+.site-root .btn-primary:hover {
+    filter: brightness(1.06);
+    transform: translateY(-1px);
+    box-shadow: 0 16px 30px -10px color-mix(in srgb, var(--a) 65%, transparent),
+                inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.site-root .btn-primary:active { transform: translateY(0); filter: brightness(0.98); }
+
+/* Secondary (outline) button. */
+.site-root .btn-ghost {
+    background: #fff;
+    color: var(--brand);
+    border: 1px solid var(--line);
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+.site-root .btn-ghost:hover {
+    border-color: color-mix(in srgb, var(--a) 45%, var(--line));
+    box-shadow: 0 8px 18px -10px rgba(30, 27, 75, 0.25);
+    transform: translateY(-1px);
+}
+
+/* Soft gradient washes for the "colour journey" down the page. */
+.site-root .wash-hero { background:
+    radial-gradient(1100px 520px at 18% -8%, var(--lavender), transparent 60%),
+    radial-gradient(900px 480px at 100% 0%, var(--pink), transparent 55%),
+    var(--canvas); }
+.site-root .wash-tint { background: linear-gradient(180deg, var(--paper), var(--canvas)); }
+.site-root .band-deep {
+    background: radial-gradient(900px 500px at 80% -20%, color-mix(in srgb, var(--g-from) 55%, var(--brand)), transparent 60%), var(--brand);
+    color: #fff;
+}
+.site-root .band-cta {
+    background: linear-gradient(120deg, var(--g-from), var(--g-to) 60%, var(--brand));
+    color: #fff;
+}
+
 /* Native form controls follow the active theme by default, so the legacy
    white-card pages (Settings, Users, Developer, Profile) match the dark app
    shell instead of rendering as bright white boxes. Inputs that set their own

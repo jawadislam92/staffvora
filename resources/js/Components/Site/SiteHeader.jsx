@@ -40,15 +40,16 @@ export default function SiteHeader({ nav = [], brand, isAuthed }) {
     return (
         <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-[var(--canvas)]/85 backdrop-blur-xl">
             <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-5 py-3.5 sm:px-6">
-                <a href="/" aria-label={name}><SiteLogo name={name} size={28} textClass="text-lg" /></a>
-
-                <nav className="hidden items-center gap-7 lg:flex">
-                    {nav.map((item, i) => <HeaderItem key={i} item={item} />)}
-                </nav>
+                <div className="flex items-center gap-9">
+                    <a href="/" aria-label={name}><SiteLogo name={name} size={28} textClass="text-lg" /></a>
+                    <nav className="hidden items-center gap-7 lg:flex">
+                        {nav.map((item, i) => <HeaderItem key={i} item={item} />)}
+                    </nav>
+                </div>
 
                 <div className="hidden items-center gap-4 lg:flex">
                     {!isAuthed && <Link href="/login" className="text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--brand)]">Sign in</Link>}
-                    <Nav url={cta.url} label={cta.label} className="rounded-full bg-[var(--a)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--a-deep)]" />
+                    <Nav url={cta.url} label={cta.label} className="btn-primary rounded-full px-5 py-2.5 text-sm font-semibold" />
                 </div>
 
                 <button type="button" onClick={() => setOpen((o) => !o)} className="rounded-lg p-2 text-[var(--brand)] lg:hidden" aria-label="Menu" aria-expanded={open}>
@@ -73,7 +74,7 @@ export default function SiteHeader({ nav = [], brand, isAuthed }) {
                         ))}
                         <div className="mt-3 flex flex-col gap-2 border-t border-[var(--line)] pt-4">
                             {!isAuthed && <Link href="/login" className="px-1 text-sm font-semibold text-[var(--muted)]">Sign in</Link>}
-                            <Nav url={cta.url} label={cta.label} className="rounded-full bg-[var(--a)] px-5 py-2.5 text-center text-sm font-semibold text-white" />
+                            <Nav url={cta.url} label={cta.label} className="btn-primary rounded-full px-5 py-2.5 text-center text-sm font-semibold" />
                         </div>
                     </div>
                 </div>

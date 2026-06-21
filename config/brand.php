@@ -41,24 +41,30 @@ return [
 
     /*
     | Brand palette — the single source of truth for the marketing site's light
-    | theme. These exact hexes are emitted as CSS custom properties on the public
-    | site root (see the marketing palette in app.css / Site/Show), so no block
-    | ever contains a raw hex. From the "Measured System" guidelines.
+    | theme. Emitted as CSS custom properties on the public site root (Site/Show),
+    | so no block ever contains a raw hex. Change a value here = rebrand the whole
+    | site. Direction: a Hubstaff-style indigo/violet gradient identity (the owner
+    | chose to match the category's premium blue/purple look), with a pink→lavender
+    | hero and deep-indigo sections building down the page.
     */
     'colors' => [
-        'accent' => '#4F9E78',      // Sage — actions, links, focus (--a)
-        'accent_deep' => '#3C8763', // Sage deep — hover/pressed
-        'highlight' => '#86C9A4',   // Mint-bright — on dark surfaces (--hl)
-        'brand' => '#1C3D2F',       // Evergreen — primary brand / dark sections
-        'ink' => '#15201B',         // darkest text
-        'mint' => '#CFE6D7',        // soft tint
-        'paper' => '#F4F1E9',       // warm surface
-        'canvas' => '#FBFAF6',      // page background
+        'accent' => '#4F46E5',      // Indigo — actions, links, focus (--a)
+        'accent_deep' => '#4338CA', // hover/pressed
+        'grad_from' => '#8B5CF6',   // Violet — button / band gradient start
+        'grad_to' => '#4F46E5',     // Indigo — gradient end
+        'highlight' => '#A78BFA',   // Violet-300 — on dark surfaces (--hl)
+        'brand' => '#1E1B4B',       // Deep indigo navy — dark sections / CTA
+        'ink' => '#15132E',         // darkest
+        'mint' => '#EDE9FE',        // soft lavender tint
+        'paper' => '#F5F3FF',       // light lavender surface / band
+        'canvas' => '#FFFFFF',      // page background
         'surface' => '#FFFFFF',     // cards
-        'border' => '#E4E2D8',
-        'text' => '#15201B',
-        'muted' => '#4A5650',       // Slate — body/secondary
-        'subtle' => '#8A938C',
+        'border' => '#E9E7F5',
+        'text' => '#1E1B2E',
+        'muted' => '#56536E',       // body / secondary
+        'subtle' => '#9794AE',
+        'pink' => '#FCE7F3',        // hero gradient tint
+        'lavender' => '#EDE9FE',    // hero gradient tint
     ],
 
     // Web font (Google Fonts). Loaded once in the blade shell.
