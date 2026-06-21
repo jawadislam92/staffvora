@@ -327,9 +327,10 @@ Route::post('/stop-impersonating', [PlatformController::class, 'stopImpersonatin
 
 require __DIR__.'/auth.php';
 
-// Published marketing pages by slug (e.g. /pricing, /privacy). Declared LAST so
-// it can never shadow an app route — only unmatched lowercase slugs reach it,
-// and the controller 404s when there's no published page.
+// Published marketing pages by slug (e.g. /pricing, /privacy, /solutions/agencies).
+// Declared LAST so it can never shadow an app route — only unmatched lowercase
+// slugs reach it (one optional nested level allowed), and the controller 404s
+// when there's no published page.
 Route::get('/{slug}', [SitePageController::class, 'show'])
-    ->where('slug', '[a-z0-9][a-z0-9-]*')
+    ->where('slug', '[a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*)?')
     ->name('site.page');
