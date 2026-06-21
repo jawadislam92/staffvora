@@ -37,14 +37,80 @@ class PageController extends Controller
         $page = SitePage::published($slug);
         abort_unless($page, 404);
 
+        $payload = $page->publicPayload();
+        $payload['meta']['canonical'] = $slug === 'home' ? url('/') : url('/'.$slug);
+        $payload['meta']['robots'] = 'index,follow';
+
         return Inertia::render('Site/Show', [
-            'page' => $page->publicPayload(),
+            'page' => $payload,
             'theme' => SiteTheme::current()->publicPayload(),
             'brand' => $this->brandPayload(),
             'nav' => SiteNavigation::resolve(),
             'plans' => $this->plansPayload(),
+            'jsonLd' => $this->jsonLd($payload),
             'isAuthed' => (bool) $request->user(),
         ]);
+    }
+
+    /**
+     * Schema.org JSON-LD for the page: Organization + WebSite site-wide, plus a
+     * FAQPage when the page carries an FAQ block (so the Q&As can earn rich
+     * results). Rendered as a <script type="application/ld+json"> by Show.jsx.
+     */
+    private function jsonLd(array $payload): array
+    {
+        $b = config('brand');
+        $graph = [
+            [
+                '@context' => 'https://schema.org',
+                '@type' => 'Organization',
+                'name' => $b['name'] ?? 'Tracksuite',
+                'url' => url('/'),
+                'description' => $b['description'] ?? null,
+                'email' => $b['support_email'] ?? null,
+                'sameAs' => array_values(array_filter($b['socials'] ?? [])),
+            ],
+            [
+                '@context' => 'https://schema.org',
+                '@type' => 'WebSite',
+                'name' => $b['name'] ?? 'Tracksuite',
+                'url' => url('/'),
+            ],
+        ];
+
+        $faq = collect($payload['blocks'] ?? [])->firstWhere('type', 'faq');
+        $items = collect($faq['data']['items'] ?? [])->filter(fn ($i) => ! empty($i['q']) && ! empty($i['a']));
+        if ($items->isNotEmpty()) {
+            $graph[] = [
+                '@context' => 'https://schema.org',
+                '@type' => 'FAQPage',
+                'mainEntity' => $items->map(fn ($i) => [
+                    '@type' => 'Question',
+                    'name' => $i['q'],
+                    'acceptedAnswer' => ['@type' => 'Answer', 'text' => $i['a']],
+                ])->values()->all(),
+            ];
+        }
+
+        return $graph;
+    }
+
+    /** XML sitemap of every published marketing page (for search engines). */
+    public function sitemap()
+    {
+        $pages = SitePage::where('status', 'published')->get(['slug', 'updated_at']);
+
+        $urls = $pages->map(function (SitePage $p) {
+            $loc = $p->slug === 'home' ? url('/') : url('/'.$p->slug);
+
+            return '  <url><loc>'.e($loc).'</loc><lastmod>'.$p->updated_at->toAtomString().'</lastmod>'
+                .'<changefreq>weekly</changefreq><priority>'.($p->slug === 'home' ? '1.0' : '0.7').'</priority></url>';
+        })->implode("\n");
+
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>'."\n"
+            .'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'."\n".$urls."\n".'</urlset>';
+
+        return response($xml, 200, ['Content-Type' => 'application/xml']);
     }
 
     /** Public plan tiers for the PricingTable block — wired to the live catalogue. */

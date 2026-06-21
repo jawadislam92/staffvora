@@ -81,7 +81,7 @@ function initialMode() {
  * `mode`, which swaps the CSS custom properties on `.site-root`. The choice is
  * persisted and the first paint honours the visitor's OS preference.
  */
-export default function Show({ page, theme, brand, nav, plans, isAuthed }) {
+export default function Show({ page, theme, brand, nav, plans, jsonLd, isAuthed }) {
     const [mode, setMode] = useState(initialMode);
     const [ready, setReady] = useState(false);
     const meta = page?.meta || {};
@@ -134,9 +134,15 @@ export default function Show({ page, theme, brand, nav, plans, isAuthed }) {
                 {meta.robots && <meta name="robots" content={meta.robots} />}
                 <meta property="og:title" content={meta.title || effectiveBrand?.name || 'Tracksuite'} />
                 {meta.description && <meta property="og:description" content={meta.description} />}
+                {meta.canonical && <meta property="og:url" content={meta.canonical} />}
+                <meta property="og:site_name" content={effectiveBrand?.name || 'Tracksuite'} />
                 <meta property="og:type" content="website" />
                 <meta name="twitter:card" content="summary_large_image" />
             </Head>
+
+            {Array.isArray(jsonLd) && jsonLd.length > 0 && (
+                <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+            )}
 
             <SiteHeader nav={headerNav} brand={effectiveBrand} theme={theme} isAuthed={isAuthed} mode={mode} onToggleTheme={toggleTheme} />
             <main>

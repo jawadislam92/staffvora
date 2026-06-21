@@ -1,2 +1,9 @@
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /login
+Disallow: /register
+Disallow: /dashboard
+Disallow: /settings
+Disallow: /platform
+
+Sitemap: https://satimetracker.com/sitemap.xml

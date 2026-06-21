@@ -327,6 +327,10 @@ Route::post('/stop-impersonating', [PlatformController::class, 'stopImpersonatin
 
 require __DIR__.'/auth.php';
 
+// SEO: XML sitemap of every published marketing page (declared before the
+// catch-all so the literal path wins).
+Route::get('/sitemap.xml', [SitePageController::class, 'sitemap'])->name('site.sitemap');
+
 // Published marketing pages by slug (e.g. /pricing, /privacy, /solutions/agencies).
 // Declared LAST so it can never shadow an app route — only unmatched lowercase
 // slugs reach it (one optional nested level allowed), and the controller 404s
