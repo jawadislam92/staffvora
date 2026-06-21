@@ -14,10 +14,10 @@ function Cta({ cta, variant }) {
 // on coloured blobs (the lively, "alive" hero look). Pure CSS, no images needed.
 function HeroCollage() {
     return (
-        <div className="relative mx-auto aspect-[5/4] w-full max-w-xl">
+        <div className="relative mx-auto aspect-[5/4] w-full max-w-2xl lg:ml-auto lg:mr-0">
             {/* colour blobs */}
-            <div className="absolute -right-6 -top-8 h-56 w-56 rounded-full blur-2xl" style={{ background: 'radial-gradient(circle, var(--g-from), transparent 70%)', opacity: 0.55 }} />
-            <div className="absolute -bottom-6 left-2 h-48 w-48 rounded-full blur-2xl" style={{ background: 'radial-gradient(circle, var(--pink), transparent 70%)', opacity: 0.7 }} />
+            <div className="absolute -right-10 -top-10 h-72 w-72 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, var(--g-from), transparent 70%)', opacity: 0.6 }} />
+            <div className="absolute -bottom-8 left-0 h-56 w-56 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, var(--pink), transparent 70%)', opacity: 0.75 }} />
 
             {/* main dashboard card */}
             <div className="absolute left-1/2 top-1/2 w-[88%] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/70 bg-white/90 p-5 shadow-2xl ring-1 ring-black/5 backdrop-blur">
@@ -83,7 +83,7 @@ export default function Hero({ data }) {
             {/* full-bleed vibrant gradient backdrop */}
             <div className="absolute inset-0 -z-10" style={{ background: 'radial-gradient(820px 560px at 6% -6%, color-mix(in srgb, var(--g-from) 38%, white), transparent 58%), radial-gradient(760px 560px at 102% 4%, color-mix(in srgb, var(--pink) 80%, white), transparent 56%), radial-gradient(700px 520px at 70% 108%, color-mix(in srgb, var(--a) 22%, white), transparent 60%), var(--canvas)' }} />
 
-            <div className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-20 pt-14 lg:grid-cols-[1.05fr_1fr] lg:pb-28 lg:pt-24">
+            <div className="mx-auto grid max-w-[1600px] items-center gap-10 px-6 pb-20 pt-14 sm:px-10 lg:grid-cols-[1fr_1.1fr] lg:gap-16 lg:pb-28 lg:pt-24">
                 <div className="text-center lg:text-left">
                     {data.eyebrow && (
                         <span className="inline-flex items-center gap-2 rounded-full border bg-white/70 px-4 py-1.5 text-sm font-medium backdrop-blur" style={{ color: 'var(--a)', borderColor: 'color-mix(in srgb, var(--a) 25%, white)' }}>
@@ -92,9 +92,9 @@ export default function Hero({ data }) {
                         </span>
                     )}
                     <h1 className="mx-auto mt-6 max-w-2xl text-[2.6rem] font-extrabold leading-[1.04] tracking-tight text-[var(--brand)] sm:text-6xl lg:mx-0">
-                        {data.heading}{' '}
+                        {data.heading}
                         {data.heading_highlight && (
-                            <span style={{ background: 'linear-gradient(120deg,var(--g-from),var(--g-to))', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>{data.heading_highlight}</span>
+                            <span className="block" style={{ background: 'linear-gradient(120deg,var(--g-from),var(--g-to))', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>{data.heading_highlight}</span>
                         )}
                     </h1>
                     {data.subhead && <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-[var(--muted)] lg:mx-0">{data.subhead}</p>}

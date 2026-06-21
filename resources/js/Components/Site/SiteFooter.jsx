@@ -22,7 +22,7 @@ export default function SiteFooter({ nav = [], brand }) {
 
     return (
         <footer className="border-t border-[var(--line)] bg-[var(--paper)]">
-            <div className="mx-auto max-w-7xl px-5 py-16 sm:px-6">
+            <div className="mx-auto max-w-[1600px] px-5 py-16 sm:px-10">
                 <div className="grid gap-10 md:grid-cols-[1.5fr_repeat(3,1fr)] lg:grid-cols-[1.6fr_repeat(4,1fr)]">
                     <div>
                         <a href="/" aria-label={name}><SiteLogo name={name} size={28} textClass="text-lg" /></a>

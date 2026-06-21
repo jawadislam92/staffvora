@@ -39,7 +39,7 @@ export default function SiteHeader({ nav = [], brand, isAuthed }) {
 
     return (
         <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-[var(--canvas)]/85 backdrop-blur-xl">
-            <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-5 py-3.5 sm:px-6">
+            <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-6 px-5 py-3.5 sm:px-10">
                 <div className="flex items-center gap-9">
                     <a href="/" aria-label={name}><SiteLogo name={name} size={28} textClass="text-lg" /></a>
                     <nav className="hidden items-center gap-7 lg:flex">
