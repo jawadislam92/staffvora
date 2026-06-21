@@ -10,38 +10,66 @@ function Cta({ cta, variant }) {
         : <a href={cta.url} className={cls}>{cta.label}{variant === 'primary' ? ' →' : ''}</a>;
 }
 
-// Dark product mock — light site + dark screenshot is the category-standard look.
-function DeviceMock() {
+// A vibrant product collage — a main dashboard card with floating accent cards
+// on coloured blobs (the lively, "alive" hero look). Pure CSS, no images needed.
+function HeroCollage() {
     return (
-        <div className="relative mx-auto mt-16 max-w-4xl">
-            <div className="absolute -inset-4 rounded-[2rem] opacity-20 blur-2xl" style={{ background: 'var(--a)' }} />
-            <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-[#101213] shadow-2xl ring-1 ring-black/5">
-                <div className="flex items-center gap-1.5 border-b border-white/10 px-4 py-3">
-                    <span className="h-3 w-3 rounded-full bg-rose-400/80" />
-                    <span className="h-3 w-3 rounded-full bg-yellow-400/80" />
-                    <span className="h-3 w-3 rounded-full bg-emerald-400/80" />
-                    <span className="ml-3 text-xs text-zinc-500">app.tracksuite.io/dashboard</span>
+        <div className="relative mx-auto aspect-[5/4] w-full max-w-xl">
+            {/* colour blobs */}
+            <div className="absolute -right-6 -top-8 h-56 w-56 rounded-full blur-2xl" style={{ background: 'radial-gradient(circle, var(--g-from), transparent 70%)', opacity: 0.55 }} />
+            <div className="absolute -bottom-6 left-2 h-48 w-48 rounded-full blur-2xl" style={{ background: 'radial-gradient(circle, var(--pink), transparent 70%)', opacity: 0.7 }} />
+
+            {/* main dashboard card */}
+            <div className="absolute left-1/2 top-1/2 w-[88%] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/70 bg-white/90 p-5 shadow-2xl ring-1 ring-black/5 backdrop-blur">
+                <div className="mb-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <span className="h-7 w-7 rounded-lg" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' }} />
+                        <span className="text-sm font-bold text-[var(--brand)]">Today</span>
+                    </div>
+                    <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: 'color-mix(in srgb, var(--a) 12%, white)', color: 'var(--a)' }}>On track</span>
                 </div>
-                <div className="grid gap-4 p-6 sm:grid-cols-3">
-                    {[
-                        { label: 'Worked today', value: '6h 42m' },
-                        { label: 'Team active now', value: '14' },
-                        { label: 'This week', value: '31h 05m' },
-                    ].map((c) => (
-                        <div key={c.label} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                            <div className="text-[11px] uppercase tracking-wide text-zinc-500">{c.label}</div>
-                            <div className="mt-1 text-2xl font-bold" style={{ color: 'var(--a)' }}>{c.value}</div>
-                        </div>
-                    ))}
-                    <div className="sm:col-span-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                        <div className="mb-3 flex items-center justify-between text-xs text-zinc-500">
-                            <span className="uppercase tracking-wide">This week</span><span>Mon – Fri</span>
-                        </div>
-                        <div className="flex items-end gap-3" style={{ height: 90 }}>
-                            {[55, 80, 65, 95, 45].map((h, i) => (
-                                <div key={i} className="flex-1 rounded-t-md" style={{ height: `${h}%`, background: 'var(--a)', opacity: 0.85 }} />
-                            ))}
-                        </div>
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl bg-[var(--paper)] p-3">
+                        <div className="text-[11px] font-medium text-[var(--subtle)]">Worked today</div>
+                        <div className="mt-1 text-2xl font-extrabold" style={{ color: 'var(--a)' }}>6h 42m</div>
+                    </div>
+                    <div className="rounded-xl bg-[var(--paper)] p-3">
+                        <div className="text-[11px] font-medium text-[var(--subtle)]">Team active</div>
+                        <div className="mt-1 text-2xl font-extrabold text-[var(--brand)]">14</div>
+                    </div>
+                </div>
+                <div className="mt-3 rounded-xl bg-[var(--paper)] p-3">
+                    <div className="mb-2 flex items-center justify-between text-[11px] text-[var(--subtle)]"><span>This week</span><span>Mon–Fri</span></div>
+                    <div className="flex items-end gap-2" style={{ height: 64 }}>
+                        {[52, 78, 64, 96, 70].map((h, i) => (
+                            <div key={i} className="flex-1 rounded-t-md" style={{ height: `${h}%`, background: 'linear-gradient(180deg,var(--g-from),var(--g-to))' }} />
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* floating "focus" card */}
+            <div className="absolute -left-2 top-4 rounded-2xl border border-white/70 bg-white p-3.5 shadow-xl ring-1 ring-black/5">
+                <div className="flex items-center gap-2.5">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full text-white" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' }}>
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg>
+                    </span>
+                    <div>
+                        <div className="text-[11px] font-medium text-[var(--subtle)]">Focus</div>
+                        <div className="text-sm font-bold text-[var(--brand)]">92% today</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* floating "clock-in" card */}
+            <div className="absolute -right-3 bottom-6 rounded-2xl border border-white/70 bg-white p-3.5 shadow-xl ring-1 ring-black/5">
+                <div className="flex items-center gap-2.5">
+                    <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[var(--mint)] text-[var(--a)] font-bold">A
+                        <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
+                    </span>
+                    <div>
+                        <div className="text-[11px] font-medium text-[var(--subtle)]">Clocked in</div>
+                        <div className="text-sm font-bold text-[var(--brand)]">9:02 am</div>
                     </div>
                 </div>
             </div>
@@ -51,31 +79,37 @@ function DeviceMock() {
 
 export default function Hero({ data }) {
     return (
-        <section className="wash-hero relative overflow-hidden">
-            <div className="relative mx-auto max-w-7xl px-6 pb-8 pt-16 text-center sm:pt-24">
-                {data.eyebrow && (
-                    <span className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium ring-1" style={{ color: 'var(--a)', borderColor: 'var(--a)', background: 'color-mix(in srgb, var(--a) 8%, white)', '--tw-ring-color': 'color-mix(in srgb, var(--a) 25%, white)' }}>
-                        <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: 'var(--a)' }} />
-                        {data.eyebrow}
-                    </span>
-                )}
-                <h1 className="mx-auto mt-6 max-w-4xl text-4xl font-extrabold leading-[1.05] tracking-tight text-zinc-900 sm:text-6xl">
-                    {data.heading}
-                    {data.heading_highlight && <span className="block" style={{ color: 'var(--a)' }}>{data.heading_highlight}</span>}
-                </h1>
-                {data.subhead && <p className="mx-auto mt-6 max-w-2xl text-lg text-zinc-600">{data.subhead}</p>}
-                <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                    <Cta cta={data.primary_cta} variant="primary" />
-                    <Cta cta={data.secondary_cta} variant="secondary" />
-                </div>
-                {data.note && <p className="mt-4 text-sm text-zinc-500">{data.note}</p>}
-                {data.image_url ? (
-                    <div className="mx-auto mt-16 max-w-5xl overflow-hidden rounded-2xl border border-zinc-200 shadow-2xl">
-                        <img src={data.image_url} alt="" className="w-full" />
+        <section className="relative isolate overflow-hidden">
+            {/* full-bleed vibrant gradient backdrop */}
+            <div className="absolute inset-0 -z-10" style={{ background: 'radial-gradient(820px 560px at 6% -6%, color-mix(in srgb, var(--g-from) 38%, white), transparent 58%), radial-gradient(760px 560px at 102% 4%, color-mix(in srgb, var(--pink) 80%, white), transparent 56%), radial-gradient(700px 520px at 70% 108%, color-mix(in srgb, var(--a) 22%, white), transparent 60%), var(--canvas)' }} />
+
+            <div className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-20 pt-14 lg:grid-cols-[1.05fr_1fr] lg:pb-28 lg:pt-24">
+                <div className="text-center lg:text-left">
+                    {data.eyebrow && (
+                        <span className="inline-flex items-center gap-2 rounded-full border bg-white/70 px-4 py-1.5 text-sm font-medium backdrop-blur" style={{ color: 'var(--a)', borderColor: 'color-mix(in srgb, var(--a) 25%, white)' }}>
+                            <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: 'var(--a)' }} />
+                            {data.eyebrow}
+                        </span>
+                    )}
+                    <h1 className="mx-auto mt-6 max-w-2xl text-[2.6rem] font-extrabold leading-[1.04] tracking-tight text-[var(--brand)] sm:text-6xl lg:mx-0">
+                        {data.heading}{' '}
+                        {data.heading_highlight && (
+                            <span style={{ background: 'linear-gradient(120deg,var(--g-from),var(--g-to))', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>{data.heading_highlight}</span>
+                        )}
+                    </h1>
+                    {data.subhead && <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-[var(--muted)] lg:mx-0">{data.subhead}</p>}
+                    <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start">
+                        <Cta cta={data.primary_cta} variant="primary" />
+                        <Cta cta={data.secondary_cta} variant="secondary" />
                     </div>
-                ) : (
-                    <DeviceMock />
-                )}
+                    {data.note && <p className="mt-4 text-sm text-[var(--subtle)]">{data.note}</p>}
+                </div>
+
+                <div className="relative">
+                    {data.image_url
+                        ? <div className="overflow-hidden rounded-2xl border border-white/70 shadow-2xl"><img src={data.image_url} alt="" className="w-full" /></div>
+                        : <HeroCollage />}
+                </div>
             </div>
         </section>
     );
