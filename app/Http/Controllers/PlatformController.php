@@ -264,7 +264,9 @@ class PlatformController extends Controller
         );
 
         // config('app.url') is the customer (apex) host; the signed path rides on it.
-        return redirect()->away(rtrim(config('app.url'), '/').$relative);
+        // Inertia::location forces a full cross-host browser visit (a plain redirect
+        // from an Inertia POST would be swallowed by the XHR, never navigating).
+        return Inertia::location(rtrim(config('app.url'), '/').$relative);
     }
 
     /**
@@ -292,7 +294,9 @@ class PlatformController extends Controller
         $request->session()->forget(['platform_impersonator', 'impersonator_id']);
         Auth::guard('web')->logout();
 
-        return redirect()->route('platform.index');
+        // Cross-host (customer -> platform): force a full browser visit so the
+        // Inertia POST actually navigates back to the portal.
+        return Inertia::location(route('platform.index'));
     }
 }
 
