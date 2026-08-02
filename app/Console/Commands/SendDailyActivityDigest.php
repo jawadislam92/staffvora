@@ -15,7 +15,7 @@ class SendDailyActivityDigest extends Command
 
     public function handle(ActivityDigestService $service): int
     {
-        $timezone = config('services.slack_reports.timezone', 'Asia/Karachi');
+        $timezone = \App\Support\BusinessTime::tz();
 
         if ($this->option('start') || $this->option('end')) {
             $start = Carbon::parse($this->option('start') ?: $this->option('end'), $timezone)->startOfDay();

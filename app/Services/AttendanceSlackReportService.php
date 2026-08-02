@@ -7,28 +7,33 @@ use App\Models\TimeEntry;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Http;
 use RuntimeException;
-use Throwable;
 
 class AttendanceSlackReportService
 {
     private const MAX_TABLE_DATA_ROWS = 98;
 
+    public function __construct(private SlackReportDestination $destination) {}
+
+    /**
+     * Reports go to the WORKSPACE'S OWN Slack connection. This used to be one
+     * platform-wide incoming webhook, so every customer's attendance table
+     * landed in a single channel none of them owned — see SlackReportDestination.
+     */
     public function configured(): bool
     {
-        return filled(config('services.slack_reports.webhook_url'));
+        return $this->destination->configured();
     }
 
     public function sendMonthly(string $month, array $userIds, array $includeFields): array
     {
         if (! $this->configured()) {
-            throw new RuntimeException('Slack reporting is not configured.');
+            throw new RuntimeException($this->destination->unconfiguredMessage());
         }
 
-        $startDate = Carbon::createFromFormat('Y-m-d', "{$month}-01", config('services.slack_reports.timezone'))->startOfDay();
+        $startDate = Carbon::createFromFormat('Y-m-d', "{$month}-01", \App\Support\BusinessTime::tz())->startOfDay();
         $endDate = $startDate->copy()->endOfMonth();
-        $now = Carbon::now(config('services.slack_reports.timezone'));
+        $now = Carbon::now(\App\Support\BusinessTime::tz());
         $today = $now->copy()->startOfDay();
         $includeFields = array_values(array_intersect($includeFields, [
             'present',
@@ -157,18 +162,7 @@ class AttendanceSlackReportService
             ],
         ];
 
-        try {
-            $response = Http::asJson()
-                ->timeout(10)
-                ->retry(2, 250)
-                ->post(config('services.slack_reports.webhook_url'), $payload);
-        } catch (Throwable) {
-            throw new RuntimeException('The app could not connect to Slack.');
-        }
-
-        if ($response->failed()) {
-            throw new RuntimeException('Slack did not accept the attendance report.');
-        }
+        $this->destination->send($payload);
 
         return [
             'month' => $period,
@@ -233,7 +227,7 @@ class AttendanceSlackReportService
             return false;
         }
 
-        $timezone = config('services.slack_reports.timezone');
+        $timezone = \App\Support\BusinessTime::tz();
         $shiftStart = $date->copy()->setTimezone($timezone)->setTimeFromTimeString($user->shift_start_time->format('H:i:s'));
         $allowedClockIn = $shiftStart->copy()->addMinutes((int) ($user->shift_grace_minutes ?? 0));
         $clockInTime = Carbon::parse($firstClockIn->action_timestamp)->setTimezone($timezone);
@@ -248,7 +242,7 @@ class AttendanceSlackReportService
         }
 
         $absenceDueAt = $date->copy()
-            ->setTimezone(config('services.slack_reports.timezone'))
+            ->setTimezone(\App\Support\BusinessTime::tz())
             ->setTimeFromTimeString($user->shift_start_time->format('H:i:s'))
             ->addMinutes((int) ($user->shift_grace_minutes ?? 0));
 
@@ -299,7 +293,7 @@ class AttendanceSlackReportService
         $currentBreakStart = null;
 
         foreach ($entries as $entry) {
-            $entryTime = Carbon::parse($entry->action_timestamp)->setTimezone(config('services.slack_reports.timezone'));
+            $entryTime = Carbon::parse($entry->action_timestamp)->setTimezone(\App\Support\BusinessTime::tz());
 
             if ($entry->action_type === 'clock_in') {
                 $currentSessionStart = $entryTime;

@@ -1,25 +1,32 @@
-import InputError from '@/Components/InputError';
-import InputLabel from '@/Components/InputLabel';
-import PrimaryButton from '@/Components/PrimaryButton';
-import TextInput from '@/Components/TextInput';
-import Avatar from '@/Components/Avatar';
 import { Link, useForm, usePage } from '@inertiajs/react';
 import { Transition } from '@headlessui/react';
 import { useRef } from 'react';
+import Avatar from '@/Components/Avatar';
+import { Button, Field, Input } from '@/Components/ui';
 
-export default function UpdateProfileInformation({ mustVerifyEmail, status, className = '' }) {
-    const user = usePage().props.auth.user;
+export default function UpdateProfileInformation({
+    user: userProp,
+    mustVerifyEmail,
+    status,
+    preview = false,
+    className = '',
+}) {
+    // In preview there is no Inertia page context, so fall back to the passed
+    // sample user. Real behavior (usePage) is preserved otherwise.
+    const pageUser = preview ? null : usePage().props.auth.user;
+    const user = userProp || pageUser;
     const fileInputRef = useRef();
 
     const { data, setData, post, errors, processing, recentlySuccessful } = useForm({
         name: user.name,
         email: user.email,
         avatar: null,
-        _method: 'PATCH'
+        _method: 'PATCH',
     });
 
     const submit = (e) => {
         e.preventDefault();
+        if (preview) return;
 
         if (data.avatar) {
             // Use POST with _method PATCH for file uploads
@@ -48,20 +55,11 @@ export default function UpdateProfileInformation({ mustVerifyEmail, status, clas
 
     return (
         <section className={className}>
-            <header>
-                <h2 className="text-lg font-medium text-body">Profile Information</h2>
-
-                <p className="mt-1 text-sm text-muted">
-                    Update your account's profile information and email address.
-                </p>
-            </header>
-
-            <form onSubmit={submit} className="mt-6 space-y-6">
-                <div>
-                    <InputLabel value="Profile Picture" />
-                    <div className="mt-2 flex items-center space-x-4">
-                        <Avatar user={user} size="lg" />
-                        <div className="flex flex-col space-y-2">
+            <form onSubmit={submit} className="space-y-6">
+                <Field label="Profile Picture">
+                    <div className="flex items-center gap-4">
+                        <Avatar user={{ ...user, avatar: data.avatar ? null : user.avatar }} size="lg" />
+                        <div className="flex flex-col gap-2">
                             <input
                                 ref={fileInputRef}
                                 type="file"
@@ -70,20 +68,24 @@ export default function UpdateProfileInformation({ mustVerifyEmail, status, clas
                                 className="hidden"
                                 id="avatar-upload"
                             />
-                            <label
+                            <Button
+                                as="label"
                                 htmlFor="avatar-upload"
-                                className="cursor-pointer inline-flex items-center px-4 py-2 bg-gray-800 border border-transparent rounded-md font-semibold text-xs text-body uppercase tracking-widest hover:bg-gray-700 active:bg-gray-900 focus:outline-none focus:border-gray-900 focus:ring ring-gray-300"
+                                variant="secondary"
+                                size="sm"
+                                className="cursor-pointer"
                             >
                                 Choose New Picture
-                            </label>
+                            </Button>
                             {(user.avatar || data.avatar) && (
-                                <button
+                                <Button
                                     type="button"
+                                    variant="danger"
+                                    size="sm"
                                     onClick={removeAvatar}
-                                    className="inline-flex items-center px-4 py-2 bg-red-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-red-500 active:bg-red-700 focus:outline-none focus:border-red-700 focus:ring ring-red-300"
                                 >
                                     Remove Picture
-                                </button>
+                                </Button>
                             )}
                         </div>
                     </div>
@@ -92,57 +94,49 @@ export default function UpdateProfileInformation({ mustVerifyEmail, status, clas
                             New picture selected: {data.avatar.name}
                         </p>
                     )}
-                    <InputError className="mt-2" message={errors.avatar} />
-                </div>
+                    {errors.avatar && (
+                        <p className="mt-2 text-xs text-danger">{errors.avatar}</p>
+                    )}
+                </Field>
 
-                <div>
-                    <InputLabel htmlFor="name" value="Name" />
-
-                    <TextInput
+                <Field label="Name" htmlFor="name" error={errors.name} required>
+                    <Input
                         id="name"
-                        className="mt-1 block w-full"
                         value={data.name}
                         onChange={(e) => setData('name', e.target.value)}
                         required
-                        isFocused
+                        autoFocus
                         autoComplete="name"
                     />
+                </Field>
 
-                    <InputError className="mt-2" message={errors.name} />
-                </div>
-
-                <div>
-                    <InputLabel htmlFor="email" value="Email" />
-
-                    <TextInput
+                <Field label="Email" htmlFor="email" error={errors.email} required>
+                    <Input
                         id="email"
                         type="email"
-                        className="mt-1 block w-full"
                         value={data.email}
                         onChange={(e) => setData('email', e.target.value)}
                         required
                         autoComplete="username"
                     />
-
-                    <InputError className="mt-2" message={errors.email} />
-                </div>
+                </Field>
 
                 {mustVerifyEmail && user.email_verified_at === null && (
-                    <div>
-                        <p className="text-sm mt-2 text-body">
-                            Your email address is unverified.
+                    <div className="rounded-lg bg-warning-soft px-4 py-3">
+                        <p className="text-sm text-warning">
+                            Your email address is unverified.{' '}
                             <Link
                                 href={route('verification.send')}
                                 method="post"
                                 as="button"
-                                className="underline text-sm text-muted hover:text-body rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                className="rounded-md font-medium text-accent underline hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                             >
                                 Click here to re-send the verification email.
                             </Link>
                         </p>
 
                         {status === 'verification-link-sent' && (
-                            <div className="mt-2 font-medium text-sm text-green-600">
+                            <div className="mt-2 text-sm font-medium text-success">
                                 A new verification link has been sent to your email address.
                             </div>
                         )}
@@ -150,7 +144,9 @@ export default function UpdateProfileInformation({ mustVerifyEmail, status, clas
                 )}
 
                 <div className="flex items-center gap-4">
-                    <PrimaryButton disabled={processing}>Save</PrimaryButton>
+                    <Button type="submit" loading={processing} disabled={processing}>
+                        Save
+                    </Button>
 
                     <Transition
                         show={recentlySuccessful}

@@ -4,9 +4,17 @@ const os = require('node:os');
 const { ipcMain, BrowserWindow, app, safeStorage } = require('electron');
 const api = require('./api');
 const store = require('./store');
+const diag = require('./diag');
+const report = require('./report');
 const tracker = require('./trackerService');
 const tray = require('./tray');
 const updater = require('./updater');
+const collector = require('./collector');
+
+// Levels the renderer is allowed to raise. The renderer is the least trusted
+// part of the agent, so its events are whitelisted and re-labelled here — it
+// can never invent an arbitrary event name that the server-side watchdog reads.
+const RENDERER_EVENTS = new Set(['renderer_error', 'renderer_unhandled_rejection', 'renderer_boot_failed']);
 
 const PREF_DEFAULTS = {
   autoStartTracking: false,
@@ -51,9 +59,23 @@ function register() {
     const user = await api.login(payload);
     if (payload?.remember) saveCredentials(payload.email, payload.password);
     else store.delete('savedLogin');
+    // Scope the local capture log to this employee, then push whatever
+    // telemetry was buffered before we had a token.
+    try { diag.setUser(user.id); } catch { /* ignore */ }
+    report.info('signed_in', 'employee signed in on this machine');
+    report.flush().catch(() => {});
+    // A shared PC can change hands mid-day, so the inventory has to be re-filed
+    // under whoever is signed in now. Signing in also clears any entitlement
+    // suppression, so an operator who just granted the add-on does not have to
+    // wait out the collector's quiet window. Fire-and-forget, off the login path.
+    collector.onSignIn();
+    setTimeout(() => { collector.run('login').catch(() => {}); }, 5_000).unref?.();
     return user;
   });
   ipcMain.handle('auth:logout', async () => {
+    // Best-effort: get this shift's telemetry up while the token is still valid.
+    report.info('signed_out', 'employee signed out on this machine');
+    try { await report.flush({ force: true }); } catch { /* ignore */ }
     await api.logout();
     return { ok: true };
   });
@@ -131,7 +153,40 @@ function register() {
 
   // ---- Attendance clock (clock in/out, breaks) ----
   ipcMain.handle('timeclock:status', async () => api.timeClockStatus());
-  ipcMain.handle('timeclock:act', async (_evt, actionType) => api.timeClockAct(actionType));
+  ipcMain.handle('timeclock:act', async (_evt, actionType) => {
+    const res = await api.timeClockAct(actionType);
+    // Break transitions are what stop the capture watchdog from crying
+    // "antivirus block" at someone who is simply on a break, so the agent's
+    // view of them is worth having next to the server's record.
+    report.info('time_clock', 'clock action: ' + String(actionType).slice(0, 20), {
+      action: String(actionType).slice(0, 20),
+      tracking: !!tracker.status().running,
+    });
+    // Clocking in is the one moment we know for certain that this person is at
+    // this PC and working, so it is the right time to make sure their machine
+    // appears on the compliance dashboard for today. Debounced inside the
+    // collector, so a clock-in right after the launch sweep costs nothing.
+    if (actionType === 'clock_in') {
+      setTimeout(() => { collector.run('clock_in').catch(() => {}); }, 3_000).unref?.();
+    }
+    return res;
+  });
+
+  // ---- Client-side (renderer) error reporting ----
+  // The renderer forwards window.onerror / unhandledrejection here so a UI
+  // crash (white screen, failed boot) is visible server-side instead of only to
+  // the employee. Whitelisted event names, capped payload, best-effort.
+  ipcMain.handle('diag:report', (_evt, payload) => {
+    try {
+      const event = RENDERER_EVENTS.has(payload?.event) ? payload.event : 'renderer_error';
+      report.error(event, String(payload?.message ?? '').slice(0, 2000), {
+        source: String(payload?.source ?? '').slice(0, 200) || null,
+        line: Number.isFinite(payload?.line) ? payload.line : null,
+        stack: payload?.stack ? String(payload.stack).split('\n').slice(0, 6).join('\n') : null,
+      });
+    } catch { /* reporting is best-effort */ }
+    return { ok: true };
+  });
 
   // ---- Tracker ----
   ipcMain.handle('tracker:start', async (_evt, opts) => {

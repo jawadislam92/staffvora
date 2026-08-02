@@ -64,7 +64,7 @@ class PageController extends Controller
             [
                 '@context' => 'https://schema.org',
                 '@type' => 'Organization',
-                'name' => $b['name'] ?? 'Tracksuite',
+                'name' => $b['name'] ?? 'Staffvora',
                 'url' => url('/'),
                 'description' => $b['description'] ?? null,
                 'email' => $b['support_email'] ?? null,
@@ -73,7 +73,7 @@ class PageController extends Controller
             [
                 '@context' => 'https://schema.org',
                 '@type' => 'WebSite',
-                'name' => $b['name'] ?? 'Tracksuite',
+                'name' => $b['name'] ?? 'Staffvora',
                 'url' => url('/'),
             ],
         ];

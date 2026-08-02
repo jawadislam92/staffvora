@@ -10,6 +10,7 @@ use App\Models\TrackingScreenshot;
 use App\Models\TrackingSession;
 use App\Models\UpworkProfile;
 use App\Models\User;
+use App\Services\TenantProvisioner;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Bus;
@@ -53,6 +54,36 @@ class DesktopApiTest extends TestCase
         ])->assertStatus(422);
     }
 
+    public function test_desktop_login_rejects_a_suspended_workspace_without_issuing_a_token(): void
+    {
+        $owner = app(TenantProvisioner::class)->provision('Suspended Co', 'Owner', 'owner@suspended.test', 'secret-pass-123')['owner'];
+        $owner->organization->update(['status' => \App\Models\Organization::STATUS_SUSPENDED]);
+
+        $this->postJson('/api/desktop/login', [
+            'email' => $owner->email,
+            'password' => 'secret-pass-123',
+            'device_name' => 'Test Device',
+        ])
+            ->assertForbidden()
+            ->assertJsonPath('code', 'workspace_suspended');
+
+        $this->assertSame(0, $owner->tokens()->count());
+    }
+
+    public function test_existing_desktop_token_is_blocked_after_subscription_expiry(): void
+    {
+        $owner = app(TenantProvisioner::class)->provision('Expired Co', 'Owner', 'owner@expired.test', 'secret-pass-123')['owner'];
+        $owner->organization->subscription->update([
+            'status' => 'trialing',
+            'trial_ends_at' => now()->subMinute(),
+        ]);
+        Sanctum::actingAs($owner, ['desktop-tracker']);
+
+        $this->getJson('/api/desktop/me')
+            ->assertStatus(402)
+            ->assertJsonPath('code', 'subscription_required');
+    }
+
     public function test_me_endpoint_requires_token(): void
     {
         $this->getJson('/api/desktop/me')->assertUnauthorized();
@@ -82,7 +113,9 @@ class DesktopApiTest extends TestCase
 
     public function test_clients_endpoint_returns_profile_via_pivot_when_legacy_column_is_null(): void
     {
-        $user = User::factory()->create();
+        $user = app(TenantProvisioner::class)
+            ->provision('Agency Metadata Co', 'Owner', 'owner@agency-metadata.test', 'secret-pass-123', null, 14, 'agency')['owner'];
+        app(\App\Tenancy\CurrentOrganization::class)->set($user->organization_id);
         Sanctum::actingAs($user, ['desktop-tracker']);
 
         $profile = UpworkProfile::create(['name' => 'Pivot Profile']);
@@ -294,10 +327,13 @@ class DesktopApiTest extends TestCase
 
         $response = $this->getJson('/api/desktop/sessions/week')->assertOk();
 
+        // The week chart buckets by the workspace's business timezone, so expected
+        // day labels are computed there too (storage is UTC).
+        $tz = config('app.business_timezone') ?: config('app.timezone');
         $days = $response->json('days');
         $this->assertCount(7, $days);
-        $this->assertSame(now()->subDays(6)->toDateString(), $days[0]['date']);
-        $this->assertSame(now()->toDateString(), $days[6]['date']);
+        $this->assertSame(now($tz)->subDays(6)->toDateString(), $days[0]['date']);
+        $this->assertSame(now($tz)->toDateString(), $days[6]['date']);
         $this->assertTrue($days[6]['is_today']);
         $this->assertSame(3600, $days[6]['total_seconds']);
         $this->assertSame(1800, $days[4]['total_seconds']);
@@ -468,6 +504,8 @@ class DesktopApiTest extends TestCase
             ],
         ])->assertStatus(201)->assertJson(['accepted' => 2]);
 
+        // Scoped count: the bulk insert() must stamp organization_id by hand,
+        // or these rows land NULL and fall outside the OrganizationScope forever.
         $this->assertSame(2, TrackingActivitySample::count());
     }
 

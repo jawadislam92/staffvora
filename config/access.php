@@ -60,6 +60,10 @@ return [
                 'label' => 'Mark attendance manually',
                 'description' => 'Can override attendance statuses (Present, Leave, Holiday…) and schedule company-wide marks. Every change is recorded in the audit history.',
             ],
+            'attendance.edit_times' => [
+                'label' => 'Edit clock-in/out times',
+                'description' => 'Can set or correct an employee\'s clock-in, clock-out and break times for a day — e.g. when they forgot to clock in — and clock out someone who was left running. Every edit is recorded in the audit history.',
+            ],
             'attendance.export' => [
                 'label' => 'Export attendance',
                 'description' => 'Allows downloading attendance data as CSV.',
@@ -121,14 +125,66 @@ return [
                 'description' => 'Bulk CSV import and export of the entire client list.',
             ],
         ],
-        'Upwork Profiles' => [
+        'Profiles' => [
             'profiles.view' => [
                 'label' => 'View profiles',
-                'description' => 'Opens the Upwork profiles list used to attribute tracked work.',
+                'description' => 'Opens the profiles list used to attribute tracked work (an optional dimension used by agencies). Only visible when the workspace has Profiles enabled.',
             ],
             'profiles.manage' => [
                 'label' => 'Manage profiles',
-                'description' => 'Can create, edit, and delete Upwork profiles.',
+                'description' => 'Can create, edit, and delete profiles.',
+            ],
+        ],
+        'Billing' => [
+            'billing.manage' => [
+                'label' => 'Manage billing & add-ons',
+                'description' => 'Opens the billing hub for changes: switch the billing cycle between monthly and yearly, add or remove paid add-ons for the workspace, and edit the company billing details that appear on invoices. Adding an add-on records a charge your company owes — it does not take payment. Everyone can VIEW the billing page (it is where an expired workspace is sent); this grants the ability to change it.',
+            ],
+        ],
+        'Timesheets' => [
+            'timesheets.approve' => [
+                'label' => 'Approve timesheets',
+                'description' => 'Opens the approval queue and can approve or send back OTHER people\'s timesheets for a pay period. Approving freezes that period\'s time entries against every edit and delete, so it is the number payroll pays against. It deliberately does NOT allow approving your own.',
+            ],
+            'timesheets.approve_own' => [
+                'label' => 'Approve own timesheet',
+                'description' => 'The higher grant: also allowed to approve their OWN timesheet. Meant for a workspace owner or a solo operator who would otherwise have nobody to sign theirs off.',
+            ],
+            'timesheets.reopen' => [
+                'label' => 'Reopen approved timesheets',
+                'description' => 'Unlocks an approved pay period so its time can be corrected. Separate from approving because it un-freezes a number payroll may already have paid. Every reopen is recorded against the person\'s name.',
+            ],
+        ],
+        'Insights' => [
+            'insights.view' => [
+                'label' => 'View Insights',
+                'description' => 'Opens the Insights page: how each person\'s hours compare with their own shift target, the team activity gauge, billable vs non-billable time, hours by work category, the worked-hours trend, and the derived highlights.',
+            ],
+        ],
+        'Machine Compliance' => [
+            'compliance.view' => [
+                'label' => 'View machine compliance',
+                'description' => 'Opens the Machine Compliance dashboard: what is installed and running on every team PC, matched against the blocklist, per machine, per employee and per extension.',
+            ],
+            'compliance.manage' => [
+                'label' => 'Acknowledge findings & remove machines',
+                'description' => 'Can acknowledge a finding (seen — stays visible, stays quiet), ignore it on that machine forever, reopen it, and permanently delete a decommissioned machine together with its whole compliance history.',
+            ],
+        ],
+        'Schedule' => [
+            'shift.edit_own' => [
+                'label' => 'Change own shift for a day',
+                'description' => 'Lets a person set a one-day shift change for themselves — a different start time and/or length on a specific date (e.g. start earlier on Friday because they are off Saturday). Today or future dates only. It only moves that day\'s schedule (and the auto clock-out window); it never creates clock-ins or hours, so it cannot inflate time.',
+            ],
+            'shift.manage_all' => [
+                'label' => 'Change anyone\'s shift for a day',
+                'description' => 'Set or remove a one-day shift change for any employee, including backdated days — e.g. to approve a teammate\'s adjusted day. Every change is recorded in the audit history.',
+            ],
+        ],
+        'Help & Feedback' => [
+            'feedback.manage' => [
+                'label' => 'Manage the feedback inbox',
+                'description' => 'Opens the Feedback Inbox: questions and feature requests submitted by the team. Can change a request\'s status and reply. Everyone can submit feedback and see their own; this grants the triage view.',
             ],
         ],
         'System' => [

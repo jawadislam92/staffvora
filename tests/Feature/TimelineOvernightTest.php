@@ -16,7 +16,10 @@ class TimelineOvernightTest extends TestCase
 
     private function makeOvernightSession(User $user): TrackingSession
     {
-        $tz = config('app.timezone');
+        // These timestamps are business-time (the zone the timeline buckets in),
+        // not storage-time (UTC). For org-less tests that is the configured
+        // fallback business timezone.
+        $tz = config('app.business_timezone') ?: config('app.timezone');
 
         // Friday 21:20 -> Saturday 03:00 business time, 5h40m (20400s) tracked.
         $session = TrackingSession::create([

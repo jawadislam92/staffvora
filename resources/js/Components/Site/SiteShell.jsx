@@ -136,7 +136,7 @@ export default function SiteShell({ brand, theme, nav, jsonLd, isAuthed, meta = 
     const headerNav = (theme?.nav_links?.length ? theme.nav_links : nav?.header) || [];
     const footerNav = (theme?.footer_columns?.length ? theme.footer_columns : nav?.footer) || [];
     const eb = siteEffectiveBrand(brand, theme);
-    const fallbackTitle = eb?.name || 'Tracksuite';
+    const fallbackTitle = eb?.name || 'Staffvora';
 
     return (
         <div

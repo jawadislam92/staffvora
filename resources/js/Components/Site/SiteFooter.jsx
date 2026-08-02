@@ -16,7 +16,7 @@ const SOCIALS = [
 ];
 
 export default function SiteFooter({ nav = [], brand }) {
-    const name = brand?.name || 'Tracksuite';
+    const name = brand?.name || 'Staffvora';
     const socials = brand?.socials || {};
     const wa = (brand?.whatsapp || '').replace(/\D/g, '');
 

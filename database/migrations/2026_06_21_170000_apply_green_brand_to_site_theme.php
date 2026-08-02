@@ -22,7 +22,7 @@ return new class extends Migration
         }
 
         DB::table('site_themes')->where('id', 1)->update([
-            'site_name' => config('brand.name', 'Tracksuite'),
+            'site_name' => config('brand.name', 'Staffvora'),
             'tagline' => config('brand.tagline'),
             'accent_color' => config('brand.colors.accent', '#4F9E78'),
             'highlight_color' => config('brand.colors.highlight', '#86C9A4'),

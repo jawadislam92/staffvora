@@ -112,7 +112,10 @@ class PlatformConsoleTest extends TestCase
         $this->actingAs($this->operator(), 'platform')->put(route('platform.plans.update', $free->id), [
             'name' => 'Free',
             'price_cents' => 0,
-            'is_public' => true,
+            // `visibility` replaced the `is_public` boolean: it carries the whole
+            // public/hidden/custom/legacy lifecycle, and `is_public` is derived
+            // from it so nothing can disagree.
+            'visibility' => 'public',
             'entitlements' => $entitlements,
         ])->assertRedirect()->assertSessionHasNoErrors();
 

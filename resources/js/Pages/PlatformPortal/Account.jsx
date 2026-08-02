@@ -1,16 +1,36 @@
 import { Head, useForm, usePage } from '@inertiajs/react';
-import PlatformLayout from '@/Layouts/PlatformLayout';
+import PlatformLayout, { PlatformPageHeader } from '@/Layouts/PlatformLayout';
+import { Card, CardHeader, Field, Input, Button, Badge } from '@/Components/ui';
 
-export default function Account({ account }) {
-    const flash = usePage().props.flash || {};
+// Offline preview sample — a mock operator account so `preview` routes render
+// with no authenticated platform user / no server round-trip.
+const DEV_SAMPLE = {
+    account: { name: 'Jawad', email: 'jawad@staffvora.test', role: 'owner' },
+};
+
+/**
+ * Account — the signed-in operator's own profile + password form.
+ * @param {object} props
+ * @param {{name:string,email:string,role:string}} [props.account] Operator profile (server-provided).
+ * @param {boolean} [props.preview] Render fully offline from DEV_SAMPLE (mock data).
+ */
+export default function Account({ account, preview = false }) {
+    const account_ = account || (preview ? DEV_SAMPLE.account : { name: '', email: '', role: '' });
+
+    // In preview there is no Inertia page context; guard usePage().
+    const page = preview ? { props: {} } : usePage();
+    const flash = page.props.flash || {};
+
     const form = useForm({
-        name: account.name || '',
+        name: account_.name || '',
         current_password: '',
         password: '',
         password_confirmation: '',
     });
+
     const submit = (e) => {
         e.preventDefault();
+        if (preview) return;
         form.put(route('platform.account.update'), {
             preserveScroll: true,
             onSuccess: () => form.reset('current_password', 'password', 'password_confirmation'),
@@ -18,49 +38,98 @@ export default function Account({ account }) {
     };
 
     return (
-        <PlatformLayout title="Account" header={<h2 className="text-xl font-semibold text-white">Your account</h2>}>
+        <PlatformLayout
+            title="Account"
+            preview={preview}
+            header={<PlatformPageHeader title="Your account" description="Manage your operator profile and sign-in password." />}
+        >
             <Head title="Account" />
-            <div className="mx-auto max-w-lg space-y-4">
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-                    <div className="mb-4 flex items-center justify-between text-sm">
-                        <span className="text-zinc-400">{account.email}</span>
-                        <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs capitalize text-zinc-300">{account.role}</span>
+
+            <div className="mx-auto max-w-2xl space-y-5">
+                {flash.success && (
+                    <div className="rounded-lg border border-line bg-success-soft px-3 py-2 text-sm text-success">
+                        {flash.success}
                     </div>
+                )}
 
-                    {flash.success && <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">{flash.success}</div>}
+                {/* Identity summary */}
+                <Card padded={false}>
+                    <div className="flex items-center gap-4 p-5">
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent/15 text-lg font-bold text-accent">
+                            {(account_.name || 'Operator').trim().charAt(0).toUpperCase() || 'O'}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                            <div className="truncate text-base font-semibold text-body">{account_.name || 'Operator'}</div>
+                            <div className="truncate text-sm text-muted">{account_.email}</div>
+                        </div>
+                        {account_.role && (
+                            <Badge tone="accent" className="capitalize">{account_.role}</Badge>
+                        )}
+                    </div>
+                </Card>
 
-                    <form onSubmit={submit} className="space-y-4">
-                        <div>
-                            <label className="mb-1 block text-xs font-semibold text-zinc-400">Name</label>
-                            <input type="text" value={form.data.name} onChange={(e) => form.setData('name', e.target.value)}
-                                className="w-full rounded-lg border-zinc-700 bg-zinc-800 text-sm text-white focus:border-orange-500 focus:ring-orange-500" />
-                            {form.errors.name && <p className="mt-1 text-xs text-rose-400">{form.errors.name}</p>}
+                <form onSubmit={submit} className="space-y-5">
+                    {/* Profile */}
+                    <Card padded={false}>
+                        <CardHeader title="Profile" description="Your display name across the operator portal." />
+                        <div className="p-5">
+                            <Field label="Name" htmlFor="account-name" error={form.errors.name}>
+                                <Input
+                                    id="account-name"
+                                    type="text"
+                                    value={form.data.name}
+                                    onChange={(e) => form.setData('name', e.target.value)}
+                                    autoComplete="name"
+                                />
+                            </Field>
                         </div>
-                        <hr className="border-zinc-800" />
-                        <p className="text-xs text-zinc-500">Change your password — enter your current one to confirm.</p>
-                        <div>
-                            <label className="mb-1 block text-xs font-semibold text-zinc-400">Current password</label>
-                            <input type="password" value={form.data.current_password} onChange={(e) => form.setData('current_password', e.target.value)}
-                                className="w-full rounded-lg border-zinc-700 bg-zinc-800 text-sm text-white focus:border-orange-500 focus:ring-orange-500" />
-                            {form.errors.current_password && <p className="mt-1 text-xs text-rose-400">{form.errors.current_password}</p>}
+                    </Card>
+
+                    {/* Password */}
+                    <Card padded={false}>
+                        <CardHeader title="Password" description="Enter your current password to confirm a change." />
+                        <div className="space-y-4 p-5">
+                            <Field label="Current password" htmlFor="account-current-password" error={form.errors.current_password}>
+                                <Input
+                                    id="account-current-password"
+                                    type="password"
+                                    value={form.data.current_password}
+                                    onChange={(e) => form.setData('current_password', e.target.value)}
+                                    autoComplete="current-password"
+                                />
+                            </Field>
+                            <Field
+                                label="New password"
+                                htmlFor="account-password"
+                                hint="Minimum 12 characters."
+                                error={form.errors.password}
+                            >
+                                <Input
+                                    id="account-password"
+                                    type="password"
+                                    value={form.data.password}
+                                    onChange={(e) => form.setData('password', e.target.value)}
+                                    autoComplete="new-password"
+                                />
+                            </Field>
+                            <Field label="Confirm new password" htmlFor="account-password-confirmation" error={form.errors.password_confirmation}>
+                                <Input
+                                    id="account-password-confirmation"
+                                    type="password"
+                                    value={form.data.password_confirmation}
+                                    onChange={(e) => form.setData('password_confirmation', e.target.value)}
+                                    autoComplete="new-password"
+                                />
+                            </Field>
                         </div>
-                        <div>
-                            <label className="mb-1 block text-xs font-semibold text-zinc-400">New password (min 12 chars)</label>
-                            <input type="password" value={form.data.password} onChange={(e) => form.setData('password', e.target.value)}
-                                className="w-full rounded-lg border-zinc-700 bg-zinc-800 text-sm text-white focus:border-orange-500 focus:ring-orange-500" />
-                            {form.errors.password && <p className="mt-1 text-xs text-rose-400">{form.errors.password}</p>}
-                        </div>
-                        <div>
-                            <label className="mb-1 block text-xs font-semibold text-zinc-400">Confirm new password</label>
-                            <input type="password" value={form.data.password_confirmation} onChange={(e) => form.setData('password_confirmation', e.target.value)}
-                                className="w-full rounded-lg border-zinc-700 bg-zinc-800 text-sm text-white focus:border-orange-500 focus:ring-orange-500" />
-                        </div>
-                        <button type="submit" disabled={form.processing}
-                            className="rounded-lg bg-orange-500 px-5 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">
+                    </Card>
+
+                    <div className="flex justify-end">
+                        <Button type="submit" loading={form.processing} disabled={form.processing}>
                             {form.processing ? 'Saving…' : 'Save changes'}
-                        </button>
-                    </form>
-                </div>
+                        </Button>
+                    </div>
+                </form>
             </div>
         </PlatformLayout>
     );

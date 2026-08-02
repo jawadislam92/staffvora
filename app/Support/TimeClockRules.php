@@ -35,6 +35,12 @@ class TimeClockRules
             return 'Please end your break before clocking out.';
         }
 
+        // Already on the clock (incl. a clock-in carried over past midnight) and
+        // trying to clock in again — the reported double clock-in.
+        if ($nextAction === 'clock_in' && in_array($lastAction, ['clock_in', 'break_start', 'break_end'], true)) {
+            return "You're already clocked in — clock out first.";
+        }
+
         return 'This time action is not available from your current status.';
     }
 

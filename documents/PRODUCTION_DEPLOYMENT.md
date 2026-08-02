@@ -22,11 +22,42 @@ php artisan storage:link
 php artisan optimize
 ```
 
-Create the first administrator interactively if it was not seeded:
+Provision the first workspace (organization + owner + settings + trial) — do NOT
+create a bare admin user, the product is multi-tenant and every user must belong
+to an organization:
 
 ```bash
-php artisan user:create-admin
+php artisan tenant:create "Acme Co" owner@acme.test
 ```
+
+To add another super admin to an EXISTING workspace, `user:create-admin` now
+requires the target org:
+
+```bash
+php artisan user:create-admin --org=acme --name="Ops" --email=ops@acme.test
+```
+
+## Post-deploy tenancy check (required)
+
+Run this after every migration and deploy. A non-zero exit means at least one
+user has `organization_id = NULL`; such an account signs in on the ordinary
+login page and, before the `tenant.required` middleware landed, ran every query
+with no organization filter — total cross-customer read and write. Delete or
+re-home the row before serving traffic.
+
+```bash
+php artisan tenancy:audit
+```
+
+The equivalent manual query:
+
+```sql
+SELECT id, email, role FROM users WHERE organization_id IS NULL;
+```
+
+Note that the project ships no database-level foreign keys (SQLite + MySQL
+portability), so this invariant is enforced in the application and by this
+command — not by the schema.
 
 ## Scheduler
 

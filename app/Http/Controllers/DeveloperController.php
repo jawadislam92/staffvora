@@ -2,7 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DesktopDiagnostic;
+use App\Models\Organization;
+use App\Models\User;
 use App\Services\ActivityDigestService;
+use App\Tenancy\CurrentOrganization;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -331,6 +335,77 @@ class DeveloperController extends Controller
         ]);
     }
 
+    /**
+     * Recent desktop diagnostics — agent-reported client-side failures plus the
+     * capture-health watchdog's decisions — so a broken tracker is visible here
+     * instead of only over SSH.
+     *
+     * Operator surface, so it reads ACROSS tenants (runUnscoped) and labels every
+     * row with the workspace it came from. Everything is aggregated in SQL and
+     * bounded: counts are a single GROUP BY over a fixed window, the feed is a
+     * hard-capped `limit`, and the workspace/person names are resolved in two set
+     * queries rather than per row.
+     */
+    public function diagnostics(Request $request): JsonResponse
+    {
+        $this->authorizeDeveloper($request);
+
+        $limit = max(10, min(100, (int) $request->integer('limit', 50)));
+        $days = max(1, min(30, (int) $request->integer('days', 7)));
+        $since = now()->subDays($days);
+
+        return response()->json(app(CurrentOrganization::class)->runUnscoped(function () use ($limit, $since, $days) {
+            // One grouped query for the whole summary — never a count per bucket.
+            $grouped = DesktopDiagnostic::query()
+                ->where('captured_at', '>=', $since)
+                ->selectRaw('category, level, count(*) as total')
+                ->groupBy('category', 'level')
+                ->get();
+
+            $counts = [];
+            $levels = ['info' => 0, 'warn' => 0, 'error' => 0];
+
+            foreach ($grouped as $row) {
+                $counts[$row->category] = ($counts[$row->category] ?? 0) + (int) $row->total;
+                if (array_key_exists($row->level, $levels)) {
+                    $levels[$row->level] += (int) $row->total;
+                }
+            }
+            arsort($counts);
+
+            $recent = DesktopDiagnostic::query()
+                ->orderByDesc('id')
+                ->limit($limit)
+                ->get(['id', 'organization_id', 'user_id', 'category', 'level', 'event', 'summary', 'device_name', 'app_version', 'captured_at']);
+
+            $organizationNames = Organization::query()
+                ->whereIn('id', $recent->pluck('organization_id')->filter()->unique()->values()->all())
+                ->pluck('name', 'id');
+
+            $userNames = User::query()
+                ->whereIn('id', $recent->pluck('user_id')->filter()->unique()->values()->all())
+                ->pluck('name', 'id');
+
+            return [
+                'window_days' => $days,
+                'counts' => $counts,
+                'levels' => $levels,
+                'recent' => $recent->map(fn ($row) => [
+                    'id' => $row->id,
+                    'category' => $row->category,
+                    'level' => $row->level,
+                    'event' => $row->event,
+                    'summary' => $row->summary ?: $row->event,
+                    'workspace' => $organizationNames[$row->organization_id] ?? null,
+                    'user' => $userNames[$row->user_id] ?? null,
+                    'device_name' => $row->device_name,
+                    'app_version' => $row->app_version,
+                    'captured_at' => optional($row->captured_at)->toDateTimeString(),
+                ])->all(),
+            ];
+        }));
+    }
+
     private function authorizeDeveloper(Request $request): void
     {
         // Operator portal only — this page edits platform-wide .env secrets
@@ -462,9 +537,14 @@ class DeveloperController extends Controller
                 'when' => 'Daily '.config('services.slack_reports.daily_digest_time', '09:00').' '.config('services.slack_reports.timezone', 'Asia/Karachi'),
             ],
             [
-                'name' => 'Screenshot retention prune',
+                'name' => 'Screenshot / sample / diagnostics retention prune',
                 'enabled' => true,
                 'when' => 'Daily 02:30 '.config('services.slack_reports.timezone', 'Asia/Karachi'),
+            ],
+            [
+                'name' => 'Tracker capture-health watchdog',
+                'enabled' => (bool) config('services.attendance.tracker_health_slack_enabled'),
+                'when' => 'Every 15 minutes (silent after '.(int) config('services.attendance.tracker_health_silent_minutes', 20).'m without a capture)',
             ],
         ];
     }
@@ -514,7 +594,7 @@ class DeveloperController extends Controller
 
         try {
             $response = Http::asJson()->timeout(10)->post($webhook, [
-                'text' => ':white_check_mark: Timetracker developer test — webhook is working. ('.now()->toDateTimeString().')',
+                'text' => ':white_check_mark: Staffvora developer test — webhook is working. ('.now()->toDateTimeString().')',
             ]);
 
             return $response->successful()

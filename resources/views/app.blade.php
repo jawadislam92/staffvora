@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-@php($ttTheme = in_array(request()->cookie('tt_theme'), ['light', 'dark', 'black'], true) ? request()->cookie('tt_theme') : 'dark')
+@php($ttTheme = in_array(request()->cookie('tt_theme'), ['light', 'dark', 'black'], true) ? request()->cookie('tt_theme') : 'light')
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}" data-theme="{{ $ttTheme }}">
     <head>
         <meta charset="utf-8">
@@ -7,7 +7,7 @@
         <meta name="color-scheme" content="light dark">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title inertia>{{ config('app.name', 'Tracksuite') }}</title>
+        <title inertia>{{ config('app.name', 'Staffvora') }}</title>
 
         <!-- Favicons. Modern browsers prefer the neutral SVG mark; the SA-era
              PNG/ICO remain only as a fallback until a final brand favicon ships. -->

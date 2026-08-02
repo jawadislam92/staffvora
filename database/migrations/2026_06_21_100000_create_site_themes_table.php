@@ -16,7 +16,7 @@ return new class extends Migration
     {
         Schema::create('site_themes', function (Blueprint $table) {
             $table->id();
-            $table->string('site_name')->default('Tracksuite');
+            $table->string('site_name')->default('Staffvora');
             $table->string('tagline')->nullable();
             $table->string('logo_path')->nullable();      // S3 (avatars disk)
             $table->string('favicon_path')->nullable();

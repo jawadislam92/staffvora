@@ -1,32 +1,12 @@
 import { useEffect } from 'react';
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import ApplicationLogo from '@/Components/ApplicationLogo';
-
-function Field({ id, label, type = 'text', value, onChange, error, placeholder, autoComplete, autoFocus = false }) {
-    return (
-        <div>
-            <label htmlFor={id} className="block text-sm font-semibold text-[#374151] mb-2">{label}</label>
-            <input
-                id={id}
-                type={type}
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                className="w-full px-4 py-3 border-2 border-[#e5e7eb] rounded-xl bg-[#f9fafb] text-[#111827] placeholder:text-[#9ca3af] transition-all duration-200 focus:bg-white focus:outline-none"
-                onFocus={(e) => { e.target.style.borderColor = '#f97316'; e.target.style.boxShadow = '0 0 0 4px rgba(249, 115, 22, 0.12)'; }}
-                onBlur={(e) => { e.target.style.borderColor = '#e5e7eb'; e.target.style.boxShadow = 'none'; }}
-                placeholder={placeholder}
-                autoComplete={autoComplete}
-                autoFocus={autoFocus}
-            />
-            {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-        </div>
-    );
-}
+import { Head, Link, useForm } from '@inertiajs/react';
+import AuthLayout from '@/Layouts/AuthLayout';
+import { Button, Field, Input, Select } from '@/Components/ui';
 
 export default function Register() {
-    const appName = usePage().props?.branding?.name || 'Tracksuite';
     const { data, setData, post, processing, errors, reset } = useForm({
         company: '',
+        workspace_type: 'general',
         name: '',
         email: '',
         password: '',
@@ -41,48 +21,109 @@ export default function Register() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center relative overflow-hidden py-10" style={{ background: 'linear-gradient(135deg, #282a2a 0%, #1f2020 50%, #161717 100%)' }}>
+        <AuthLayout
+            title="Start your free trial"
+            description="Create your workspace — no card required."
+        >
             <Head title="Create your account" />
 
-            <div className="absolute inset-0 overflow-hidden">
-                <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full opacity-20 animate-float"></div>
-                <div className="absolute -bottom-1/2 -right-1/2 w-full h-full rounded-full opacity-30 animate-float-delayed" style={{ background: 'linear-gradient(45deg, #282a2a, #1f2020)' }}></div>
-            </div>
+            <form onSubmit={submit} className="space-y-5">
+                <Field label="Company / workspace name" htmlFor="company" error={errors.company}>
+                    <Input
+                        id="company"
+                        name="company"
+                        value={data.company}
+                        onChange={(e) => setData('company', e.target.value)}
+                        placeholder="Acme Inc"
+                        autoComplete="organization"
+                        autoFocus
+                    />
+                </Field>
 
-            <div className="relative z-10 w-full max-w-md mx-4">
-                <div className="glass-effect shadow-2xl rounded-3xl p-8">
-                    <div className="text-center mb-8">
-                        <div className="inline-block p-3 rounded-2xl shadow-lg mb-4 animate-float" style={{ background: 'linear-gradient(135deg, #282a2a, #404343)' }}>
-                            <ApplicationLogo size="16" />
-                        </div>
-                        <h1 className="text-3xl font-bold gradient-text mb-2">Start your free trial</h1>
-                        <p className="text-gray-600 text-sm">Create your {appName} workspace — no card required.</p>
-                    </div>
+                <Field
+                    label="What kind of team are you?"
+                    htmlFor="workspace_type"
+                    error={errors.workspace_type}
+                    hint="This tailors projects, client work, reporting, and optional account profiles to your team."
+                >
+                    <Select
+                        id="workspace_type"
+                        name="workspace_type"
+                        value={data.workspace_type}
+                        onChange={(e) => setData('workspace_type', e.target.value)}
+                    >
+                        <option value="general">In-house team / company</option>
+                        <option value="agency">Client services agency</option>
+                        <option value="bpo">BPO / Call center</option>
+                        <option value="freelancer">Freelancer</option>
+                    </Select>
+                </Field>
 
-                    <form onSubmit={submit} className="space-y-5">
-                        <Field id="company" label="Company / workspace name" value={data.company} onChange={(v) => setData('company', v)} error={errors.company} placeholder="Acme Inc" autoComplete="organization" autoFocus />
-                        <Field id="name" label="Your name" value={data.name} onChange={(v) => setData('name', v)} error={errors.name} placeholder="Jane Doe" autoComplete="name" />
-                        <Field id="email" label="Work email" type="email" value={data.email} onChange={(v) => setData('email', v)} error={errors.email} placeholder="jane@acme.com" autoComplete="username" />
-                        <Field id="password" label="Password" type="password" value={data.password} onChange={(v) => setData('password', v)} error={errors.password} placeholder="At least 12 characters" autoComplete="new-password" />
-                        <Field id="password_confirmation" label="Confirm password" type="password" value={data.password_confirmation} onChange={(v) => setData('password_confirmation', v)} error={errors.password_confirmation} placeholder="Re-enter your password" autoComplete="new-password" />
+                <Field label="Your name" htmlFor="name" error={errors.name}>
+                    <Input
+                        id="name"
+                        name="name"
+                        value={data.name}
+                        onChange={(e) => setData('name', e.target.value)}
+                        placeholder="Jane Doe"
+                        autoComplete="name"
+                    />
+                </Field>
 
-                        <button
-                            type="submit"
-                            disabled={processing}
-                            className="w-full bg-gradient-to-r from-orange-400 to-yellow-500 font-bold text-gray-900 py-3 px-6 rounded-xl transition-all duration-200 transform hover:scale-105 hover:from-orange-500 hover:to-yellow-600 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-lg"
-                        >
-                            {processing ? 'Creating your workspace…' : 'Create workspace'}
-                        </button>
-                    </form>
+                <Field label="Work email" htmlFor="email" error={errors.email}>
+                    <Input
+                        id="email"
+                        type="email"
+                        name="email"
+                        value={data.email}
+                        onChange={(e) => setData('email', e.target.value)}
+                        placeholder="jane@acme.com"
+                        autoComplete="username"
+                    />
+                </Field>
 
-                    <div className="mt-6 text-center">
-                        <p className="text-sm text-gray-600">
-                            Already have an account?{' '}
-                            <Link href={route('login')} className="font-semibold hover:underline" style={{ color: '#c2410c' }}>Sign in</Link>
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
+                <Field label="Password" htmlFor="password" error={errors.password}>
+                    <Input
+                        id="password"
+                        type="password"
+                        name="password"
+                        value={data.password}
+                        onChange={(e) => setData('password', e.target.value)}
+                        placeholder="At least 12 characters"
+                        autoComplete="new-password"
+                    />
+                </Field>
+
+                <Field
+                    label="Confirm password"
+                    htmlFor="password_confirmation"
+                    error={errors.password_confirmation}
+                >
+                    <Input
+                        id="password_confirmation"
+                        type="password"
+                        name="password_confirmation"
+                        value={data.password_confirmation}
+                        onChange={(e) => setData('password_confirmation', e.target.value)}
+                        placeholder="Re-enter your password"
+                        autoComplete="new-password"
+                    />
+                </Field>
+
+                <Button type="submit" block loading={processing}>
+                    {processing ? 'Creating your workspace…' : 'Create workspace'}
+                </Button>
+            </form>
+
+            <p className="mt-6 text-center text-sm text-muted">
+                Already have an account?{' '}
+                <Link
+                    href={route('login')}
+                    className="rounded font-medium text-accent transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-app"
+                >
+                    Sign in
+                </Link>
+            </p>
+        </AuthLayout>
     );
 }

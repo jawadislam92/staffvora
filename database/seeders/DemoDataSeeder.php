@@ -34,10 +34,10 @@ class DemoDataSeeder extends Seeder
     private function createProfiles(): array
     {
         $definitions = [
-            ['name' => 'Sparking Asia - Web', 'email' => 'web.demo@sparkingasia.test', 'description' => 'Web application and dashboard projects.'],
-            ['name' => 'Sparking Asia - Mobile', 'email' => 'mobile.demo@sparkingasia.test', 'description' => 'Mobile application and API projects.'],
-            ['name' => 'Sparking Asia - Design', 'email' => 'design.demo@sparkingasia.test', 'description' => 'UI, UX, and product design projects.'],
-            ['name' => 'Sparking Asia - Support', 'email' => 'support.demo@sparkingasia.test', 'description' => 'Maintenance and operational support projects.'],
+            ['name' => 'Demo Agency - Web', 'email' => 'web@demo.invalid', 'description' => 'Web application and dashboard projects.'],
+            ['name' => 'Demo Agency - Mobile', 'email' => 'mobile@demo.invalid', 'description' => 'Mobile application and API projects.'],
+            ['name' => 'Demo Agency - Design', 'email' => 'design@demo.invalid', 'description' => 'UI, UX, and product design projects.'],
+            ['name' => 'Demo Agency - Support', 'email' => 'support@demo.invalid', 'description' => 'Maintenance and operational support projects.'],
         ];
 
         return collect($definitions)->mapWithKeys(function (array $definition) {
@@ -57,31 +57,31 @@ class DemoDataSeeder extends Seeder
                 'name' => 'Northstar Analytics',
                 'work_type' => 'tracker_manual',
                 'tags' => ['analytics', 'dashboard'],
-                'profiles' => ['Sparking Asia - Web'],
+                'profiles' => ['Demo Agency - Web'],
             ],
             [
                 'name' => 'Cedar Health',
                 'work_type' => 'tracker_manual',
                 'tags' => ['healthcare', 'portal'],
-                'profiles' => ['Sparking Asia - Web', 'Sparking Asia - Design'],
+                'profiles' => ['Demo Agency - Web', 'Demo Agency - Design'],
             ],
             [
                 'name' => 'Orbit Commerce',
                 'work_type' => 'fixed',
                 'tags' => ['ecommerce', 'mobile'],
-                'profiles' => ['Sparking Asia - Mobile'],
+                'profiles' => ['Demo Agency - Mobile'],
             ],
             [
                 'name' => 'Harbor Logistics',
                 'work_type' => 'tracker_manual',
                 'tags' => ['logistics', 'api'],
-                'profiles' => ['Sparking Asia - Web', 'Sparking Asia - Support'],
+                'profiles' => ['Demo Agency - Web', 'Demo Agency - Support'],
             ],
             [
                 'name' => 'Brightline Studio',
                 'work_type' => 'fixed',
                 'tags' => ['branding', 'design'],
-                'profiles' => ['Sparking Asia - Design'],
+                'profiles' => ['Demo Agency - Design'],
             ],
             [
                 'name' => 'Local Operations',

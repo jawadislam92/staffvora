@@ -1,11 +1,21 @@
 import React from 'react';
 import AuthenticatedLayout from '../Layouts/AuthenticatedLayout';
 import TagInput from '../Components/TagInput';
-import { Head, useForm, Link } from '@inertiajs/react';
+import { Head, useForm, Link, usePage } from '@inertiajs/react';
 import PageHeader from '../Components/Layout/PageHeader';
 import PageShell from '../Components/Layout/PageShell';
 
 export default function ClientEdit({ auth, client, upworkProfiles, workTypes, returnTo = '' }) {
+    // The Upwork "profiles" dimension is an ENTITLEMENT, not an edition: it
+    // comes from the shared `entitlements` map, the same resolution the server
+    // gates on. `workspace` supplies terminology only.
+    const workspace = usePage().props?.workspace || {};
+    const entitlements = usePage().props?.entitlements || {};
+    const usesProfiles = entitlements.upwork_profiles === true;
+    const clientTerm = workspace.client_term || 'Project';
+    const clientTermPlural = clientTerm.endsWith('s') ? clientTerm : clientTerm + 's';
+    const profileTerm = workspace.profile_term || 'Profile';
+    const profileTermPlural = profileTerm.endsWith('s') ? profileTerm : profileTerm + 's';
     // Initialize with existing multiple profiles or fallback to single profile
     const initialProfileIds = client.upwork_profiles && client.upwork_profiles.length > 0 
         ? client.upwork_profiles.map(p => p.id)
@@ -36,8 +46,9 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
         form.put(route('clients.update', client.id));
     };
 
-    // Check if profile is required for the selected work type
-    const isProfileRequired = form.data.work_type && ['tracker_manual', 'fixed'].includes(form.data.work_type);
+    // Check if a profile applies for the selected work type — only when this
+    // workspace uses profiles at all (agencies); hidden for in-house teams.
+    const isProfileRequired = usesProfiles && form.data.work_type && ['tracker_manual', 'fixed'].includes(form.data.work_type);
     
     // Reset profiles when work type changes and profile is not required
     React.useEffect(() => {
@@ -110,12 +121,12 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
 
     return (
         <AuthenticatedLayout user={auth.user}>
-            <Head title="Edit Client" />
+            <Head title={'Edit ' + clientTerm} />
             
             <PageShell width="max-w-5xl">
                 <PageHeader
-                    eyebrow="Clients"
-                    title="Edit Client"
+                    eyebrow={clientTermPlural}
+                    title={'Edit ' + clientTerm}
                     description={`Update information and assignments for ${client.name}.`}
                 />
                     
@@ -127,7 +138,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                 {/* Client Name */}
                                 <div>
                                     <label className="block text-sm font-semibold text-muted mb-3">
-                                        Client Name
+                                        {clientTerm} Name
                                         <span className="text-red-500 ml-1">*</span>
                                     </label>
                                     <div className="relative">
@@ -138,7 +149,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                         </div>
                                         <input 
                                             type="text" 
-                                            placeholder="Enter client name..." 
+                                            placeholder={'Enter ' + clientTerm.toLowerCase() + ' name...'}
                                             value={form.data.name} 
                                             onChange={e => form.setData('name', e.target.value)} 
                                             className="w-full pl-10 pr-4 py-3 border-2 border-line rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-body placeholder-slate-400"
@@ -209,11 +220,11 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                     )}
                                 </div>
 
-                                {/* Upwork Profiles - conditionally shown with search and multiple selection */}
+                                {/* Profiles - optional attribution dimension, conditionally shown */}
                                 {(isProfileRequired) && (
                                     <div>
                                         <label className="block text-sm font-semibold text-muted mb-3">
-                                            Profiles
+                                            {profileTermPlural}
                                             {isProfileRequired && <span className="text-red-500">*</span>}
                                             {!isProfileRequired && <span className="text-subtle font-normal ml-2">(optional)</span>}
                                         </label>
@@ -221,7 +232,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                         {/* Selected Profiles Display */}
                                         {selectedProfiles.length > 0 && (
                                             <div className="mb-3">
-                                                <p className="text-sm text-muted mb-2">Selected Profiles:</p>
+                                                <p className="text-sm text-muted mb-2">Selected {profileTermPlural}:</p>
                                                 <div className="space-y-2">
                                                     {selectedProfiles.map((profile) => (
                                                         <div
@@ -252,7 +263,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                         <div ref={profileRef} className="relative">
                                             <input
                                                 type="text"
-                                                placeholder={isProfileRequired ? 'Search and select upwork profiles...' : 'Search and select upwork profiles (optional)...'}
+                                                placeholder={'Search and select ' + profileTermPlural.toLowerCase() + '...'}
                                                 value={profileSearch}
                                                 onChange={(e) => {
                                                     setProfileSearch(e.target.value);
@@ -281,7 +292,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                             {filteredProfiles.length === 0 && profileSearch && showProfileDropdown && (
                                                 <div className="absolute z-50 w-full mt-1 bg-surface border-2 border-line rounded-xl shadow-2xl backdrop-blur-xl">
                                                     <div className="px-4 py-3 text-muted text-sm">
-                                                        No available profiles found
+                                                        No available {profileTermPlural.toLowerCase()} found
                                                     </div>
                                                 </div>
                                             )}
@@ -290,8 +301,8 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                         
                                         <p className="text-subtle text-sm mt-2">
                                             {isProfileRequired 
-                                                ? 'Select one or more Upwork profiles associated with this client'
-                                                : 'Optionally select Upwork profiles for this client'
+                                                ? 'Select one or more ' + profileTermPlural.toLowerCase() + ' associated with this ' + clientTerm.toLowerCase()
+                                                : 'Optionally select ' + profileTermPlural.toLowerCase() + ' for this ' + clientTerm.toLowerCase()
                                             }
                                         </p>
                                     </div>
@@ -306,11 +317,11 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                     <TagInput
                                         tags={form.data.tags}
                                         onChange={(newTags) => form.setData('tags', newTags)}
-                                        placeholder="Add tags to categorize this client..."
+                                        placeholder={'Add tags to categorize this ' + clientTerm.toLowerCase() + '...'}
                                     />
                                     {form.errors.tags && <div className="text-red-500 text-sm mt-2">{form.errors.tags}</div>}
                                     <p className="text-subtle text-sm mt-2">
-                                        Add tags to help organize and search for clients (e.g., "Enterprise", "Startup", "Local")
+                                        Add tags to help organize and search {clientTermPlural.toLowerCase()} (e.g., "Enterprise", "Startup", "Local")
                                     </p>
                                 </div>
 
@@ -321,7 +332,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                             {client.name.charAt(0).toUpperCase()}
                                         </div>
                                         <div>
-                                            <p className="text-sm text-subtle mb-1">Editing Client:</p>
+                                            <p className="text-sm text-subtle mb-1">Editing {clientTerm}:</p>
                                             <p className="font-semibold text-body text-lg">{client.name}</p>
                                         </div>
                                     </div>
@@ -334,8 +345,8 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                             </span>
                                         </div>
                                         
-                                        <div>
-                                            <p className="text-sm text-subtle mb-1">Current Profiles:</p>
+                                        {usesProfiles && <div>
+                                            <p className="text-sm text-subtle mb-1">Current {profileTermPlural}:</p>
                                             <div className="flex flex-wrap gap-2">
                                                 {/* Show multiple profiles if they exist */}
                                                 {client.upwork_profiles && client.upwork_profiles.length > 0 ? (
@@ -354,7 +365,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                                     </span>
                                                 )}
                                             </div>
-                                        </div>
+                                        </div>}
                                     </div>
                                     
                                     {client.tags && client.tags.length > 0 && (
@@ -384,7 +395,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                         </svg>
-                                        {form.processing ? 'Updating...' : 'Update Client'}
+                                        {form.processing ? 'Updating...' : 'Update ' + clientTerm}
                                     </button>
                                     <Link
                                         href={returnTo || route('clients.index')}
@@ -393,7 +404,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                         </svg>
-                                        Back to Clients
+                                        Back to {clientTermPlural}
                                     </Link>
                                 </div>
                             </form>

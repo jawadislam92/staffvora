@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import Modal from '@/Components/Modal';
+import { Button, Card, Badge, EmptyState } from '@/Components/ui';
+import { X, ChevronLeft, ChevronRight, ArrowLeft, MonitorPlay, Flag, Camera, Lock } from 'lucide-react';
+
+const cx = (...a) => a.filter(Boolean).join(' ');
 
 function fmtDuration(seconds) {
     if (!seconds) return '0m';
@@ -27,11 +31,121 @@ function fmtTime(iso) {
     }
 }
 
-export default function SessionDetail({ auth, session, screenshots = [], permissions = {} }) {
-    DISPLAY = usePage().props.display || DISPLAY;
+function statusTone(status) {
+    if (status === 'active') return 'success';
+    if (status === 'abandoned') return 'warning';
+    return 'neutral';
+}
+
+// Activity strength -> a token-colored dot. Low activity stays neutral (it is
+// not an error), medium warns, high reads as healthy.
+function activityDot(percent) {
+    if (percent >= 60) return 'bg-success';
+    if (percent >= 30) return 'bg-warning';
+    return 'bg-surface-2 ring-1 ring-line';
+}
+
+// ---------------------------------------------------------------------------
+// DEV_SAMPLE — one self-contained tracking session used only when `preview` is
+// true. Screenshot thumbnails are solid token-colored placeholders (see
+// `tint`), never external images.
+// ---------------------------------------------------------------------------
+const SAMPLE_TINTS = ['bg-accent/15', 'bg-info-soft', 'bg-success-soft', 'bg-warning-soft'];
+
+function buildDevSample() {
+    const today = new Date().toISOString().slice(0, 10);
+    const apps = ['VS Code', 'Chrome', 'Figma', 'Slack', 'Terminal'];
+    const domains = ['github.com', 'figma.com', 'staffvora.com', null, 'docs.google.com'];
+    const screenshots = Array.from({ length: 8 }, (_, i) => {
+        const hh = String(9 + Math.floor(i / 4)).padStart(2, '0');
+        const mm = String((i % 4) * 15).padStart(2, '0');
+        return {
+            id: 900 + i,
+            captured_at: `${today}T${hh}:${mm}:00Z`,
+            thumbnail_url: null,
+            image_url: null,
+            tint: SAMPLE_TINTS[i % SAMPLE_TINTS.length],
+            activity_percent: [78, 92, 41, 66, 88, 24, 71, 58][i],
+            active_app: apps[i % apps.length],
+            active_window_title: `${apps[i % apps.length]} — sample window ${i + 1}`,
+            url_domain: domains[i % domains.length],
+            is_flagged: i === 2,
+        };
+    });
+    return {
+        auth: { user: { id: 99, name: 'Jawad', email: 'jawad@staffvora.com', role: 'owner', is_super_admin: true, permissions: [] } },
+        session: {
+            id: 1041,
+            user: { id: 1, name: 'Ayesha Khan', email: 'ayesha@staffvora.com' },
+            client: { name: 'Northwind Retail' },
+            work_type: 'client_work',
+            status: 'active',
+            started_at: `${today}T09:05:00Z`,
+            stopped_at: `${today}T12:20:00Z`,
+            total_seconds: 11700,
+            activity_percent: 84,
+            task_note: 'Checkout redesign — building the new payment step and wiring the address form validation.',
+        },
+        screenshots,
+        permissions: { view_screenshots: true, delete_screenshots: true },
+    };
+}
+
+function ScreenshotTile({ shot, onOpen }) {
+    return (
+        <button
+            type="button"
+            onClick={onOpen}
+            className={cx(
+                'group block overflow-hidden rounded-lg border border-line bg-surface-2 text-left transition',
+                'hover:ring-2 hover:ring-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-app',
+            )}
+        >
+            {shot.thumbnail_url ? (
+                <img
+                    src={shot.thumbnail_url}
+                    alt={`Screenshot at ${fmtTime(shot.captured_at)}`}
+                    className="h-32 w-full object-cover"
+                    loading="lazy"
+                />
+            ) : shot.tint ? (
+                <div className={cx('flex h-32 w-full items-center justify-center', shot.tint)}>
+                    <MonitorPlay className="h-6 w-6 text-body/30" />
+                </div>
+            ) : (
+                <div className="flex h-32 w-full items-center justify-center text-xs text-subtle">no preview</div>
+            )}
+            <div className="space-y-0.5 p-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-body">{fmtTime(shot.captured_at)}</span>
+                    <span className="flex items-center gap-1.5">
+                        {shot.is_flagged && <Flag className="h-3 w-3 text-danger" />}
+                        <span className={cx('inline-block h-2 w-2 rounded-full', activityDot(shot.activity_percent))} title={`Activity ${shot.activity_percent ?? 0}%`} />
+                    </span>
+                </div>
+                <div className="truncate text-muted">{shot.url_domain || shot.active_app || '—'}</div>
+                <div className="text-subtle">Activity: {shot.activity_percent ?? 0}%</div>
+            </div>
+        </button>
+    );
+}
+
+export default function SessionDetail({ auth, session, screenshots = [], permissions = {}, preview = false }) {
+    // Preview: swap every prop for the built-in offline sample and a mock
+    // super-admin viewer, so the page renders in full with no network/props.
+    if (preview) {
+        const sample = buildDevSample();
+        auth = auth || sample.auth;
+        session = sample.session;
+        screenshots = sample.screenshots;
+        permissions = sample.permissions;
+    }
+
+    DISPLAY = preview ? DISPLAY : (usePage().props.display || DISPLAY);
+
     // Lightbox is driven by index so Prev/Next can step through the grid.
     const [lightboxIndex, setLightboxIndex] = useState(null);
-    const open = lightboxIndex !== null && screenshots[lightboxIndex];
+    const shot = lightboxIndex !== null ? screenshots[lightboxIndex] : null;
 
     const step = useCallback((delta) => {
         setLightboxIndex((current) => {
@@ -45,140 +159,150 @@ export default function SessionDetail({ auth, session, screenshots = [], permiss
     useEffect(() => {
         if (lightboxIndex === null) return;
         const onKey = (e) => {
-            if (e.key === 'Escape') setLightboxIndex(null);
-            else if (e.key === 'ArrowLeft') step(-1);
+            if (e.key === 'ArrowLeft') step(-1);
             else if (e.key === 'ArrowRight') step(1);
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [lightboxIndex, step]);
 
-    const shot = open ? screenshots[lightboxIndex] : null;
+    const meta = [
+        { label: 'User', value: session.user?.name || '—' },
+        { label: 'Client', value: session.client?.name || '—' },
+        { label: 'Work type', value: session.work_type || '—' },
+        { label: 'Started', value: fmtTime(session.started_at) },
+        { label: 'Stopped', value: fmtTime(session.stopped_at) },
+        { label: 'Duration', value: fmtDuration(session.total_seconds) },
+        { label: 'Activity', value: `${session.activity_percent ?? 0}%` },
+    ];
 
     return (
-        <AuthenticatedLayout
-            user={auth.user}
-            header={<h2 className="font-semibold text-xl leading-tight">Tracking Session #{session.id}</h2>}
-        >
+        <AuthenticatedLayout user={auth.user} header={`Tracking Session #${session.id}`}>
             <Head title={`Session #${session.id}`} />
 
-            <div className="min-h-screen bg-slate-950">
-                <div className="mx-auto max-w-7xl space-y-4 px-4 py-8 sm:px-6 lg:px-8">
-                    <Link href={route('monitoring.sessions')} className="text-sm text-orange-400 hover:text-orange-300">
-                        &larr; Back to sessions
-                    </Link>
+            <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+                <Button
+                    as={Link}
+                    href={preview ? '#' : route('monitoring.sessions')}
+                    variant="ghost"
+                    size="sm"
+                    icon={<ArrowLeft className="h-4 w-4" />}
+                >
+                    Back to sessions
+                </Button>
 
-                    <div className="grid grid-cols-2 gap-4 rounded-lg border border-slate-800 bg-slate-900 p-6 text-sm shadow md:grid-cols-4">
-                        <div><div className="text-slate-500">User</div><div className="font-medium text-slate-100">{session.user?.name}</div></div>
-                        <div><div className="text-slate-500">Client</div><div className="font-medium text-slate-100">{session.client?.name || '—'}</div></div>
-                        <div><div className="text-slate-500">Work type</div><div className="font-medium text-slate-100">{session.work_type || '—'}</div></div>
-                        <div><div className="text-slate-500">Status</div><div className="font-medium text-slate-100">{session.status}</div></div>
-                        <div><div className="text-slate-500">Started</div><div className="font-medium text-slate-100">{fmtTime(session.started_at)}</div></div>
-                        <div><div className="text-slate-500">Stopped</div><div className="font-medium text-slate-100">{fmtTime(session.stopped_at)}</div></div>
-                        <div><div className="text-slate-500">Duration</div><div className="font-medium text-slate-100">{fmtDuration(session.total_seconds)}</div></div>
-                        <div><div className="text-slate-500">Activity</div><div className="font-medium text-slate-100">{session.activity_percent ?? 0}%</div></div>
+                <Card>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-5 md:grid-cols-4">
+                        {meta.map((m) => (
+                            <div key={m.label}>
+                                <div className="text-xs uppercase tracking-wide text-muted">{m.label}</div>
+                                <div className="mt-1 font-medium text-body">{m.value}</div>
+                            </div>
+                        ))}
+                        <div>
+                            <div className="text-xs uppercase tracking-wide text-muted">Status</div>
+                            <div className="mt-1">
+                                <Badge tone={statusTone(session.status)} dot>{session.status}</Badge>
+                            </div>
+                        </div>
                         {session.task_note && (
                             <div className="col-span-full">
-                                <div className="text-slate-500">Task note</div>
-                                <div className="whitespace-pre-wrap font-medium text-slate-200">{session.task_note}</div>
+                                <div className="text-xs uppercase tracking-wide text-muted">Task note</div>
+                                <div className="mt-1 whitespace-pre-wrap font-medium text-body">{session.task_note}</div>
                             </div>
                         )}
                     </div>
+                </Card>
 
-                    <div className="rounded-lg border border-slate-800 bg-slate-900 p-6 shadow">
-                        <h3 className="mb-4 text-lg font-semibold text-slate-100">Screenshots</h3>
-                        {!permissions?.view_screenshots ? (
-                            <p className="text-sm text-slate-500">You do not have permission to view screenshots for this session.</p>
-                        ) : screenshots.length === 0 ? (
-                            <p className="text-sm text-slate-500">No screenshots captured.</p>
-                        ) : (
-                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                                {screenshots.map((s, i) => (
-                                    <button
-                                        key={s.id}
-                                        type="button"
-                                        onClick={() => setLightboxIndex(i)}
-                                        className="block overflow-hidden rounded-lg border border-slate-800 bg-slate-950 text-left transition hover:ring-2 hover:ring-orange-400/70"
-                                    >
-                                        {s.thumbnail_url ? (
-                                            <img
-                                                src={s.thumbnail_url}
-                                                alt={`Screenshot at ${fmtTime(s.captured_at)}`}
-                                                className="h-32 w-full object-cover"
-                                                loading="lazy"
-                                            />
-                                        ) : (
-                                            <div className="flex h-32 w-full items-center justify-center text-xs text-slate-600">
-                                                no preview
-                                            </div>
-                                        )}
-                                        <div className="p-2 text-xs">
-                                            <div className="font-medium text-slate-200">{fmtTime(s.captured_at)}</div>
-                                            <div className="truncate text-slate-400">{s.active_app || '—'}</div>
-                                            <div className="text-slate-500">Activity: {s.activity_percent ?? 0}%</div>
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
+                <Card
+                    header={
+                        <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-4">
+                            <div className="font-semibold text-body">Screenshots</div>
+                            {permissions?.view_screenshots && screenshots.length > 0 && (
+                                <Badge tone="neutral">{screenshots.length}</Badge>
+                            )}
+                        </div>
+                    }
+                >
+                    {!permissions?.view_screenshots ? (
+                        <EmptyState
+                            icon={<Lock className="h-5 w-5" />}
+                            title="Screenshots hidden"
+                            description="You do not have permission to view screenshots for this session."
+                        />
+                    ) : screenshots.length === 0 ? (
+                        <EmptyState
+                            icon={<Camera className="h-5 w-5" />}
+                            title="No screenshots captured"
+                            description="This session recorded no screenshots."
+                        />
+                    ) : (
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                            {screenshots.map((s, i) => (
+                                <ScreenshotTile key={s.id} shot={s} onOpen={() => setLightboxIndex(i)} />
+                            ))}
+                        </div>
+                    )}
+                </Card>
             </div>
 
-            {open && (
-                <div
-                    className="fixed inset-0 z-[70] flex flex-col bg-slate-950/90 backdrop-blur-sm"
-                    onClick={() => setLightboxIndex(null)}
-                >
-                    <div
-                        className="flex items-center justify-between gap-3 border-b border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-300"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="min-w-0 truncate">
-                            <span className="font-semibold text-slate-100">{fmtTime(shot.captured_at)}</span>
-                            <span className="text-slate-400"> — {shot.active_app || 'unknown app'}</span>
-                            {shot.active_window_title ? <span className="text-slate-500"> · {shot.active_window_title}</span> : ''}
-                            <span className="ml-2 text-slate-500">({lightboxIndex + 1} / {screenshots.length})</span>
+            {/* Screenshot lightbox — standardized on the shared Modal */}
+            <Modal show={shot !== null} maxWidth="2xl" onClose={() => setLightboxIndex(null)}>
+                {shot && (
+                    <div className="flex flex-col">
+                        <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 text-sm text-body">
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2 font-semibold text-body">
+                                    <span className={cx('inline-block h-2.5 w-2.5 rounded-full', activityDot(shot.activity_percent))} />
+                                    {fmtTime(shot.captured_at)}
+                                    <span className="font-normal text-muted">· activity {shot.activity_percent ?? 0}%</span>
+                                    {shot.is_flagged && <Flag className="h-4 w-4 text-danger" />}
+                                </div>
+                                <div className="truncate text-xs text-muted">
+                                    {shot.url_domain || shot.active_app || 'Unknown'}
+                                    {shot.active_window_title ? ` — ${shot.active_window_title}` : ''}
+                                    <span className="ml-2 text-subtle">{lightboxIndex + 1} / {screenshots.length}</span>
+                                </div>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => setLightboxIndex(null)} aria-label="Close viewer" icon={<X className="h-4 w-4" />} />
                         </div>
-                        <button
-                            type="button"
-                            onClick={() => setLightboxIndex(null)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-1.5 font-semibold text-slate-200 transition hover:bg-white/10"
-                        >
-                            <X className="h-4 w-4" /> Close
-                        </button>
-                    </div>
-
-                    <div className="relative flex flex-1 items-center justify-center overflow-hidden p-4">
-                        {lightboxIndex > 0 && (
+                        <div className="relative flex items-center justify-center bg-app px-4 py-4">
                             <button
                                 type="button"
-                                onClick={(e) => { e.stopPropagation(); step(-1); }}
-                                className="absolute left-3 top-1/2 z-10 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-slate-900/80 text-slate-200 transition hover:bg-slate-800"
+                                onClick={() => step(-1)}
+                                disabled={lightboxIndex <= 0}
+                                className="absolute left-3 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface/90 text-body transition hover:bg-surface-2 disabled:opacity-30"
                                 aria-label="Previous"
                             >
                                 <ChevronLeft className="h-6 w-6" />
                             </button>
-                        )}
-                        <img
-                            src={shot.image_url}
-                            alt="Full screenshot"
-                            className="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
-                            onClick={(e) => e.stopPropagation()}
-                        />
-                        {lightboxIndex < screenshots.length - 1 && (
+                            {shot.image_url || shot.thumbnail_url ? (
+                                <img
+                                    src={shot.image_url || shot.thumbnail_url}
+                                    alt={shot.active_window_title || 'Screenshot'}
+                                    className="max-h-[70vh] max-w-full rounded-lg object-contain"
+                                />
+                            ) : (
+                                <div className={cx('flex h-64 w-full items-center justify-center rounded-lg', shot.tint || 'bg-surface-2')}>
+                                    <MonitorPlay className="h-10 w-10 text-body/30" />
+                                </div>
+                            )}
                             <button
                                 type="button"
-                                onClick={(e) => { e.stopPropagation(); step(1); }}
-                                className="absolute right-3 top-1/2 z-10 -translate-y-1/2 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-slate-900/80 text-slate-200 transition hover:bg-slate-800"
+                                onClick={() => step(1)}
+                                disabled={lightboxIndex >= screenshots.length - 1}
+                                className="absolute right-3 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface/90 text-body transition hover:bg-surface-2 disabled:opacity-30"
                                 aria-label="Next"
                             >
                                 <ChevronRight className="h-6 w-6" />
                             </button>
-                        )}
+                        </div>
+                        <p className="border-t border-line py-2 text-center text-[11px] text-subtle">
+                            Use ← → arrow keys to move between screenshots · Esc to close
+                        </p>
                     </div>
-                </div>
-            )}
+                )}
+            </Modal>
         </AuthenticatedLayout>
     );
 }

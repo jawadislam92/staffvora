@@ -6,15 +6,21 @@ use App\Models\TrackingActivitySample;
 use App\Models\TrackingSession;
 use App\Models\User;
 use Carbon\CarbonInterface;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class ActivityDigestService
 {
+    public function __construct(private SlackReportDestination $destination) {}
+
+    /**
+     * The digest goes to the WORKSPACE'S OWN Slack connection. It used to go to
+     * one platform-wide incoming webhook, so the scheduled daily digest pushed
+     * every tenant's per-person tracked time, activity scores, top client and
+     * top app into a single shared channel — see SlackReportDestination.
+     */
     public function configured(): bool
     {
-        return filled(config('services.slack_reports.webhook_url'));
+        return $this->destination->configured();
     }
 
     /**
@@ -26,7 +32,7 @@ class ActivityDigestService
     public function buildPayload(CarbonInterface $start, CarbonInterface $end): array
     {
         // Align bounds with the storage timezone (app.timezone).
-        $storageTz = config('app.timezone', 'Asia/Karachi');
+        $storageTz = \App\Support\BusinessTime::storageTz();
         $rangeStart = $start->copy()->setTimezone($storageTz);
         $rangeEnd = $end->copy()->setTimezone($storageTz);
 
@@ -152,21 +158,13 @@ class ActivityDigestService
     public function sendRange(CarbonInterface $start, CarbonInterface $end): array
     {
         if (! $this->configured()) {
-            throw new RuntimeException('Slack reporting is not configured.');
+            throw new RuntimeException($this->destination->unconfiguredMessage());
         }
 
         $payload = $this->buildPayload($start, $end);
         $message = $this->formatSlack($payload);
 
-        $response = Http::asJson()->post(config('services.slack_reports.webhook_url'), $message);
-
-        if ($response->failed()) {
-            Log::warning('Activity digest Slack push failed', [
-                'status' => $response->status(),
-                'body' => $response->body(),
-            ]);
-            throw new RuntimeException('Slack accepted the request but returned an error: '.$response->status());
-        }
+        $this->destination->send($message);
 
         return [
             'range' => $payload['range'],

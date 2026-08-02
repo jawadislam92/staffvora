@@ -9,11 +9,13 @@ export default function Avatar({ user, size = 'md', className = '' }) {
         xl: 'w-20 h-20 text-xl'
     };
 
-    const baseClasses = `rounded-full object-cover border flex-shrink-0 ${sizeClasses[size]} ${className}`;
+    const baseClasses = `rounded-full object-cover border border-line flex-shrink-0 ${sizeClasses[size]} ${className}`;
 
     // avatar_url is resolvable wherever the file lives (local /storage or a
     // signed S3 URL); the raw avatar path only works for local storage.
-    const src = user.avatar_url || (user.avatar ? `/storage/${user.avatar}` : null);
+    // Null-safe: the shell must never crash if a user prop is missing.
+    const src = user?.avatar_url || (user?.avatar ? `/storage/${user.avatar}` : null);
+    const initial = (user?.name || '?').charAt(0).toUpperCase();
 
     useEffect(() => {
         setImageFailed(false);
@@ -23,7 +25,7 @@ export default function Avatar({ user, size = 'md', className = '' }) {
         return (
             <img
                 src={src}
-                alt={`${user.name}'s avatar`}
+                alt={`${user?.name || 'User'}'s avatar`}
                 className={baseClasses}
                 onError={() => setImageFailed(true)}
             />
@@ -31,10 +33,8 @@ export default function Avatar({ user, size = 'md', className = '' }) {
     }
 
     return (
-        <div className={`${baseClasses} bg-gray-300 flex items-center justify-center`}>
-            <span className="text-gray-600 font-medium">
-                {user.name.charAt(0).toUpperCase()}
-            </span>
+        <div className={`${baseClasses} bg-surface-2 flex items-center justify-center`}>
+            <span className="text-muted font-medium">{initial}</span>
         </div>
     );
 }

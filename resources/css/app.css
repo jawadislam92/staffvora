@@ -17,14 +17,14 @@
    only thing this can't catch (it must stay white on coloured buttons) — those
    are converted to `text-body` per-page. */
 :root, [data-theme="dark"] {
-    --bg: #0b1120;
-    --surface: #111827;
-    --surface-2: #1e293b;
-    --border: #1f2a3b;
-    --text: #f1f5f9;
-    --text-muted: #94a3b8;
-    --text-subtle: #64748b;
-    --accent: var(--brand-accent, #f97316);
+    --bg: #070b18;
+    --surface: #0e1628;
+    --surface-2: #131f38;
+    --border: #1e2b45;
+    --text: #eef2fb;
+    --text-muted: #aeb9d0;
+    --text-subtle: #6b7793;
+    --accent: var(--brand-accent, #2563EB);
 
     --c-slate-50: 248 250 252; --c-slate-100: 241 245 249; --c-slate-200: 226 232 240;
     --c-slate-300: 203 213 225; --c-slate-400: 148 163 184; --c-slate-500: 100 116 139;
@@ -518,23 +518,32 @@ html { background-color: var(--bg); color: var(--text); }
     }
 }
 
-/* White-label accent. Default is the Tracksuite ember; the AuthenticatedLayout
+/* White-label accent. Default is the Staffvora ember; the AuthenticatedLayout
    overrides --brand-accent with each workspace's colour at runtime (set on the
    Branding settings page). Full propagation across the UI is part of the final
    visual audit; these utilities + ::selection consume it today. */
 :root {
-    --brand-accent: #f97316;
-    /* The brand (orange) scale is remapped to per-tenant accent vars so the ~166
+    /* Brand accent = Electric blue (the locked Staffvora brand). */
+    --brand-accent: #2563EB;
+    /* The brand accent scale is remapped to per-tenant accent vars so the ~166
        hard-coded `orange-*` utilities across the app follow the workspace accent
-       colour. Defaults are the exact Tailwind orange channels, so with the
-       default ember accent nothing changes; app.jsx overrides these from the
-       accent (deriving a light→dark ramp) only when a custom accent is set.
-       Amber is intentionally NOT remapped — it's a semantic colour (On Break,
-       warnings). */
-    --c-orange-50: 255 247 237; --c-orange-100: 255 237 213; --c-orange-200: 254 215 170;
-    --c-orange-300: 253 186 116; --c-orange-400: 251 146 60; --c-orange-500: 249 115 22;
-    --c-orange-600: 234 88 12; --c-orange-700: 194 65 12; --c-orange-800: 154 52 18;
-    --c-orange-900: 124 45 18; --c-orange-950: 67 20 7;
+       colour. Defaults are the Tailwind BLUE channels (electric-blue brand), so
+       with the default accent the app reads electric blue; app.jsx overrides
+       these from the accent (deriving a light→dark ramp) only when a custom
+       accent is set. Amber is intentionally NOT remapped — it's a semantic
+       colour (On Break, warnings). */
+    --c-orange-50: 239 246 255; --c-orange-100: 219 234 254; --c-orange-200: 191 219 254;
+    --c-orange-300: 147 197 253; --c-orange-400: 96 165 250; --c-orange-500: 59 130 246;
+    --c-orange-600: 37 99 235; --c-orange-700: 29 78 216; --c-orange-800: 30 64 175;
+    --c-orange-900: 30 58 138; --c-orange-950: 23 37 84;
+}
+/* Semantic status tokens (theme-stable hues; alpha-based tints read on any
+   theme background). Use bg-success-soft / text-danger / border-warning, etc. */
+:root {
+    --success: #22c55e; --success-soft: rgba(34, 197, 94, 0.14);
+    --warning: #f59e0b; --warning-soft: rgba(245, 158, 11, 0.16);
+    --danger:  #ef4444; --danger-soft:  rgba(239, 68, 68, 0.14);
+    --info:    #3b82f6; --info-soft:    rgba(59, 130, 246, 0.14);
 }
 ::selection { background-color: var(--brand-accent); color: #fff; }
 .bg-brand { background-color: var(--brand-accent) !important; }

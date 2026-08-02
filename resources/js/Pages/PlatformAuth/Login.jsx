@@ -12,7 +12,7 @@ export default function Login() {
             <div className="w-full max-w-sm">
                 <div className="mb-6 text-center">
                     <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-orange-500 text-xl font-black text-white">T</div>
-                    <h1 className="text-lg font-bold text-white">Tracksuite Operations</h1>
+                    <h1 className="text-lg font-bold text-white">Staffvora Operations</h1>
                     <p className="text-sm text-zinc-500">Operator portal — staff only</p>
                 </div>
                 <form onSubmit={submit} className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">

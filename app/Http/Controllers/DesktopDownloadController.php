@@ -8,7 +8,10 @@ use Inertia\Inertia;
 
 class DesktopDownloadController extends Controller
 {
-    private const WINDOWS_INSTALLER = 'SA Track Setup 0.3.4.exe';
+    private const WINDOWS_INSTALLERS = [
+        'Staffvora Desktop Setup 0.3.4.exe',
+        'SA Track Setup 0.3.4.exe',
+    ];
 
     private const WINDOWS_VERSION = '0.3.4';
 
@@ -17,10 +20,12 @@ class DesktopDownloadController extends Controller
     /**
      * Accepted macOS artifact names, preferred first. A DMG is preferred, but
      * a zipped .app bundle is a perfectly valid distribution too (download,
-     * unzip, drag to Applications). The SA Track-branded 0.3.2 build is the
-     * current one; older names are kept as fallbacks.
+     * unzip, drag to Applications). Productized names are preferred; the older
+     * internal names remain temporary fallbacks for existing preview artifacts.
      */
     private const MAC_INSTALLERS = [
+        'Staffvora Desktop-0.3.4-arm64.dmg',
+        'Staffvora Desktop-0.3.4-arm64-mac.zip',
         'SA Track-0.3.3-arm64.dmg',
         'SA Track-0.3.3-arm64-mac.zip',
         'SA Track-0.3.2-arm64.dmg',
@@ -42,7 +47,7 @@ class DesktopDownloadController extends Controller
                 'windows' => [
                     'available' => $windows !== null,
                     'version' => self::WINDOWS_VERSION,
-                    'filename' => self::WINDOWS_INSTALLER,
+                    'filename' => $windows ? basename($windows['path']) : null,
                     'size' => $windows['size'] ?? null,
                     'sha256' => $windows['sha256'] ?? null,
                     'url' => $windows ? route('desktop-downloads.windows') : null,
@@ -89,7 +94,7 @@ class DesktopDownloadController extends Controller
 
         abort_unless($path, 404);
 
-        return response()->download($path, self::WINDOWS_INSTALLER, [
+        return response()->download($path, basename($path), [
             'Content-Type' => 'application/vnd.microsoft.portable-executable',
             'X-Content-Type-Options' => 'nosniff',
         ]);
@@ -159,7 +164,7 @@ class DesktopDownloadController extends Controller
 
     private function windowsInstaller(): ?string
     {
-        return $this->findInstaller([self::WINDOWS_INSTALLER]);
+        return $this->findInstaller(self::WINDOWS_INSTALLERS);
     }
 
     private function macInstaller(): ?string

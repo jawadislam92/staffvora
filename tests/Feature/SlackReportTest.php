@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Models\MonitoringSetting;
 use App\Models\User;
 use App\Models\WorkHour;
 use Carbon\Carbon;
@@ -18,16 +19,33 @@ class SlackReportTest extends TestCase
     {
         parent::setUp();
 
+        // The platform-wide webhook is deliberately still set here: reports must
+        // now go to the WORKSPACE'S own Slack and must never fall back to this
+        // shared destination (see SlackReportDestination). Leaving it populated
+        // is what makes the fail-closed assertions below meaningful.
         config()->set('services.slack_reports.webhook_url', 'https://hooks.slack.test/services/example');
         config()->set('services.slack_reports.timezone', 'Asia/Karachi');
     }
 
+    /** Connect the currently-bound workspace's own Slack and fake the Web API. */
+    private function connectSlack(string $channel = '#reports'): void
+    {
+        MonitoringSetting::current()->update([
+            'slack_bot_token' => 'xoxb-workspace-token',
+            'slack_attendance_channel' => $channel,
+        ]);
+
+        Http::fake([
+            'slack.com/api/*' => Http::response(['ok' => true, 'ts' => '1.1']),
+            '*' => Http::response('ok'),
+        ]);
+    }
+
     public function test_super_admin_can_send_a_selected_date_range_to_slack(): void
     {
-        Http::fake(['hooks.slack.test/*' => Http::response('ok')]);
-
         $admin = User::factory()->create(['role' => 'super_admin']);
         $member = User::factory()->create(['name' => 'Test Member', 'role' => 'member']);
+        $this->connectSlack();
         $client = Client::create([
             'name' => 'Example Client',
             'work_type' => 'tracker_manual',
@@ -85,10 +103,9 @@ class SlackReportTest extends TestCase
 
     public function test_manual_report_only_includes_the_selected_users_and_fields(): void
     {
-        Http::fake(['hooks.slack.test/*' => Http::response('ok')]);
-
         $admin = User::factory()->create(['role' => 'super_admin']);
         $included = User::factory()->create(['name' => 'Included Member', 'role' => 'member']);
+        $this->connectSlack();
         $excluded = User::factory()->create(['name' => 'Excluded Member', 'role' => 'member']);
         $client = Client::create([
             'name' => 'Visible Client',
@@ -131,10 +148,9 @@ class SlackReportTest extends TestCase
 
     public function test_slack_table_respects_the_one_hundred_row_limit(): void
     {
-        Http::fake(['hooks.slack.test/*' => Http::response('ok')]);
-
         $admin = User::factory()->create(['role' => 'super_admin']);
         $member = User::factory()->create(['name' => 'Busy Member', 'role' => 'member']);
+        $this->connectSlack();
 
         foreach (range(1, 101) as $index) {
             WorkHour::create([
@@ -180,10 +196,10 @@ class SlackReportTest extends TestCase
 
     public function test_weekly_command_sends_the_last_seven_completed_days(): void
     {
-        Http::fake(['hooks.slack.test/*' => Http::response('ok')]);
         Carbon::setTestNow(Carbon::parse('2026-06-07 10:00:00', 'Asia/Karachi'));
 
         $member = User::factory()->create(['name' => 'Weekly Member', 'role' => 'member']);
+        $this->connectSlack();
         WorkHour::create([
             'user_id' => $member->id,
             'date' => '2026-06-06',
@@ -202,8 +218,6 @@ class SlackReportTest extends TestCase
 
     public function test_automatic_report_excludes_users_disabled_for_slack_reporting(): void
     {
-        Http::fake(['hooks.slack.test/*' => Http::response('ok')]);
-
         $included = User::factory()->create([
             'name' => 'Included Staff',
             'include_in_slack_reports' => true,
@@ -212,6 +226,7 @@ class SlackReportTest extends TestCase
             'name' => 'Excluded Manager',
             'include_in_slack_reports' => false,
         ]);
+        $this->connectSlack();
 
         foreach ([$included, $excluded] as $user) {
             WorkHour::create([
@@ -239,13 +254,12 @@ class SlackReportTest extends TestCase
 
     public function test_manual_report_can_explicitly_include_a_user_disabled_by_default(): void
     {
-        Http::fake(['hooks.slack.test/*' => Http::response('ok')]);
-
         $admin = User::factory()->create(['role' => 'super_admin']);
         $manager = User::factory()->create([
             'name' => 'Occasional Manager',
             'include_in_slack_reports' => false,
         ]);
+        $this->connectSlack();
 
         WorkHour::create([
             'user_id' => $manager->id,

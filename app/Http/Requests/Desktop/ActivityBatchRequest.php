@@ -16,10 +16,13 @@ class ActivityBatchRequest extends FormRequest
         return [
             'tracking_session_id' => ['required', 'integer', 'exists:tracking_sessions,id'],
             'samples' => ['required', 'array', 'min:1', 'max:200'],
+            // captured_at is clamped to a bounded window around server time in
+            // ActivityController — an unbounded value lets the agent plant
+            // activity evidence on days nobody worked.
             'samples.*.captured_at' => ['required', 'date'],
-            'samples.*.keyboard_count' => ['nullable', 'integer', 'min:0'],
-            'samples.*.mouse_count' => ['nullable', 'integer', 'min:0'],
-            'samples.*.idle_seconds' => ['nullable', 'integer', 'min:0'],
+            'samples.*.keyboard_count' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'samples.*.mouse_count' => ['nullable', 'integer', 'min:0', 'max:1000000'],
+            'samples.*.idle_seconds' => ['nullable', 'integer', 'min:0', 'max:86400'],
             'samples.*.active_app' => ['nullable', 'string', 'max:255'],
             'samples.*.active_window_title' => ['nullable', 'string', 'max:255'],
             'samples.*.url_domain' => ['nullable', 'string', 'max:255'],

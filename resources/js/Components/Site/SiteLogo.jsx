@@ -1,4 +1,4 @@
-// The Tracksuite mark — an open progress-ring with a single measured arc (from
+// The Staffvora mark — an open progress-ring with a single measured arc (from
 // the "Measured System" brand guidelines). Reads as time / completion / calm
 // focus, never a watching eye. Three tones for light, dark and single-colour use.
 export function SiteMark({ size = 28, tone = 'brand' }) {
@@ -14,7 +14,7 @@ export function SiteMark({ size = 28, tone = 'brand' }) {
 }
 
 // Full lockup: mark + wordmark. `tone` reversed = on dark/evergreen surfaces.
-export default function SiteLogo({ name = 'Tracksuite', tone = 'brand', size = 28, className = '', textClass = 'text-lg' }) {
+export default function SiteLogo({ name = 'Staffvora', tone = 'brand', size = 28, className = '', textClass = 'text-lg' }) {
     const wordColor = tone === 'reversed' ? '#ffffff' : 'var(--brand, #1C3D2F)';
     return (
         <span className={`inline-flex items-center gap-2.5 ${className}`}>

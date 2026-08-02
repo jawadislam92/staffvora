@@ -7,7 +7,7 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { Toaster } from 'react-hot-toast';
 import ErrorBoundary from '@/Components/ErrorBoundary';
 
-const DEFAULT_APP_NAME = import.meta.env.VITE_APP_NAME || 'Tracksuite';
+const DEFAULT_APP_NAME = import.meta.env.VITE_APP_NAME || 'Staffvora';
 const DEFAULT_ACCENT = '#f97316';
 // The workspace brand name, kept current by applyTheme so the document <title>
 // (resolved per page below) reflects the tenant's branding, not a constant.

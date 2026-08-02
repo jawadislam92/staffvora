@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Desktop;
 
+use App\Services\TrackingSessionService;
 use Illuminate\Foundation\Http\FormRequest;
 
 class HeartbeatRequest extends FormRequest
@@ -14,7 +15,9 @@ class HeartbeatRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'total_seconds' => ['required', 'integer', 'min:0'],
+            // Floor-level guard only; SessionController::heartbeat() clamps the
+            // value to server-measured elapsed time before storing it.
+            'total_seconds' => ['required', 'integer', 'min:0', 'max:'.TrackingSessionService::MAX_SESSION_SECONDS],
             'activity_percent' => ['nullable', 'integer', 'min:0', 'max:100'],
             'heartbeat_at' => ['nullable', 'date'],
         ];

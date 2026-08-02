@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\MonitoringSetting;
 use App\Models\UpworkProfile;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class ClientController extends Controller
@@ -15,37 +16,60 @@ class ClientController extends Controller
         try {
             $perPage = $request->get('perPage', 10);
             $search = $request->get('search', '');
+            $status = $request->get('status', 'all');
 
             // Validate perPage to ensure it's within reasonable limits
             if (! in_array($perPage, [10, 25, 50, 100])) {
                 $perPage = 10;
             }
 
-            $query = Client::with(['upworkProfile', 'upworkProfiles'])->orderBy('name');
+            // Validate status filter
+            if (! in_array($status, ['all', 'active', 'archived'], true)) {
+                $status = 'all';
+            }
+
+            $startOfWeek = now()->startOfWeek(MonitoringSetting::weekStartDay())->format('Y-m-d');
+            $endOfWeek = now()->endOfWeek(MonitoringSetting::weekEndDay())->format('Y-m-d');
+
+            $query = Client::with(['upworkProfile', 'upworkProfiles'])
+                // SCALE: this week's hours used to be a SUM() query PER ROW
+                // inside the transform below — perPage accepts 100, so one page
+                // load fired up to 100 extra aggregates against work_hours, a
+                // table with hundreds of thousands of rows per tenant. One
+                // correlated subquery in the paginated query replaces all of
+                // them. (Paired with the new work_hours (client_id, date) index.)
+                ->withSum(
+                    ['workHours as weekly_hours_sum' => fn ($q) => $q->whereBetween('date', [$startOfWeek, $endOfWeek])],
+                    'hours'
+                )
+                ->orderBy('name');
 
             // Apply search filter if search term is provided
             if (! empty($search)) {
                 $query->where('name', 'like', '%'.$search.'%');
             }
 
+            // Apply status filter (default 'all' shows active + archived together)
+            if ($status === 'active') {
+                $query->active();
+            } elseif ($status === 'archived') {
+                $query->archived();
+            }
+
             $clients = $query->paginate($perPage)->appends($request->query());
 
-            // Calculate weekly hours for each client and format as HH:MM
-            $startOfWeek = now()->startOfWeek(MonitoringSetting::weekStartDay())->format('Y-m-d');
-            $endOfWeek = now()->endOfWeek(MonitoringSetting::weekEndDay())->format('Y-m-d');
-
-            $clients->getCollection()->transform(function ($client) use ($startOfWeek, $endOfWeek) {
-                // Get the sum of hours for this week
-                $weeklyHours = $client->workHours()
-                    ->whereBetween('date', [$startOfWeek, $endOfWeek])
-                    ->sum('hours');
+            $clients->getCollection()->transform(function ($client) {
+                // withSum yields NULL (not 0) for a client with no rows in the
+                // window; coalescing keeps floor()/arithmetic off an implicit
+                // null-to-float deprecation on every empty row.
+                $weeklyHours = (float) ($client->weekly_hours_sum ?? 0);
 
                 // Convert decimal hours to HH:MM format
                 $hours = floor($weeklyHours);
                 $minutes = round(($weeklyHours - $hours) * 60);
 
-                // Format as HH:MM
                 $client->weekly_hours_worked = sprintf('%02d:%02d', $hours, $minutes);
+                $client->is_active = (bool) ($client->is_active ?? true);
 
                 return $client;
             });
@@ -55,8 +79,16 @@ class ClientController extends Controller
                 'filters' => [
                     'search' => $search,
                     'perPage' => $perPage,
+                    'status' => $status,
                 ],
-                'workTypes' => Client::getWorkTypes(),
+                'filterOptions' => [
+                    'status' => [
+                        ['value' => 'all', 'label' => 'All'],
+                        ['value' => 'active', 'label' => 'Active'],
+                        ['value' => 'archived', 'label' => 'Archived'],
+                    ],
+                ],
+                'workTypes' => Client::getWorkTypes($request->user()?->organization),
             ]);
         } catch (\Exception $e) {
             \Log::error('ClientController index error: '.$e->getMessage());
@@ -65,10 +97,13 @@ class ClientController extends Controller
         }
     }
 
-    public function create()
+    public function create(Request $request)
     {
-        $upworkProfiles = UpworkProfile::active()->orderBy('name')->get();
-        $workTypes = Client::getWorkTypes();
+        $organization = $request->user()?->organization;
+        $upworkProfiles = $organization?->usesProfiles()
+            ? UpworkProfile::active()->orderBy('name')->get()
+            : collect();
+        $workTypes = Client::getWorkTypes($organization);
 
         return Inertia::render('ClientCreate', [
             'upworkProfiles' => $upworkProfiles,
@@ -78,28 +113,33 @@ class ClientController extends Controller
 
     public function store(Request $request)
     {
+        $organization = $request->user()?->organization;
+        $usesProfiles = (bool) $organization?->usesProfiles();
+        $workTypes = Client::getWorkTypes($organization);
+        $profileExists = Rule::exists('upwork_profiles', 'id')
+            ->where(fn ($query) => $query->where('organization_id', $organization?->id));
         $rules = [
             'name' => 'required|string|max:255',
             'tags' => 'nullable|array',
             'tags.*' => 'string|max:50',
-            'work_type' => 'required|string|in:'.implode(',', array_keys(Client::getWorkTypes())),
+            'work_type' => ['required', 'string', Rule::in(array_keys($workTypes))],
         ];
 
         // Make upwork_profile_ids conditionally required for multiple profiles
-        if (Client::isProfileRequired($request->work_type)) {
+        if (Client::isProfileRequired($request->work_type, $organization)) {
             $rules['upwork_profile_ids'] = 'required|array|min:1';
-            $rules['upwork_profile_ids.*'] = 'exists:upwork_profiles,id';
+            $rules['upwork_profile_ids.*'] = $profileExists;
         } else {
             $rules['upwork_profile_ids'] = 'nullable|array';
-            $rules['upwork_profile_ids.*'] = 'exists:upwork_profiles,id';
+            $rules['upwork_profile_ids.*'] = $profileExists;
         }
 
         // Keep backward compatibility for single profile
         if ($request->has('upwork_profile_id') && ! $request->has('upwork_profile_ids')) {
-            if (Client::isProfileRequired($request->work_type)) {
-                $rules['upwork_profile_id'] = 'required|exists:upwork_profiles,id';
+            if (Client::isProfileRequired($request->work_type, $organization)) {
+                $rules['upwork_profile_id'] = ['required', $profileExists];
             } else {
-                $rules['upwork_profile_id'] = 'nullable|exists:upwork_profiles,id';
+                $rules['upwork_profile_id'] = ['nullable', $profileExists];
             }
         }
 
@@ -110,23 +150,26 @@ class ClientController extends Controller
             'name' => $validated['name'],
             'tags' => $validated['tags'] ?? [],
             'work_type' => $validated['work_type'],
-            'upwork_profile_id' => $validated['upwork_profile_id'] ?? null, // Keep for backward compatibility
+            'upwork_profile_id' => $usesProfiles ? ($validated['upwork_profile_id'] ?? null) : null,
         ];
 
         $client = Client::create($clientData);
 
         // Attach multiple profiles if provided
-        if (isset($validated['upwork_profile_ids']) && is_array($validated['upwork_profile_ids'])) {
+        if ($usesProfiles && isset($validated['upwork_profile_ids']) && is_array($validated['upwork_profile_ids'])) {
             $client->upworkProfiles()->attach($validated['upwork_profile_ids']);
         }
 
         return redirect()->route('clients.index')->with('success', 'Client created.');
     }
 
-    public function edit(Client $client)
+    public function edit(Request $request, Client $client)
     {
-        $upworkProfiles = UpworkProfile::active()->orderBy('name')->get();
-        $workTypes = Client::getWorkTypes();
+        $organization = $request->user()?->organization;
+        $upworkProfiles = $organization?->usesProfiles()
+            ? UpworkProfile::active()->orderBy('name')->get()
+            : collect();
+        $workTypes = Client::getWorkTypes($organization);
 
         return Inertia::render('ClientEdit', [
             'client' => $client->load(['upworkProfile', 'upworkProfiles']),
@@ -138,28 +181,33 @@ class ClientController extends Controller
 
     public function update(Request $request, Client $client)
     {
+        $organization = $request->user()?->organization;
+        $usesProfiles = (bool) $organization?->usesProfiles();
+        $workTypes = Client::getWorkTypes($organization);
+        $profileExists = Rule::exists('upwork_profiles', 'id')
+            ->where(fn ($query) => $query->where('organization_id', $organization?->id));
         $rules = [
             'name' => 'required|string|max:255',
             'tags' => 'nullable|array',
             'tags.*' => 'string|max:50',
-            'work_type' => 'required|string|in:'.implode(',', array_keys(Client::getWorkTypes())),
+            'work_type' => ['required', 'string', Rule::in(array_keys($workTypes))],
         ];
 
         // Make upwork_profile_ids conditionally required for multiple profiles
-        if (Client::isProfileRequired($request->work_type)) {
+        if (Client::isProfileRequired($request->work_type, $organization)) {
             $rules['upwork_profile_ids'] = 'required|array|min:1';
-            $rules['upwork_profile_ids.*'] = 'exists:upwork_profiles,id';
+            $rules['upwork_profile_ids.*'] = $profileExists;
         } else {
             $rules['upwork_profile_ids'] = 'nullable|array';
-            $rules['upwork_profile_ids.*'] = 'exists:upwork_profiles,id';
+            $rules['upwork_profile_ids.*'] = $profileExists;
         }
 
         // Keep backward compatibility for single profile
         if ($request->has('upwork_profile_id') && ! $request->has('upwork_profile_ids')) {
-            if (Client::isProfileRequired($request->work_type)) {
-                $rules['upwork_profile_id'] = 'required|exists:upwork_profiles,id';
+            if (Client::isProfileRequired($request->work_type, $organization)) {
+                $rules['upwork_profile_id'] = ['required', $profileExists];
             } else {
-                $rules['upwork_profile_id'] = 'nullable|exists:upwork_profiles,id';
+                $rules['upwork_profile_id'] = ['nullable', $profileExists];
             }
         }
 
@@ -170,14 +218,16 @@ class ClientController extends Controller
             'name' => $validated['name'],
             'tags' => $validated['tags'] ?? [],
             'work_type' => $validated['work_type'],
-            'upwork_profile_id' => $validated['upwork_profile_id'] ?? null, // Keep for backward compatibility
+            'upwork_profile_id' => $usesProfiles ? ($validated['upwork_profile_id'] ?? null) : null,
         ];
 
         $client->update($clientData);
 
         // Sync multiple profiles if provided
-        if (isset($validated['upwork_profile_ids']) && is_array($validated['upwork_profile_ids'])) {
+        if ($usesProfiles && isset($validated['upwork_profile_ids']) && is_array($validated['upwork_profile_ids'])) {
             $client->upworkProfiles()->sync($validated['upwork_profile_ids']);
+        } elseif (! $usesProfiles) {
+            $client->upworkProfiles()->sync([]);
         }
 
         return $this->redirectToReturnPath($request, 'clients.index', [
@@ -216,13 +266,90 @@ class ClientController extends Controller
         }
     }
 
-    public function export()
+    /**
+     * Archive / restore a single client. Archiving hides it from the pickers
+     * used to log NEW work; every historical hour and report keeps showing.
+     */
+    public function setStatus(Request $request, Client $client)
+    {
+        $request->validate([
+            'is_active' => 'required|boolean',
+        ]);
+
+        $client->update(['is_active' => $request->boolean('is_active')]);
+
+        return $this->redirectToReturnPath($request, 'clients.index', [
+            'success' => $request->boolean('is_active') ? 'Client restored.' : 'Client archived.',
+        ]);
+    }
+
+    /**
+     * Bulk archive / restore. Either the explicit ticked ids, or every client
+     * matching the current list filters ("select all N matching").
+     */
+    public function bulkStatus(Request $request)
+    {
+        $request->validate([
+            'is_active' => 'required|boolean',
+            'ids' => 'nullable|array',
+            'ids.*' => 'integer',
+            'all_matching' => 'nullable|boolean',
+            'search' => 'nullable|string',
+            'status' => 'nullable|string',
+        ]);
+
+        try {
+            if ($request->boolean('all_matching')) {
+                // Rebuild the SAME query index() uses from the provided filters,
+                // applying BOTH the search term AND the status scope, so the
+                // affected set matches the count and rows the user saw.
+                $search = $request->get('search', '');
+                $status = $request->get('status', 'all');
+
+                $query = Client::query();
+                if (! empty($search)) {
+                    $query->where('name', 'like', '%'.$search.'%');
+                }
+
+                // Apply the identical status scope index() used.
+                if ($status === 'active') {
+                    $query->active();
+                } elseif ($status === 'archived') {
+                    $query->archived();
+                }
+
+                $ids = $query->pluck('id')->all();
+            } else {
+                $ids = $request->input('ids', []);
+            }
+
+            $isActive = $request->boolean('is_active');
+            // The OrganizationScope applies here too, so ids belonging to
+            // another tenant simply match nothing.
+            $count = Client::whereIn('id', $ids)->update(['is_active' => $isActive]);
+
+            $action = $isActive ? 'Restored' : 'Archived';
+
+            return $this->redirectToReturnPath($request, 'clients.index', [
+                'success' => "{$action} {$count} client(s).",
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Bulk status update error: '.$e->getMessage());
+
+            return $this->redirectToReturnPath($request, 'clients.index', [
+                'error' => 'Failed to update selected clients.',
+            ]);
+        }
+    }
+
+    public function export(Request $request)
     {
         try {
+            $workTypes = Client::getWorkTypes($request->user()?->organization);
             $clients = Client::with(['upworkProfile', 'upworkProfiles'])->get();
 
             $csvData = [];
-            $csvData[] = ['ID', 'Name', 'Work Type', 'Upwork Profiles', 'Tags', 'Created At']; // Header
+            $csvData[] = ['ID', 'Name', 'Work Type', 'Profiles', 'Tags', 'Created At']; // Header
 
             foreach ($clients as $client) {
                 // Get all profiles (both single and multiple)
@@ -236,7 +363,7 @@ class ClientController extends Controller
                 $csvData[] = [
                     $client->id,
                     $client->name,
-                    Client::getWorkTypes()[$client->work_type] ?? $client->work_type,
+                    $workTypes[$client->work_type] ?? $client->work_type,
                     implode('; ', $profileNames),
                     is_array($client->tags) ? implode(', ', $client->tags) : '',
                     $client->created_at->format('Y-m-d H:i:s'),
@@ -274,6 +401,9 @@ class ClientController extends Controller
         ]);
 
         try {
+            $organization = $request->user()?->organization;
+            $usesProfiles = (bool) $organization?->usesProfiles();
+            $workTypes = array_flip(Client::getWorkTypes($organization));
             $file = $request->file('file');
             $path = $file->getRealPath();
 
@@ -285,17 +415,16 @@ class ClientController extends Controller
 
                 while (($data = fgetcsv($handle)) !== false) {
                     try {
-                        // Expected CSV format: Name, Work Type, Upwork Profile, Tags
+                        // Expected CSV format: Name, Work Type, optional Profile, Tags
                         if (count($data) >= 2 && ! empty($data[0])) {
                             $workType = 'tracker_manual'; // Default
                             if (! empty($data[1])) {
                                 // Try to match work type
-                                $workTypes = array_flip(Client::getWorkTypes());
                                 $workType = $workTypes[$data[1]] ?? 'tracker_manual';
                             }
 
                             $upworkProfileId = null;
-                            if (! empty($data[2])) {
+                            if ($usesProfiles && ! empty($data[2])) {
                                 $profile = UpworkProfile::where('name', $data[2])->first();
                                 $upworkProfileId = $profile ? $profile->id : null;
                             }

@@ -42,10 +42,11 @@ class BillingTest extends TestCase
         ]));
 
         $org->refresh();
-        $this->assertSame(3, $org->seatLimit());
-        // Free now includes capped monitoring (6 shots/hr), but not the paid flags.
-        $this->assertTrue($org->planFeature('monitoring'));
-        $this->assertSame(6, $org->entitlement('max_screenshots_per_hour'));
+        $this->assertSame(2, $org->seatLimit());
+        // Free is time tracking only: screenshots + activity start at Starter.
+        $this->assertFalse($org->planFeature('monitoring'));
+        $this->assertSame(0, $org->entitlement('max_screenshots_per_hour'));
+        $this->assertSame(7, $org->entitlement('max_retention_days'));
         $this->assertFalse($org->planFeature('ai'));
         $this->assertFalse($org->planFeature('activity_tracking'));
     }
@@ -54,7 +55,7 @@ class BillingTest extends TestCase
     {
         $owner = app(TenantProvisioner::class)->provision('Acme', 'Owner', 'owner@acme.test', 'super-secret-pw')['owner'];
 
-        // Downgrade to Free (3 seats); the owner is seat #1.
+        // Downgrade to Free (2 seats); the owner is seat #1.
         app(CurrentOrganization::class)->runFor($owner->organization_id, fn () =>
             $owner->organization->subscription->update(['plan_id' => Plan::where('key', 'free')->first()->id]));
 
@@ -63,8 +64,7 @@ class BillingTest extends TestCase
         ]);
 
         $add(2)->assertSessionHasNoErrors(); // seat #2
-        $add(3)->assertSessionHasNoErrors(); // seat #3
-        $add(4)->assertSessionHasErrors('email'); // would be #4 — blocked
+        $add(3)->assertSessionHasErrors('email'); // would be #3 — blocked
     }
 
     public function test_billing_page_shows_plan_entitlements_and_the_orgs_price(): void
@@ -103,5 +103,34 @@ class BillingTest extends TestCase
 
         $paymentCount = app(CurrentOrganization::class)->runFor($org->id, fn () => \App\Models\Payment::count());
         $this->assertSame(1, $paymentCount);
+    }
+
+    public function test_suspended_workspace_is_blocked_but_billing_and_logout_remain_available(): void
+    {
+        $owner = app(TenantProvisioner::class)->provision('Acme', 'Owner', 'owner@acme.test', 'super-secret-pw')['owner'];
+        $owner->organization->update(['status' => Organization::STATUS_SUSPENDED]);
+
+        $this->actingAs($owner)
+            ->get(route('dashboard'))
+            ->assertRedirect(route('billing.index'))
+            ->assertSessionHas('error');
+
+        $this->actingAs($owner)->get(route('billing.index'))->assertOk();
+        $this->actingAs($owner)->post(route('logout'))->assertRedirect('/');
+    }
+
+    public function test_expired_trial_is_blocked_until_payment_is_recorded(): void
+    {
+        $owner = app(TenantProvisioner::class)->provision('Acme', 'Owner', 'owner@acme.test', 'super-secret-pw')['owner'];
+        $owner->organization->subscription->update([
+            'status' => 'trialing',
+            'trial_ends_at' => now()->subMinute(),
+        ]);
+
+        $this->actingAs($owner)
+            ->get(route('dashboard'))
+            ->assertRedirect(route('billing.index'));
+
+        $this->actingAs($owner)->get(route('billing.index'))->assertOk();
     }
 }

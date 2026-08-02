@@ -64,4 +64,19 @@ class UserMonitoringSetting extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    /**
+     * The settings row for a user, tolerating rows written before
+     * organization_id existed (or written while no tenant was bound).
+     *
+     * user_id is globally UNIQUE on this table, so a legacy NULL-organization
+     * row must be reused rather than duplicated — a second insert for the same
+     * user would be rejected by that unique index. The tenant-scoped read is
+     * tried first so a normal multi-tenant lookup stays scoped.
+     */
+    public static function forUser(int $userId): ?self
+    {
+        return static::query()->where('user_id', $userId)->first()
+            ?: static::query()->withoutOrganizationScope()->where('user_id', $userId)->first();
+    }
 }

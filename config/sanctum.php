@@ -47,6 +47,15 @@ return [
     | considered expired. This will override any values set in the token's
     | "expires_at" attribute, but first-party sessions are not affected.
     |
+    | DELIBERATELY NULL — this does NOT mean "tokens never expire". Putting a
+    | number here OVERRIDES the per-token expires_at for EVERY token in the
+    | app, so one value would silently govern any future non-desktop token that
+    | needs a different lifetime. Expiry is set at the issuance site instead:
+    | App\Http\Controllers\Api\Desktop\AuthController::TOKEN_LIFETIME_DAYS
+    | passes an explicit expires_at to createToken(), and Sanctum's guard
+    | enforces that on every request independently of this key. Any new token
+    | type must do the same — do not rely on this config to bound a lifetime.
+    |
     */
 
     'expiration' => null,

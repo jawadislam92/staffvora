@@ -20,7 +20,7 @@ class SiteContext
         [$light, $dark] = self::resolvePalette($b, $theme);
 
         return [
-            'name' => $b['name'] ?? 'Tracksuite',
+            'name' => $b['name'] ?? 'Staffvora',
             'tagline' => $b['tagline'] ?? null,
             'legal_name' => $b['legal_name'] ?? null,
             'colors' => $light,

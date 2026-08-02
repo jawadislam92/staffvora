@@ -6,10 +6,9 @@ use App\Models\SitePage;
 use App\Models\SiteTheme;
 
 /**
- * Ships the full default marketing site (home + every launch page) as published
- * CMS block-pages, so the public site is complete from day one and the owner
- * edits everything in the builder. Idempotent: only creates pages that are
- * missing. Adding a page = one entry in pages(); it auto-appears in nav.
+ * Ships the default marketing site as CMS block-pages. Pages that still contain
+ * an explicit [REPLACE] marker remain drafts, preventing placeholder legal,
+ * security, pricing, or company claims from being exposed publicly.
  */
 class DefaultSiteContent
 {
@@ -17,27 +16,37 @@ class DefaultSiteContent
     {
         self::ensureTheme();
 
-        $created = false;
+        $changed = false;
         foreach (self::pages() as $slug => $def) {
-            if (SitePage::where('slug', $slug)->exists()) {
+            $existing = SitePage::where('slug', $slug)->first();
+            if ($existing) {
+                // Release guard for databases seeded by older versions, which
+                // published every page even when its live snapshot was a draft.
+                if ($existing->status === 'published' && self::hasPlaceholders($existing->published_blocks)) {
+                    $existing->update(['status' => 'draft']);
+                    SitePage::forgetCache($existing->slug);
+                    $changed = true;
+                }
+
                 continue;
             }
             $blocks = $def['blocks'];
+            $isDraft = self::hasPlaceholders($blocks);
             SitePage::create([
                 'slug' => $slug,
                 'title' => $def['title'],
-                'meta_title' => $def['meta_title'] ?? $def['title'].' — Tracksuite',
+                'meta_title' => $def['meta_title'] ?? $def['title'].' — Staffvora',
                 'meta_description' => $def['meta_description'] ?? null,
-                'status' => 'published',
+                'status' => $isDraft ? 'draft' : 'published',
                 'show_in_nav' => $def['show_in_nav'] ?? true,
                 'blocks' => $blocks,
-                'published_blocks' => $blocks,
+                'published_blocks' => $isDraft ? [] : $blocks,
                 'sort' => $def['sort'] ?? 0,
             ]);
-            $created = true;
+            $changed = true;
         }
 
-        if ($created) {
+        if ($changed) {
             SiteNavigation::forgetCache();
         }
 
@@ -49,7 +58,7 @@ class DefaultSiteContent
         $theme = SiteTheme::current();
         if ($theme->tagline === null) {
             $theme->update([
-                'site_name' => $theme->site_name ?: config('brand.name', 'Tracksuite'),
+                'site_name' => $theme->site_name ?: config('brand.name', 'Staffvora'),
                 'tagline' => config('brand.tagline', 'We measure the work, not the worker.'),
                 'contact_email' => $theme->contact_email ?: config('brand.support_email'),
             ]);
@@ -60,6 +69,15 @@ class DefaultSiteContent
     private static function b(string $type, array $data): array
     {
         return ['id' => 'b'.bin2hex(random_bytes(4)), 'type' => $type, 'data' => $data];
+    }
+
+    private static function hasPlaceholders(mixed $content): bool
+    {
+        if ($content === null) {
+            return false;
+        }
+
+        return str_contains((string) json_encode($content, JSON_UNESCAPED_UNICODE), '[REPLACE');
     }
 
     private static function cta(string $heading, string $text): array
@@ -75,7 +93,7 @@ class DefaultSiteContent
         return [
             'home' => [
                 'title' => 'Home', 'sort' => 0,
-                'meta_title' => 'Tracksuite — Time tracking that respects your team',
+                'meta_title' => 'Staffvora — Time tracking that respects your team',
                 'meta_description' => 'Time tracking, screenshots, attendance and reports in one place — from desktop tracker to Slack digest. Start free, no credit card.',
                 'blocks' => self::homeBlocks(),
             ],
@@ -104,7 +122,7 @@ class DefaultSiteContent
                     ]]),
                     self::b('feature_split', ['eyebrow' => 'No surprises', 'heading' => 'What we track — and what we don\'t', 'text' => 'We are deliberately clear about what is captured. The people being tracked can always see it, and sensitive things stay off by default.', 'bullets' => ['✔ Time, activity level, apps used', '✔ Optional, visible screenshots', '✘ No keylogging', '✘ No webcam, no secret capture'], 'image_side' => 'right']),
                     self::b('faq', ['heading' => 'Common questions', 'items' => [
-                        ['q' => 'Do employees know they are being tracked?', 'a' => 'Yes — Tracksuite is transparent by design. The tracker is visible and people can see their own data.'],
+                        ['q' => 'Do employees know they are being tracked?', 'a' => 'Yes — Staffvora is transparent by design. The tracker is visible and people can see their own data.'],
                         ['q' => 'Does it work offline?', 'a' => 'Yes. The desktop tracker queues data offline and syncs when the connection returns.'],
                         ['q' => 'Can I turn screenshots off?', 'a' => 'Absolutely — screenshots are configurable per workspace and can be disabled entirely.'],
                     ]]),
@@ -116,7 +134,7 @@ class DefaultSiteContent
                 'title' => 'Solutions', 'sort' => 3,
                 'meta_description' => 'Time tracking built for agencies, BPOs, software houses, remote teams and freelancers.',
                 'blocks' => [
-                    self::b('hero', ['variant' => 'center', 'eyebrow' => 'Solutions', 'heading' => 'Built for the way', 'heading_highlight' => 'your team works.', 'subhead' => 'Whether you bill by the hour or run a 24/7 floor, Tracksuite adapts to how your team operates.', ...$startCtas]),
+                    self::b('hero', ['variant' => 'center', 'eyebrow' => 'Solutions', 'heading' => 'Built for the way', 'heading_highlight' => 'your team works.', 'subhead' => 'Whether you bill by the hour or run a 24/7 floor, Staffvora adapts to how your team operates.', ...$startCtas]),
                     self::b('feature_grid', ['heading' => 'Who it\'s for', 'subhead' => 'Pick the setup that matches your team.', 'features' => [
                         ['icon' => 'users', 'title' => 'Agencies & consultancies', 'text' => 'Track billable hours per client and turn them into clean, automatic reports.'],
                         ['icon' => 'globe', 'title' => 'BPOs & call centers', 'text' => 'Shift attendance, live activity and workforce analytics across large, distributed floors.'],
@@ -125,7 +143,7 @@ class DefaultSiteContent
                         ['icon' => 'chart', 'title' => 'Freelancers', 'text' => 'Simple, honest time tracking and client-ready timesheets.'],
                     ]]),
                     self::b('feature_split', ['eyebrow' => 'One platform', 'heading' => 'Accuracy your clients trust', 'text' => 'Every plan turns tracked time into exportable timesheets and reports, so billing and payroll are never a guess.', 'bullets' => ['Per-client billable hours', 'CSV & Slack exports', 'Attendance & shifts', 'Payroll-ready timesheets'], 'image_side' => 'right']),
-                    self::cta('Find your fit', 'Start free and shape Tracksuite around your team in minutes.'),
+                    self::cta('Find your fit', 'Start free and shape Staffvora around your team in minutes.'),
                 ],
             ],
 
@@ -134,13 +152,13 @@ class DefaultSiteContent
                 'meta_description' => 'Time tracking built for agencies — billable hours, client reports and accurate invoicing.',
                 'blocks' => [
                     self::b('hero', ['variant' => 'center', 'eyebrow' => 'For agencies', 'heading' => 'Bill every hour,', 'heading_highlight' => 'accurately.', 'subhead' => 'Track time per client and project, then turn it into reports and invoices your clients trust.', ...$startCtas]),
-                    self::b('feature_split', ['eyebrow' => 'The problem', 'heading' => 'Stop leaking billable hours', 'text' => 'Manual timesheets miss time and slow down invoicing. Tracksuite captures it automatically, per client, so nothing slips.', 'bullets' => ['Per-client & per-project time', 'Automatic, exportable timesheets', 'Clear client-ready reports'], 'image_side' => 'right']),
+                    self::b('feature_split', ['eyebrow' => 'The problem', 'heading' => 'Stop leaking billable hours', 'text' => 'Manual timesheets miss time and slow down invoicing. Staffvora captures it automatically, per client, so nothing slips.', 'bullets' => ['Per-client & per-project time', 'Automatic, exportable timesheets', 'Clear client-ready reports'], 'image_side' => 'right']),
                     self::b('feature_grid', ['heading' => 'What agencies use most', 'features' => [
                         ['icon' => 'clock', 'title' => 'Billable time tracking', 'text' => 'One click per client; overnight and idle time handled for you.'],
                         ['icon' => 'chart', 'title' => 'Client reports', 'text' => 'Filter by client, project or person and export in one click.'],
                         ['icon' => 'camera', 'title' => 'Proof of work', 'text' => 'Optional, employee-visible screenshots for client confidence.'],
                     ]]),
-                    self::cta('Win back billable hours', 'Try Tracksuite free with your team for 14 days.'),
+                    self::cta('Win back billable hours', 'Try Staffvora free with your team for 14 days.'),
                 ],
             ],
 
@@ -164,7 +182,7 @@ class DefaultSiteContent
                 'meta_description' => 'We are building time tracking teams actually trust — accurate, humane and transparent.',
                 'blocks' => [
                     self::b('hero', ['variant' => 'center', 'eyebrow' => 'About us', 'heading' => 'Time tracking teams', 'heading_highlight' => 'actually trust.', 'subhead' => 'We believe you can measure work without watching people. That belief shapes every decision we make.']),
-                    self::b('rich_text', ['html' => '<h2>Our story</h2><p>Most time trackers were built to police people. We started Tracksuite because the teams we worked with deserved better — accurate measurement that respects the people doing the work. <em>[REPLACE: your real founding story.]</em></p><h3>What we believe</h3><p>Accountability and respect are not opposites. Transparent data, plain numbers and humane defaults build the trust that makes a team actually want to use a tracker.</p>']),
+                    self::b('rich_text', ['html' => '<h2>Our story</h2><p>Most time trackers were built to police people. We started Staffvora because the teams we worked with deserved better — accurate measurement that respects the people doing the work. <em>[REPLACE: your real founding story.]</em></p><h3>What we believe</h3><p>Accountability and respect are not opposites. Transparent data, plain numbers and humane defaults build the trust that makes a team actually want to use a tracker.</p>']),
                     self::b('team_grid', ['heading' => 'The people behind it', 'subhead' => '[REPLACE with your real team.]', 'members' => [
                         ['name' => 'Your name', 'role' => 'Founder'],
                         ['name' => 'Team member', 'role' => 'Engineering'],
@@ -176,13 +194,13 @@ class DefaultSiteContent
                         ['value' => 'Rawalpindi', 'label' => 'where we\'re based'],
                         ['value' => 'Humane', 'label' => 'by design'],
                     ]]),
-                    self::cta('Come build with us', 'Try Tracksuite free and tell us what you think.'),
+                    self::cta('Come build with us', 'Try Staffvora free and tell us what you think.'),
                 ],
             ],
 
             'contact' => [
                 'title' => 'Contact', 'sort' => 7,
-                'meta_description' => 'Talk to the Tracksuite team — questions, demos, or help getting started.',
+                'meta_description' => 'Talk to the Staffvora team — questions, demos, or help getting started.',
                 'blocks' => [
                     self::b('hero', ['variant' => 'center', 'eyebrow' => 'Contact', 'heading' => 'Let\'s talk.', 'subhead' => 'Questions, a demo, or help getting set up — we\'re happy to help. We usually reply within one business day.']),
                     self::b('contact', ['form_heading' => 'Send us a message']),
@@ -191,7 +209,7 @@ class DefaultSiteContent
 
             'security' => [
                 'title' => 'Security', 'sort' => 8,
-                'meta_description' => 'How Tracksuite protects your data and your team\'s privacy — encryption, access controls and employee data rights.',
+                'meta_description' => 'How Staffvora protects your data and your team\'s privacy — encryption, access controls and employee data rights.',
                 'blocks' => [
                     self::b('hero', ['variant' => 'center', 'eyebrow' => 'Security & privacy', 'heading' => 'Your data', 'heading_highlight' => 'stays yours.', 'subhead' => 'We hold workforce data to a high bar — encrypted, access-controlled, and built around the rights of the people being tracked.']),
                     self::b('feature_grid', ['heading' => 'How we protect your workspace', 'features' => [
@@ -202,10 +220,10 @@ class DefaultSiteContent
                         ['icon' => 'globe', 'title' => 'Reliable hosting', 'text' => 'Hosted on hardened infrastructure with HTTPS and regular backups.'],
                         ['icon' => 'camera', 'title' => 'Privacy controls', 'text' => 'Screenshots and activity capture are configurable per workspace and can be turned off.'],
                     ]]),
-                    self::b('rich_text', ['html' => '<h2>Our approach</h2><p>Tracksuite is designed so monitoring is transparent and proportionate. Sensitive capture is off by default, retention is configurable, and employees can always see what is recorded about them. <em>[REPLACE: add your formal security/compliance posture once finalised.]</em></p>']),
+                    self::b('rich_text', ['html' => '<h2>Our approach</h2><p>Staffvora is designed so monitoring is transparent and proportionate. Sensitive capture is off by default, retention is configurable, and employees can always see what is recorded about them. <em>[REPLACE: add your formal security/compliance posture once finalised.]</em></p>']),
                     self::b('faq', ['heading' => 'Security FAQ', 'items' => [
                         ['q' => 'Where is my data stored?', 'a' => 'On secured servers with HTTPS and regular backups. [REPLACE: name region/provider once confirmed.]'],
-                        ['q' => 'Can employees see what\'s captured?', 'a' => 'Yes — transparency is core to Tracksuite. People can view their own tracked data and screenshots.'],
+                        ['q' => 'Can employees see what\'s captured?', 'a' => 'Yes — transparency is core to Staffvora. People can view their own tracked data and screenshots.'],
                         ['q' => 'Can I delete data?', 'a' => 'Yes. You control retention, and data can be removed on request.'],
                     ]]),
                     self::cta('Questions about security?', 'Reach out — we\'re happy to walk you through it.'),
@@ -214,31 +232,31 @@ class DefaultSiteContent
 
             'download' => [
                 'title' => 'Download', 'sort' => 9,
-                'meta_description' => 'Download the Tracksuite desktop tracker for Windows and macOS.',
+                'meta_description' => 'Download the Staffvora desktop tracker for Windows and macOS.',
                 'blocks' => [
-                    self::b('hero', ['variant' => 'center', 'eyebrow' => 'Download', 'heading' => 'Get the Tracksuite', 'heading_highlight' => 'desktop tracker.', 'subhead' => 'Lightweight, auto-updating and offline-ready. Sign in once and start tracking.', 'primary_cta' => ['label' => 'Create a workspace', 'url' => '/register'], 'secondary_cta' => ['label' => 'Sign in', 'url' => '/login']]),
+                    self::b('hero', ['variant' => 'center', 'eyebrow' => 'Download', 'heading' => 'Get the Staffvora', 'heading_highlight' => 'desktop tracker.', 'subhead' => 'Lightweight, auto-updating and offline-ready. Sign in once and start tracking.', 'primary_cta' => ['label' => 'Create a workspace', 'url' => '/register'], 'secondary_cta' => ['label' => 'Sign in', 'url' => '/login']]),
                     self::b('feature_grid', ['heading' => 'Available platforms', 'subhead' => 'Download links appear inside your dashboard after you sign in.', 'features' => [
                         ['icon' => 'desktop', 'title' => 'Windows', 'text' => 'Native installer with auto-updates, offline queueing and tray controls.'],
                         ['icon' => 'desktop', 'title' => 'macOS', 'text' => 'Native app for Apple Silicon and Intel Macs.'],
                         ['icon' => 'globe', 'title' => 'Linux & more', 'text' => 'Additional platforms coming soon. [REPLACE: confirm availability.]'],
                     ]]),
-                    self::b('rich_text', ['html' => '<h2>System requirements</h2><ul><li>Windows 10 or later, or macOS 11 or later</li><li>An active Tracksuite workspace and sign-in</li><li>Internet connection (the tracker queues data offline and syncs later)</li></ul><p><em>[REPLACE: confirm exact versions / signed-installer details.]</em></p>']),
+                    self::b('rich_text', ['html' => '<h2>System requirements</h2><ul><li>Windows 10 or later, or macOS 11 or later</li><li>An active Staffvora workspace and sign-in</li><li>Internet connection (the tracker queues data offline and syncs later)</li></ul><p><em>[REPLACE: confirm exact versions / signed-installer details.]</em></p>']),
                     self::cta('Start tracking today', 'Create your free workspace, then download the app from your dashboard.'),
                 ],
             ],
 
             'terms' => [
                 'title' => 'Terms of Service', 'sort' => 20, 'show_in_nav' => false,
-                'meta_description' => 'Tracksuite Terms of Service.',
+                'meta_description' => 'Staffvora Terms of Service.',
                 'blocks' => [
                     self::b('hero', ['variant' => 'center', 'heading' => 'Terms of Service', 'subhead' => 'Last updated: [REPLACE]. Please have a legal professional review before launch.']),
-                    self::b('rich_text', ['html' => '<p><strong>Note:</strong> This is a scaffold, not binding legal text. Have a lawyer review and finalise it.</p><h2>1. Acceptance of terms</h2><p>By using Tracksuite you agree to these terms…</p><h2>2. Your account</h2><p>You are responsible for your workspace and the people you invite…</p><h2>3. Acceptable use</h2><p>Use Tracksuite lawfully and in line with applicable employment and privacy laws…</p><h2>4. Billing</h2><p>Paid plans are billed per seat; trials convert as described on the pricing page…</p><h2>5. Liability</h2><p>The service is provided "as is"…</p><h2>6. Termination</h2><p>You may cancel anytime; we may suspend accounts that violate these terms…</p>']),
+                    self::b('rich_text', ['html' => '<p><strong>Note:</strong> This is a scaffold, not binding legal text. Have a lawyer review and finalise it.</p><h2>1. Acceptance of terms</h2><p>By using Staffvora you agree to these terms…</p><h2>2. Your account</h2><p>You are responsible for your workspace and the people you invite…</p><h2>3. Acceptable use</h2><p>Use Staffvora lawfully and in line with applicable employment and privacy laws…</p><h2>4. Billing</h2><p>Paid plans are billed per seat; trials convert as described on the pricing page…</p><h2>5. Liability</h2><p>The service is provided "as is"…</p><h2>6. Termination</h2><p>You may cancel anytime; we may suspend accounts that violate these terms…</p>']),
                 ],
             ],
 
             'privacy' => [
                 'title' => 'Privacy Policy', 'sort' => 21, 'show_in_nav' => false,
-                'meta_description' => 'Tracksuite Privacy Policy.',
+                'meta_description' => 'Staffvora Privacy Policy.',
                 'blocks' => [
                     self::b('hero', ['variant' => 'center', 'heading' => 'Privacy Policy', 'subhead' => 'Last updated: [REPLACE]. Please have a legal professional review before launch.']),
                     self::b('rich_text', ['html' => '<p><strong>Note:</strong> This is a scaffold, not binding legal text. Have a lawyer review and finalise it.</p><h2>1. Data we collect</h2><p>Account details, and — for tracked users — time, activity and optional screenshots configured by their workspace…</p><h2>2. How we use it</h2><p>To provide time tracking, reports and the features you enable…</p><h2>3. Monitoring data</h2><p>Workspace admins configure what is captured; tracked users can view their own data. Sensitive capture is off by default…</p><h2>4. Retention</h2><p>Data is retained per your workspace settings and removed on request…</p><h2>5. Your rights</h2><p>You can access, export and delete your data…</p><h2>6. Contact</h2><p>Questions? Contact us at the address on our contact page…</p>']),
@@ -247,7 +265,7 @@ class DefaultSiteContent
 
             'pricing' => [
                 'title' => 'Pricing', 'sort' => 1,
-                'meta_title' => 'Pricing — Tracksuite',
+                'meta_title' => 'Pricing — Staffvora',
                 'meta_description' => 'Simple, transparent time-tracking pricing. Start free and upgrade as your team grows.',
                 'blocks' => [
                     self::b('hero', ['variant' => 'center', 'eyebrow' => 'Pricing', 'heading' => 'Simple, transparent pricing.', 'heading_highlight' => 'No surprises.', 'subhead' => 'Start free, upgrade when your team grows. Every plan includes the full tracker, attendance and reports.', 'note' => 'No credit card required · 14-day Pro trial']),
@@ -310,7 +328,7 @@ class DefaultSiteContent
             ]]),
             self::b('faq', ['heading' => 'Frequently asked questions', 'items' => [
                 ['q' => 'Do I need a credit card to start?', 'a' => 'No. Create a workspace and you get a 14-day Pro trial with full features — no card required.'],
-                ['q' => 'Can employees see their own screenshots?', 'a' => 'Yes. Tracksuite is built to be transparent — the people being tracked can see what\'s captured.'],
+                ['q' => 'Can employees see their own screenshots?', 'a' => 'Yes. Staffvora is built to be transparent — the people being tracked can see what\'s captured.'],
                 ['q' => 'Which platforms does the desktop tracker support?', 'a' => 'Windows and macOS, with auto-updates and offline queueing.'],
             ]]),
             self::b('cta_band', ['anchor' => 'contact', 'heading' => 'Start tracking in minutes', 'text' => 'Create your workspace free and see your hours, screenshots and attendance in one place.', 'primary_cta' => ['label' => 'Start free', 'url' => '/register']]),

@@ -8,6 +8,7 @@ use App\Models\TrackingAuditLog;
 use App\Models\TrackingScreenshot;
 use App\Models\TrackingSession;
 use App\Models\User;
+use App\Models\WorkCategory;
 use App\Support\BusinessTime;
 use App\Support\WebDomain;
 use Carbon\Carbon;
@@ -379,8 +380,17 @@ class TimelineController extends Controller
      */
     /**
      * Label for the Tasks breakdown. Client work shows the client; non-client
-     * work (office work, bidding, test task) shows the work type instead of a
-     * bare "Unassigned", so that time is clearly attributed.
+     * work shows the WORK CATEGORY instead of a bare "Unassigned", so that time
+     * is still clearly attributed.
+     *
+     * This used to carry its own private label map — one of the four competing
+     * maps that made the same stored value render under different names in
+     * different screens. The workspace's own work_categories row is now the only
+     * source, so the Timeline, the timesheets and the Slack digest cannot drift.
+     *
+     * Sessions still store the legacy `work_type`, so the value is translated
+     * through WorkCategory's memoised per-workspace catalogue — at most one
+     * query per process, never one per session.
      */
     private function breakdownLabel(TrackingSession $session): string
     {
@@ -388,21 +398,12 @@ class TimelineController extends Controller
             return $session->client->name;
         }
 
-        $labels = [
-            'office_work' => 'Office work',
-            'test_task' => 'Test task',
-            'upwork_bidding' => 'Bidding',
-        ];
-
-        if ($session->work_type && isset($labels[$session->work_type])) {
-            return $labels[$session->work_type];
+        if (! $session->work_type) {
+            return 'Unassigned';
         }
 
-        if ($session->work_type) {
-            return ucfirst(str_replace('_', ' ', $session->work_type));
-        }
-
-        return 'Unassigned';
+        return WorkCategory::resolveForLegacyWorkType($session->work_type)?->name
+            ?? ucfirst(str_replace('_', ' ', $session->work_type));
     }
 
     private function inDaySeconds(TrackingSession $session, Carbon $dayStart, Carbon $dayEnd): int

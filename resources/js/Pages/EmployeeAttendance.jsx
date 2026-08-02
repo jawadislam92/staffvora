@@ -13,7 +13,9 @@ import {
     Download,
     History,
     List,
+    LogOut,
     PauseCircle,
+    Pencil,
     PlayCircle,
     RotateCcw,
     Search,
@@ -25,8 +27,30 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import {
+    Badge,
+    Button,
+    Card,
+    Checkbox,
+    EmptyState,
+    Field,
+    Input,
+    Select,
+    Skeleton,
+    StatCard,
+    Table,
+    TBody,
+    Td,
+    THead,
+    Th,
+    Tr,
+    Tabs,
+} from '@/Components/ui';
+import Modal from '@/Components/Modal';
 import { showError, showExportSuccess, showLoading } from '@/Utils/notifications';
 import { formatHours } from '@/Utils/timeUtils';
+
+const cx = (...a) => a.filter(Boolean).join(' ');
 
 const TABS = [
     { id: 'monthly', label: 'Monthly Grid', icon: CalendarDays },
@@ -58,24 +82,29 @@ const calendarStatusOptions = [
     { value: 'HD', label: 'Half day' },
 ];
 
-const statusStyle = (status) => {
-    if (status === 'Working') return 'bg-emerald-500/15 text-emerald-300';
-    if (status === 'On Break') return 'bg-amber-500/15 text-amber-300';
-    if (status === 'Clocked Out') return 'bg-rose-500/15 text-rose-300';
-    return 'bg-slate-700/40 text-slate-300';
+// Live-status pill → semantic Badge tone (summary tab).
+const LIVE_STATUS_TONE = {
+    Working: 'success',
+    'On Break': 'warning',
+    'Clocked Out': 'danger',
+    'Not Started': 'neutral',
 };
 
-const gridStatusStyles = {
-    P: 'bg-emerald-600 text-white border-emerald-700',
-    A: 'bg-fuchsia-200 text-fuchsia-900 border-fuchsia-300',
-    H: 'bg-sky-100 text-sky-800 border-sky-200',
-    L: 'bg-amber-200 text-amber-900 border-amber-300',
-    HD: 'bg-yellow-200 text-yellow-900 border-yellow-300',
-    WFH: 'bg-indigo-100 text-indigo-800 border-indigo-200',
-    LC: 'bg-orange-100 text-orange-800 border-orange-200',
-    LI: 'bg-slate-100 text-slate-700 border-slate-300',
-    PH: 'bg-purple-100 text-purple-800 border-purple-200',
-    empty: 'bg-slate-800/40 text-slate-600 border-slate-800',
+// Attendance code → grid chip classes, built ONLY from semantic status tokens.
+// Present=success, Absent=danger, Late=warning, Leave=info, Off/holiday=surface-2,
+// WFH / public holiday lean on the electric-blue accent. The letter code + the
+// legend keep reused tones unambiguous.
+const GRID_TONE = {
+    P: 'bg-success-soft text-success',
+    LC: 'bg-warning-soft text-warning',
+    A: 'bg-danger-soft text-danger',
+    L: 'bg-info-soft text-info',
+    HD: 'bg-warning-soft text-warning',
+    WFH: 'bg-accent/10 text-accent',
+    H: 'bg-surface-2 text-muted',
+    PH: 'bg-accent/10 text-accent',
+    LI: 'bg-surface-2 text-subtle',
+    empty: 'bg-app text-subtle',
 };
 
 // Code → meaning for the monthly-grid legend (so the colored codes are readable).
@@ -85,19 +114,243 @@ const gridLegend = [
     ['LC', 'Late coming'],
     ['LI', 'Before joining'],
     ['L', 'Leave'],
-    ['H', 'Holiday'],
+    ['H', 'Weekly off / holiday'],
     ['PH', 'Public holiday'],
     ['WFH', 'Work from home'],
     ['HD', 'Half day'],
 ];
 
 const actionMeta = (actionType) => {
-    if (actionType === 'clock_in') return { label: 'Clocked In', icon: PlayCircle, className: 'bg-emerald-50 text-emerald-800 border-emerald-200' };
-    if (actionType === 'clock_out') return { label: 'Clocked Out', icon: Square, className: 'bg-rose-50 text-rose-800 border-rose-200' };
-    if (actionType === 'break_start') return { label: 'Break Started', icon: PauseCircle, className: 'bg-amber-50 text-amber-800 border-amber-200' };
-    if (actionType === 'break_end') return { label: 'Break Ended', icon: RotateCcw, className: 'bg-blue-50 text-blue-800 border-blue-200' };
-    return { label: actionType, icon: Clock, className: 'bg-slate-50 text-slate-800 border-slate-200' };
+    if (actionType === 'clock_in') return { label: 'Clocked In', icon: PlayCircle, tone: 'bg-success-soft text-success' };
+    if (actionType === 'clock_out') return { label: 'Clocked Out', icon: Square, tone: 'bg-danger-soft text-danger' };
+    if (actionType === 'break_start') return { label: 'Break Started', icon: PauseCircle, tone: 'bg-warning-soft text-warning' };
+    if (actionType === 'break_end') return { label: 'Break Ended', icon: RotateCcw, tone: 'bg-info-soft text-info' };
+    return { label: actionType, icon: Clock, tone: 'bg-surface-2 text-muted' };
 };
+
+// ---------------------------------------------------------------------------
+// DEV_SAMPLE — used ONLY when `preview` is true. Lets the whole attendance page
+// render fully offline (no auth, no backend) for design review / storybook-style
+// previews. NONE of this is ever fetched or shown to a real authenticated user.
+// ---------------------------------------------------------------------------
+const PREVIEW_MONTH = '2026-07';
+const PREVIEW_TODAY_DAY = 22;
+
+function buildPreviewMonthlyGrid() {
+    const [year, month] = PREVIEW_MONTH.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const LABELS = {
+        P: 'Present', A: 'Absent', H: 'Weekly off', L: 'Leave', HD: 'Half day',
+        WFH: 'Work from home', LC: 'Late coming', LI: 'Before joining', PH: 'Public holiday',
+    };
+    const WORKED = new Set(['P', 'LC', 'WFH']);
+    const PUBLIC_HOLIDAYS = new Set([14]); // Jul 14 — company-wide holiday
+
+    const days = [];
+    for (let d = 1; d <= daysInMonth; d += 1) {
+        const dow = new Date(Date.UTC(year, month - 1, d)).getUTCDay();
+        days.push({
+            date: `${PREVIEW_MONTH}-${String(d).padStart(2, '0')}`,
+            day: d,
+            weekday: WD[dow],
+            is_weekend: dow === 0,
+        });
+    }
+
+    const roster = [
+        { user_id: 1, user_name: 'Aqsa Khan', designation: 'Frontend Engineer', joinDay: 1, overrides: { 3: 'LC', 10: 'L', 17: 'WFH' } },
+        { user_id: 2, user_name: 'Musa Raza', designation: 'Backend Engineer', joinDay: 1, overrides: { 4: 'A', 11: 'WFH', 18: 'LC' } },
+        { user_id: 3, user_name: 'Sana Faisal', designation: 'Product Designer', joinDay: 1, overrides: { 7: 'HD', 15: 'L', 21: 'LC' } },
+        { user_id: 4, user_name: 'Hamza Zaidi', designation: 'QA Analyst', joinDay: 1, overrides: { 2: 'A', 9: 'WFH', 16: 'HD', 22: 'LC' } },
+        { user_id: 5, user_name: 'Nida Amin', designation: 'Marketing Lead', joinDay: 3, overrides: { 8: 'L', 20: 'A' } },
+        { user_id: 6, user_name: 'Bilal Tariq', designation: 'DevOps Engineer', joinDay: 1, overrides: { 5: 'WFH', 12: 'HD', 19: 'A' } },
+    ];
+
+    const employees = roster.map((person) => {
+        const summary = {
+            holidays: 0, present: 0, absent: 0, leave: 0, half_day: 0,
+            work_from_home: 0, late_coming: 0, late_joining: 0, public_holiday: 0, total_work_hours: 0,
+        };
+
+        const dayCells = days.map((day) => {
+            const d = day.day;
+            let code = null;
+            let source = 'automatic';
+
+            if (d < person.joinDay) {
+                code = 'LI';
+            } else if (person.overrides[d]) {
+                code = person.overrides[d];
+                source = 'manual';
+            } else if (PUBLIC_HOLIDAYS.has(d)) {
+                code = 'PH';
+            } else if (day.is_weekend) {
+                code = 'H';
+            } else if (d > PREVIEW_TODAY_DAY) {
+                code = null;
+                source = 'future';
+            } else {
+                code = 'P';
+            }
+
+            const isWorked = WORKED.has(code);
+            const workHours = code === 'HD' ? 4 : isWorked ? Math.round((7.3 + (d % 4) * 0.22) * 100) / 100 : 0;
+
+            summary.total_work_hours += workHours;
+            if (code === 'LC') { summary.present += 1; summary.late_coming += 1; }
+            else if (code === 'LI') summary.late_joining += 1;
+            else if (code === 'P') summary.present += 1;
+            else if (code === 'A') summary.absent += 1;
+            else if (code === 'H') summary.holidays += 1;
+            else if (code === 'L') summary.leave += 1;
+            else if (code === 'HD') summary.half_day += 1;
+            else if (code === 'WFH') summary.work_from_home += 1;
+            else if (code === 'PH') summary.public_holiday += 1;
+
+            return {
+                date: day.date,
+                status_code: code,
+                status_label: code ? LABELS[code] : 'Not set',
+                status_reason: null,
+                source: code === null ? 'future' : source,
+                work_hours: workHours,
+                break_hours: isWorked ? 0.5 : 0,
+                first_clock_in: isWorked ? (code === 'LC' ? '10:18 AM' : `09:0${d % 6} AM`) : null,
+                last_action_time: isWorked ? `06:0${d % 6} PM` : null,
+                manual_note: source === 'manual' ? 'Marked by admin' : null,
+            };
+        });
+
+        summary.total_work_hours = Math.round(summary.total_work_hours * 100) / 100;
+
+        return {
+            user_id: person.user_id,
+            user_name: person.user_name,
+            avatar: null,
+            designation: person.designation,
+            days: dayCells,
+            summary,
+        };
+    });
+
+    return {
+        month: PREVIEW_MONTH,
+        days,
+        employees,
+        statusOptions: [
+            { code: 'P', label: 'Present' }, { code: 'A', label: 'Absent' }, { code: 'H', label: 'Holiday' },
+            { code: 'L', label: 'Leave' }, { code: 'HD', label: 'Half day' }, { code: 'WFH', label: 'Work from home' },
+            { code: 'LC', label: 'Late coming' }, { code: 'LI', label: 'Late joining' }, { code: 'PH', label: 'Public holiday' },
+        ],
+        canManualMark: true,
+    };
+}
+
+const DEV_SAMPLE = {
+    user: { id: 0, name: 'Jawad', email: 'jawad@staffvora.com', role_label: 'Owner', is_super_admin: true, permissions: [] },
+    monthly: buildPreviewMonthlyGrid(),
+    summary: [
+        { user_id: 1, user_name: 'Aqsa Khan', designation: 'Frontend Engineer', avatar: null, total_work_hours: 7.2, total_break_hours: 0.5, current_status: 'Working', first_clock_in: '09:02 AM', last_action_time: '04:30 PM', total_entries: 6 },
+        { user_id: 2, user_name: 'Musa Raza', designation: 'Backend Engineer', avatar: null, total_work_hours: 6.8, total_break_hours: 0.6, current_status: 'Working', first_clock_in: '09:11 AM', last_action_time: '04:22 PM', total_entries: 5 },
+        { user_id: 3, user_name: 'Sana Faisal', designation: 'Product Designer', avatar: null, total_work_hours: 5.5, total_break_hours: 0.8, current_status: 'On Break', first_clock_in: '09:34 AM', last_action_time: '02:15 PM', total_entries: 7 },
+        { user_id: 4, user_name: 'Hamza Zaidi', designation: 'QA Analyst', avatar: null, total_work_hours: 4.92, total_break_hours: 0.4, current_status: 'Working', first_clock_in: '10:18 AM', last_action_time: '03:48 PM', total_entries: 4 },
+        { user_id: 5, user_name: 'Nida Amin', designation: 'Marketing Lead', avatar: null, total_work_hours: 3.08, total_break_hours: 0.7, current_status: 'Clocked Out', first_clock_in: '09:05 AM', last_action_time: '12:40 PM', total_entries: 4 },
+        { user_id: 6, user_name: 'Bilal Tariq', designation: 'DevOps Engineer', avatar: null, total_work_hours: 2.33, total_break_hours: 0.5, current_status: 'Clocked Out', first_clock_in: '08:58 AM', last_action_time: '11:20 AM', total_entries: 3 },
+    ],
+    detailed: [
+        {
+            user_id: 1, user_name: 'Aqsa Khan', designation: 'Frontend Engineer', avatar: null,
+            entries: [
+                { id: 11, action_type: 'clock_in', formatted_time: '09:02 AM', notes: null },
+                { id: 12, action_type: 'break_start', formatted_time: '12:30 PM', notes: 'Lunch' },
+                { id: 13, action_type: 'break_end', formatted_time: '01:05 PM', notes: null },
+                { id: 14, action_type: 'clock_out', formatted_time: '06:04 PM', notes: 'EOD' },
+            ],
+        },
+        {
+            user_id: 3, user_name: 'Sana Faisal', designation: 'Product Designer', avatar: null,
+            entries: [
+                { id: 31, action_type: 'clock_in', formatted_time: '09:34 AM', notes: null },
+                { id: 32, action_type: 'break_start', formatted_time: '01:00 PM', notes: null },
+                { id: 33, action_type: 'break_end', formatted_time: '01:40 PM', notes: 'Back' },
+            ],
+        },
+        {
+            user_id: 4, user_name: 'Hamza Zaidi', designation: 'QA Analyst', avatar: null,
+            entries: [
+                { id: 41, action_type: 'clock_in', formatted_time: '10:18 AM', notes: 'Late - traffic' },
+                { id: 42, action_type: 'clock_out', formatted_time: '03:48 PM', notes: null },
+            ],
+        },
+    ],
+    timeline: [
+        {
+            user_id: 1, user_name: 'Aqsa Khan', designation: 'Frontend Engineer', avatar: null,
+            total_work_hours: 7.2, total_break_hours: 0.6,
+            sessions: [
+                { type: 'work', start_time: '09:02 AM', end_time: '12:30 PM', duration: '3h 28m' },
+                { type: 'break', start_time: '12:30 PM', end_time: '01:05 PM', duration: '35m' },
+                { type: 'work', start_time: '01:05 PM', end_time: '06:04 PM', duration: '4h 59m' },
+            ],
+        },
+        {
+            user_id: 2, user_name: 'Musa Raza', designation: 'Backend Engineer', avatar: null,
+            total_work_hours: 6.8, total_break_hours: 0.6,
+            sessions: [
+                { type: 'work', start_time: '09:11 AM', end_time: '01:00 PM', duration: '3h 49m' },
+                { type: 'break', start_time: '01:00 PM', end_time: '01:36 PM', duration: '36m' },
+                { type: 'work', start_time: '01:36 PM', end_time: null, duration: '2h 46m (ongoing)' },
+            ],
+        },
+    ],
+    // One employee-day drill-in, as /employee-attendance/day-entries returns it.
+    // `is_clocked_in` is true so the force-clock-out panel is visible in preview.
+    day: {
+        clock_in: '09:02',
+        clock_out: '',
+        break_start: '12:30',
+        break_end: '13:05',
+        timezone: 'Asia/Karachi',
+        timezone_label: '',
+        current_state: 'break_end',
+        is_clocked_in: true,
+        entries: [
+            { id: 11, action_type: 'clock_in', time: '9:02 AM', notes: null },
+            { id: 12, action_type: 'break_start', time: '12:30 PM', notes: 'Lunch' },
+            { id: 13, action_type: 'break_end', time: '1:05 PM', notes: null },
+        ],
+    },
+    history: [
+        { id: 1, attendance_date: '2026-07-17', employee_name: 'Aqsa Khan', employee_designation: 'Frontend Engineer', old_status_code: null, old_status_label: 'Auto', new_status_code: 'WFH', new_status_label: 'Work from home', changed_by: 'Jawad', changed_at: '2026-07-17 9:12 AM', reason: 'Remote day approved' },
+        { id: 2, attendance_date: '2026-07-15', employee_name: 'Sana Faisal', employee_designation: 'Product Designer', old_status_code: null, old_status_label: 'Auto', new_status_code: 'L', new_status_label: 'Leave', changed_by: 'Jawad', changed_at: '2026-07-15 8:47 AM', reason: 'Sick leave' },
+        { id: 3, attendance_date: '2026-07-12', employee_name: 'Bilal Tariq', employee_designation: 'DevOps Engineer', old_status_code: null, old_status_label: 'Auto', new_status_code: 'HD', new_status_label: 'Half day', changed_by: 'Jawad', changed_at: '2026-07-12 2:05 PM', reason: 'Left early' },
+        { id: 4, attendance_date: '2026-07-11', employee_name: 'Musa Raza', employee_designation: 'Backend Engineer', old_status_code: null, old_status_label: 'Auto', new_status_code: 'WFH', new_status_label: 'Work from home', changed_by: 'Jawad', changed_at: '2026-07-11 9:30 AM', reason: null },
+        { id: 5, attendance_date: '2026-07-08', employee_name: 'Nida Amin', employee_designation: 'Marketing Lead', old_status_code: 'A', old_status_label: 'Absent', new_status_code: 'L', new_status_label: 'Leave', changed_by: 'Jawad', changed_at: '2026-07-08 10:02 AM', reason: 'Approved leave' },
+    ],
+};
+
+// Follow the app-wide theme (data-theme on <html>) so native date/month pickers
+// render their calendar chrome correctly in dark, light and black themes.
+function useColorScheme() {
+    const [scheme, setScheme] = useState(() => (
+        typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light'
+            ? 'light'
+            : 'dark'
+    ));
+
+    useEffect(() => {
+        if (typeof document === 'undefined') return undefined;
+        const root = document.documentElement;
+        const read = () => setScheme(root.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+        read();
+        const observer = new MutationObserver(read);
+        observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+        return () => observer.disconnect();
+    }, []);
+
+    return scheme;
+}
 
 const EmployeeIdentity = ({ employee, size = 'small' }) => {
     const [imageFailed, setImageFailed] = useState(false);
@@ -117,26 +370,45 @@ const EmployeeIdentity = ({ employee, size = 'small' }) => {
                     onError={() => setImageFailed(true)}
                 />
             ) : (
-                <span className={`flex ${avatarSize} shrink-0 items-center justify-center rounded-full bg-slate-700 text-sm font-bold text-slate-200`}>
+                <span className={`flex ${avatarSize} shrink-0 items-center justify-center rounded-full bg-surface-2 text-sm font-semibold text-body`}>
                     {employee.user_name.charAt(0).toUpperCase()}
                 </span>
             )}
             <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-slate-100">{employee.user_name}</div>
-                <div className="truncate text-xs text-slate-400">{employee.designation || 'Member'}</div>
+                <div className="truncate text-sm font-semibold text-body">{employee.user_name}</div>
+                <div className="truncate text-xs text-muted">{employee.designation || 'Member'}</div>
             </div>
         </div>
     );
 };
 
-export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAttendance = false, canSendAttendanceSlack = false, slackConfigured = false }) {
-    const canExport = auth.user?.is_super_admin || auth.user?.permissions?.includes('attendance.export');
-    const canSendSlack = canSendAttendanceSlack || auth.user?.is_super_admin || auth.user?.permissions?.includes('reports.send_slack');
+export default function EmployeeAttendance({
+    auth,
+    serverDate,
+    canManuallyMarkAttendance = false,
+    canEditClockTimes = false,
+    canSendAttendanceSlack = false,
+    slackConfigured = false,
+    preview = false,
+}) {
+    const colorScheme = useColorScheme();
+
+    // In preview mode we synthesize the auth user so the page renders with no
+    // backend/session at all.
+    const user = preview ? DEV_SAMPLE.user : auth?.user;
+    const canExport = preview || user?.is_super_admin || user?.permissions?.includes('attendance.export');
+    const canSendSlack = preview || canSendAttendanceSlack || user?.is_super_admin || user?.permissions?.includes('reports.send_slack');
+    // Rewriting someone's recorded punches is its own permission (attendance.edit_times).
+    const canEditTimes = preview || canEditClockTimes || user?.is_super_admin || user?.permissions?.includes('attendance.edit_times');
+    const effectiveSlackConfigured = preview ? true : slackConfigured;
+
     const [activeTab, setActiveTab] = useState('monthly');
-    const [employeesData, setEmployeesData] = useState([]);
-    const [detailedActivityData, setDetailedActivityData] = useState([]);
-    const [timelineData, setTimelineData] = useState([]);
-    const [monthlyGridData, setMonthlyGridData] = useState({ days: [], employees: [], statusOptions: [], canManualMark: false });
+    const [employeesData, setEmployeesData] = useState(preview ? DEV_SAMPLE.summary : []);
+    const [detailedActivityData, setDetailedActivityData] = useState(preview ? DEV_SAMPLE.detailed : []);
+    const [timelineData, setTimelineData] = useState(preview ? DEV_SAMPLE.timeline : []);
+    const [monthlyGridData, setMonthlyGridData] = useState(
+        preview ? DEV_SAMPLE.monthly : { days: [], employees: [], statusOptions: [], canManualMark: false }
+    );
     const [loading, setLoading] = useState(false);
     const [markingCell, setMarkingCell] = useState(null);
     const [showSlackDialog, setShowSlackDialog] = useState(false);
@@ -145,7 +417,7 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
     const [slackFields, setSlackFields] = useState(attendanceSlackFieldOptions.map((field) => field.value));
     const [showHistoryDialog, setShowHistoryDialog] = useState(false);
     const [historyLoading, setHistoryLoading] = useState(false);
-    const [manualHistory, setManualHistory] = useState([]);
+    const [manualHistory, setManualHistory] = useState(preview ? DEV_SAMPLE.history : []);
     const [selectedDate, setSelectedDate] = useState(serverDate || new Date().toISOString().split('T')[0]);
     const [selectedMonth, setSelectedMonth] = useState((serverDate || new Date().toISOString().split('T')[0]).slice(0, 7));
     const [showCalendarDialog, setShowCalendarDialog] = useState(false);
@@ -160,8 +432,28 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
     const [expandedEmployees, setExpandedEmployees] = useState({});
-    const [lastRefreshTime, setLastRefreshTime] = useState(null);
-    const canManualMark = canManuallyMarkAttendance || monthlyGridData.canManualMark;
+    const [lastRefreshTime, setLastRefreshTime] = useState(preview ? new Date() : null);
+
+    // --- Day drill-in: punches, clock-time editing and force clock-out --------
+    const [showDayDialog, setShowDayDialog] = useState(false);
+    const [dayTarget, setDayTarget] = useState(null); // { user_id, user_name, date }
+    const [dayLoading, setDayLoading] = useState(false);
+    const [dayEntries, setDayEntries] = useState([]);
+    const [dayTzLabel, setDayTzLabel] = useState('');
+    const [dayIsClockedIn, setDayIsClockedIn] = useState(false);
+    const [clockForm, setClockForm] = useState({ clock_in: '', clock_out: '', break_start: '', break_end: '', reason: '' });
+    const [isSavingClock, setIsSavingClock] = useState(false);
+    const [showForceClockOut, setShowForceClockOut] = useState(false);
+    const [clockOutForm, setClockOutForm] = useState({ time: '', note: '' });
+    const [isClockingOut, setIsClockingOut] = useState(false);
+
+    const canManualMark = preview || canManuallyMarkAttendance || monthlyGridData.canManualMark;
+
+    const statusLabelFor = (code) => {
+        if (!code) return 'Auto';
+        const match = monthlyGridData.statusOptions?.find((option) => option.code === code);
+        return match?.label || code;
+    };
 
     const fetchAttendanceData = async () => {
         setLoading(true);
@@ -199,10 +491,35 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
     };
 
     useEffect(() => {
+        if (preview) return;
         fetchAttendanceData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedDate, selectedMonth, activeTab]);
 
     const updateManualStatus = async (userId, date, statusCode) => {
+        // Preview: mutate the in-memory grid so the manual-mark menu visibly works
+        // without any network call.
+        if (preview) {
+            setMonthlyGridData((prev) => ({
+                ...prev,
+                employees: prev.employees.map((employee) => (
+                    employee.user_id !== userId ? employee : {
+                        ...employee,
+                        days: employee.days.map((cell) => (
+                            cell.date !== date ? cell : {
+                                ...cell,
+                                status_code: statusCode || null,
+                                status_label: statusCode ? statusLabelFor(statusCode) : 'Auto',
+                                source: statusCode ? 'manual' : 'automatic',
+                            }
+                        )),
+                    }
+                )),
+            }));
+            toast.success(statusCode ? 'Attendance status updated.' : 'Manual status cleared.');
+            return;
+        }
+
         const cellKey = `${userId}-${date}`;
         setMarkingCell(cellKey);
 
@@ -220,6 +537,135 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
             showError('Unable to update attendance status.');
         } finally {
             setMarkingCell(null);
+        }
+    };
+
+    // ---------------------------------------------------------------------
+    // Day drill-in — open one employee's attendance day, list its punches,
+    // correct the clock times, or clock out someone left running.
+    // ---------------------------------------------------------------------
+    const openDayDialog = async (employee, date) => {
+        const target = { user_id: employee.user_id, user_name: employee.user_name, date };
+        setDayTarget(target);
+        setDayEntries([]);
+        setDayTzLabel('');
+        setDayIsClockedIn(false);
+        setShowForceClockOut(false);
+        setClockOutForm({ time: '', note: '' });
+        setClockForm({ clock_in: '', clock_out: '', break_start: '', break_end: '', reason: '' });
+        setShowDayDialog(true);
+
+        if (preview) {
+            const sample = DEV_SAMPLE.day;
+            setDayEntries(sample.entries);
+            setDayTzLabel(sample.timezone_label);
+            setDayIsClockedIn(sample.is_clocked_in);
+            setClockForm({
+                clock_in: sample.clock_in,
+                clock_out: sample.clock_out,
+                break_start: sample.break_start,
+                break_end: sample.break_end,
+                reason: '',
+            });
+            return;
+        }
+
+        setDayLoading(true);
+        try {
+            const response = await axios.get('/employee-attendance/day-entries', {
+                params: { user_id: employee.user_id, date },
+            });
+            setDayEntries(response.data.entries || []);
+            setDayTzLabel(response.data.timezone_label || '');
+            setDayIsClockedIn(Boolean(response.data.is_clocked_in));
+            setClockForm({
+                clock_in: response.data.clock_in || '',
+                clock_out: response.data.clock_out || '',
+                break_start: response.data.break_start || '',
+                break_end: response.data.break_end || '',
+                reason: '',
+            });
+        } catch (error) {
+            console.error('Failed to load clock times:', error);
+            showError('Unable to load this employee\'s clock times.');
+        } finally {
+            setDayLoading(false);
+        }
+    };
+
+    const closeDayDialog = () => {
+        setShowDayDialog(false);
+        setDayTarget(null);
+    };
+
+    const firstErrorMessage = (error, fallback) => (
+        error?.response?.data?.message
+        || Object.values(error?.response?.data?.errors || {})[0]?.[0]
+        || fallback
+    );
+
+    const saveClockTimes = async () => {
+        if (!dayTarget) return;
+        if (!clockForm.clock_in) {
+            showError('Enter at least a clock-in time.');
+            return;
+        }
+        if (!clockForm.reason.trim()) {
+            showError('Please add a reason for this change.');
+            return;
+        }
+
+        if (preview) {
+            toast.success('Preview mode — clock times are not saved.');
+            closeDayDialog();
+            return;
+        }
+
+        setIsSavingClock(true);
+        try {
+            const response = await axios.post('/employee-attendance/clock-times', {
+                user_id: dayTarget.user_id,
+                date: dayTarget.date,
+                clock_in: clockForm.clock_in || null,
+                clock_out: clockForm.clock_out || null,
+                break_start: clockForm.break_start || null,
+                break_end: clockForm.break_end || null,
+                reason: clockForm.reason,
+            });
+            toast.success(response.data?.message || 'Clock times updated.');
+            closeDayDialog();
+            await fetchAttendanceData();
+        } catch (error) {
+            showError(firstErrorMessage(error, 'Unable to update clock times.'));
+        } finally {
+            setIsSavingClock(false);
+        }
+    };
+
+    const forceClockOut = async () => {
+        if (!dayTarget) return;
+
+        if (preview) {
+            toast.success('Preview mode — nobody was actually clocked out.');
+            setShowForceClockOut(false);
+            return;
+        }
+
+        setIsClockingOut(true);
+        try {
+            const response = await axios.post('/employee-attendance/clock-out', {
+                user_id: dayTarget.user_id,
+                time: clockOutForm.time || null,
+                note: clockOutForm.note || null,
+            });
+            toast.success(response.data?.message || 'Clocked out.');
+            setShowForceClockOut(false);
+            closeDayDialog();
+            await fetchAttendanceData();
+        } catch (error) {
+            showError(firstErrorMessage(error, 'Could not clock this person out.'));
+        } finally {
+            setIsClockingOut(false);
         }
     };
 
@@ -270,6 +716,12 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
     ]);
 
     const updateAttendanceCalendar = async () => {
+        if (preview) {
+            toast.success('Preview mode — attendance calendar changes are not saved.');
+            setShowCalendarDialog(false);
+            return;
+        }
+
         setIsUpdatingCalendar(true);
 
         try {
@@ -303,6 +755,7 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
     };
 
     const fetchManualHistory = async () => {
+        if (preview) return;
         setHistoryLoading(true);
 
         try {
@@ -320,11 +773,12 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
 
     const openHistoryDialog = () => {
         setShowHistoryDialog(true);
-        fetchManualHistory();
+        if (!preview) fetchManualHistory();
     };
 
     useEffect(() => {
-        if (showHistoryDialog) fetchManualHistory();
+        if (showHistoryDialog && !preview) fetchManualHistory();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedMonth]);
 
     const openSlackDialog = () => {
@@ -350,6 +804,12 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
     };
 
     const sendAttendanceToSlack = async () => {
+        if (preview) {
+            toast.success('Preview mode — no Slack report was actually sent.');
+            setShowSlackDialog(false);
+            return;
+        }
+
         setIsSendingSlack(true);
 
         try {
@@ -376,6 +836,11 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
     };
 
     const downloadCSV = async () => {
+        if (preview) {
+            toast.success('Preview mode — export is disabled.');
+            return;
+        }
+
         const loadingToast = showLoading('Preparing attendance report...');
 
         try {
@@ -425,10 +890,10 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
             }, { present: 0, absent: 0, leave: 0, hours: 0 });
 
             return [
-                { label: 'Present Days', value: totals.present, icon: PlayCircle, color: 'text-emerald-700', bg: 'bg-emerald-50' },
-                { label: 'Absent Days', value: totals.absent, icon: Square, color: 'text-rose-700', bg: 'bg-rose-50' },
-                { label: 'Leave Days', value: totals.leave, icon: Coffee, color: 'text-amber-700', bg: 'bg-amber-50' },
-                { label: 'Month Hours', value: formatHours(totals.hours), icon: Timer, color: 'text-blue-700', bg: 'bg-blue-50' },
+                { label: 'Present Days', value: totals.present, icon: PlayCircle },
+                { label: 'Absent Days', value: totals.absent, icon: Square },
+                { label: 'Leave Days', value: totals.leave, icon: Coffee },
+                { label: 'Month Hours', value: formatHours(totals.hours), icon: Timer },
             ];
         }
 
@@ -437,10 +902,10 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
         const clockedOut = employeesData.filter((employee) => employee.current_status === 'Clocked Out').length;
         const workHours = employeesData.reduce((sum, employee) => sum + Number(employee.total_work_hours || 0), 0);
         return [
-            { label: 'Active', value: working, icon: PlayCircle, color: 'text-emerald-700', bg: 'bg-emerald-50' },
-            { label: 'On Break', value: onBreak, icon: Coffee, color: 'text-amber-700', bg: 'bg-amber-50' },
-            { label: 'Clocked Out', value: clockedOut, icon: Square, color: 'text-rose-700', bg: 'bg-rose-50' },
-            { label: 'Team Hours', value: formatHours(workHours), icon: Timer, color: 'text-blue-700', bg: 'bg-blue-50' },
+            { label: 'Active', value: working, icon: PlayCircle },
+            { label: 'On Break', value: onBreak, icon: Coffee },
+            { label: 'Clocked Out', value: clockedOut, icon: Square },
+            { label: 'Team Hours', value: formatHours(workHours), icon: Timer },
         ];
     }, [activeTab, employeesData, monthlyGridData.employees]);
 
@@ -453,707 +918,832 @@ export default function EmployeeAttendance({ auth, serverDate, canManuallyMarkAt
             setExpandedEmployees({});
             return;
         }
-
         setExpandedEmployees(Object.fromEntries(items.map((item) => [item.user_id, true])));
     };
 
-    const renderEmpty = (title, description) => (
-        <div className="px-5 py-14 text-center">
-            <Users className="mx-auto h-10 w-10 text-slate-600" />
-            <h3 className="mt-3 font-semibold text-slate-100">{title}</h3>
-            <p className="mt-1 text-sm text-slate-500">{description}</p>
-        </div>
-    );
+    const isMonthly = activeTab === 'monthly';
 
     return (
-        <AuthenticatedLayout user={auth.user}>
+        <AuthenticatedLayout user={user} header="Attendance">
             <Head title="Attendance" />
 
-            <div className="min-h-screen bg-slate-950">
-                <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-                    <section className="flex flex-col gap-4 border-b border-slate-800 pb-5 lg:flex-row lg:items-end lg:justify-between">
-                        <div>
-                            <p className="text-sm font-semibold text-orange-400">Team operations</p>
-                            <h1 className="mt-1 text-2xl font-bold text-body">Attendance</h1>
-                            <p className="mt-1 text-sm text-slate-400">Monitor current status, work time, breaks, and daily activity.</p>
-                            {lastRefreshTime && (
-                                <p className="mt-1 text-xs text-slate-400">Updated {lastRefreshTime.toLocaleTimeString()}</p>
+            <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+                {/* Toolbar — one primary action, the rest secondary/ghost. */}
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="min-w-0">
+                        <p className="text-sm text-muted">Monitor current status, work time, breaks, and daily activity.</p>
+                        {lastRefreshTime && (
+                            <p className="mt-0.5 text-xs text-subtle">Updated {lastRefreshTime.toLocaleTimeString()}</p>
+                        )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <label className="relative">
+                            <span className="sr-only">{isMonthly ? 'Month' : 'Date'}</span>
+                            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                            {isMonthly ? (
+                                <Input
+                                    type="month"
+                                    value={selectedMonth}
+                                    onChange={(event) => setSelectedMonth(event.target.value)}
+                                    className="w-auto pl-9"
+                                    style={{ colorScheme }}
+                                />
+                            ) : (
+                                <Input
+                                    type="date"
+                                    value={selectedDate}
+                                    onChange={(event) => setSelectedDate(event.target.value)}
+                                    className="w-auto pl-9"
+                                    style={{ colorScheme }}
+                                />
                             )}
-                        </div>
+                        </label>
 
-                        <div className="flex flex-wrap items-center gap-2">
-                            <label className="relative">
-                                <CalendarDays className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                                {activeTab === 'monthly' ? (
-                                    <input
-                                        type="month"
-                                        value={selectedMonth}
-                                        onChange={(event) => setSelectedMonth(event.target.value)}
-                                        className="rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-200 [color-scheme:dark] focus:border-orange-500 focus:ring-2 focus:ring-orange-500"
-                                    />
-                                ) : (
-                                    <input
-                                        type="date"
-                                        value={selectedDate}
-                                        onChange={(event) => setSelectedDate(event.target.value)}
-                                        className="rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-200 [color-scheme:dark] focus:border-orange-500 focus:ring-2 focus:ring-orange-500"
-                                    />
-                                )}
-                            </label>
-                            {canManualMark && activeTab === 'monthly' && (
-                                <>
-                                    <button
-                                        type="button"
-                                        onClick={openCalendarDialog}
-                                        className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800"
-                                    >
-                                        <CalendarRange className="h-4 w-4" />
-                                        Attendance calendar
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={openHistoryDialog}
-                                        className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800"
-                                    >
-                                        <History className="h-4 w-4" />
-                                        Audit history
-                                    </button>
-                                </>
-                            )}
-                            {canSendSlack && activeTab === 'monthly' && (
-                                <button
-                                    type="button"
-                                    onClick={openSlackDialog}
-                                    className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800"
-                                >
-                                    <Send className="h-4 w-4" />
-                                    Send to Slack
-                                </button>
-                            )}
-                            {canExport && activeTab !== 'monthly' && (
-                                <button
-                                    type="button"
-                                    onClick={downloadCSV}
-                                    className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-body transition hover:bg-slate-800"
-                                >
-                                    <Download className="h-4 w-4" />
-                                    Export CSV
-                                </button>
-                            )}
-                        </div>
-                    </section>
-
-                    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                        {summaryMetrics.map((metric) => {
-                            const Icon = metric.icon;
-                            return (
-                                <div key={metric.label} className="rounded-lg border border-slate-800 bg-slate-900 p-4 shadow-sm">
-                                    <div className="flex items-center gap-3">
-                                        <span className={`flex h-10 w-10 items-center justify-center rounded-lg ${metric.bg}`}>
-                                            <Icon className={`h-5 w-5 ${metric.color}`} />
-                                        </span>
-                                        <div>
-                                            <div className="text-xl font-bold text-slate-100">{metric.value}</div>
-                                            <div className="text-sm text-slate-400">{metric.label}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </section>
-
-                    <section className="rounded-lg border border-slate-800 bg-slate-900 shadow-sm">
-                        <div className="flex flex-col gap-4 border-b border-slate-800 p-4 lg:flex-row lg:items-center lg:justify-between">
-                            <div className="grid w-full grid-cols-2 gap-1 rounded-lg bg-slate-950/60 p-1 sm:grid-cols-4 lg:inline-flex lg:w-auto">
-                                {TABS.map((tab) => {
-                                    const Icon = tab.icon;
-                                    return (
-                                        <button
-                                            key={tab.id}
-                                            type="button"
-                                            onClick={() => setActiveTab(tab.id)}
-                                            className={`inline-flex min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-semibold transition lg:flex-none lg:px-4 ${
-                                                activeTab === tab.id
-                                                    ? 'bg-slate-800 text-body shadow-sm'
-                                                    : 'text-slate-400 hover:text-body'
-                                            }`}
-                                        >
-                                            <Icon className="h-4 w-4" />
-                                            {tab.label}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-
-                            <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
-                                <label className="relative min-w-64 flex-1">
-                                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                                    <input
-                                        type="search"
-                                        value={searchQuery}
-                                        onChange={(event) => setSearchQuery(event.target.value)}
-                                        placeholder="Search employee or designation"
-                                        className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-sm text-slate-200 placeholder-slate-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500"
-                                    />
-                                </label>
-
-                                {activeTab === 'summary' && (
-                                    <select
-                                        value={filterStatus}
-                                        onChange={(event) => setFilterStatus(event.target.value)}
-                                        className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 [color-scheme:dark] focus:border-orange-500 focus:ring-2 focus:ring-orange-500"
-                                    >
-                                        {STATUS_OPTIONS.map((status) => (
-                                            <option key={status} value={status}>
-                                                {status === 'all' ? 'All statuses' : status}
-                                            </option>
-                                        ))}
-                                    </select>
-                                )}
-                            </div>
-                        </div>
-
-                        {loading ? (
-                            <div className="flex items-center justify-center gap-3 px-5 py-16 text-sm font-medium text-slate-400">
-                                <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-700 border-t-orange-500" />
-                                Loading attendance data...
-                            </div>
-                        ) : (
+                        {canManualMark && isMonthly && (
                             <>
-                                {activeTab === 'monthly' && (
-                                    filteredMonthlyEmployees.length === 0
-                                        ? renderEmpty('No attendance records', 'No employees match the selected month and search.')
-                                        : (
-                                            <MonthlyAttendanceGrid
-                                                days={monthlyGridData.days}
-                                                employees={filteredMonthlyEmployees}
-                                                statusOptions={monthlyGridData.statusOptions}
-                                                canManualMark={canManualMark}
-                                                markingCell={markingCell}
-                                                onStatusChange={updateManualStatus}
-                                            />
-                                        )
-                                )}
-
-                                {activeTab === 'summary' && (
-                                    filteredEmployees.length === 0
-                                        ? renderEmpty('No attendance records', 'No employees match the selected date and filters.')
-                                        : (
-                                            <div className="overflow-x-auto">
-                                                <table className="min-w-full divide-y divide-slate-800">
-                                                    <thead className="bg-slate-950/40">
-                                                        <tr>
-                                                            {['Employee', 'Status', 'Work Hours', 'Break', 'First In', 'Last Activity', 'Actions'].map((heading) => (
-                                                                <th key={heading} className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase text-slate-500">{heading}</th>
-                                                            ))}
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-slate-800">
-                                                        {filteredEmployees.map((employee) => (
-                                                            <tr key={employee.user_id} className="transition hover:bg-slate-800/40">
-                                                                <td className="px-4 py-3"><EmployeeIdentity employee={employee} /></td>
-                                                                <td className="whitespace-nowrap px-4 py-3">
-                                                                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyle(employee.current_status)}`}>
-                                                                        {employee.current_status}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-slate-100">{formatHours(employee.total_work_hours)}</td>
-                                                                <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-300">{formatHours(employee.total_break_hours)}</td>
-                                                                <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-300">{employee.first_clock_in || '-'}</td>
-                                                                <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-300">{employee.last_action_time || '-'}</td>
-                                                                <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-300">{employee.total_entries}</td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        )
-                                )}
-
-                                {activeTab === 'detailed' && (
-                                    filteredActivities.length === 0
-                                        ? renderEmpty('No activity records', 'No activity matches the selected date and search.')
-                                        : (
-                                            <AccordionList
-                                                items={filteredActivities}
-                                                expandedEmployees={expandedEmployees}
-                                                toggleEmployee={toggleEmployee}
-                                                setAllExpanded={setAllExpanded}
-                                                renderContent={(activity) => (
-                                                    <div className="space-y-2">
-                                                        {activity.entries.map((entry) => {
-                                                            const meta = actionMeta(entry.action_type);
-                                                            const Icon = meta.icon;
-                                                            return (
-                                                                <div key={entry.id} className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900 p-3">
-                                                                    <span className={`flex h-9 w-9 items-center justify-center rounded-lg border ${meta.className}`}>
-                                                                        <Icon className="h-4 w-4" />
-                                                                    </span>
-                                                                    <div className="flex-1">
-                                                                        <div className="text-sm font-semibold text-slate-100">{meta.label}</div>
-                                                                        <div className="text-xs text-slate-500">{entry.formatted_time}</div>
-                                                                    </div>
-                                                                    {entry.notes && <div className="text-sm text-slate-300">{entry.notes}</div>}
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                )}
-                                            />
-                                        )
-                                )}
-
-                                {activeTab === 'timeline' && (
-                                    filteredTimelines.length === 0
-                                        ? renderEmpty('No timeline records', 'No sessions match the selected date and search.')
-                                        : (
-                                            <AccordionList
-                                                items={filteredTimelines}
-                                                expandedEmployees={expandedEmployees}
-                                                toggleEmployee={toggleEmployee}
-                                                setAllExpanded={setAllExpanded}
-                                                renderContent={(timeline) => (
-                                                    <div className="space-y-2">
-                                                        {timeline.sessions.map((session, index) => (
-                                                            <div key={`${timeline.user_id}-${index}`} className="flex flex-col gap-2 rounded-lg border border-slate-800 bg-slate-900 p-3 sm:flex-row sm:items-center sm:justify-between">
-                                                                <div className="flex items-center gap-3">
-                                                                    <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${
-                                                                        session.type === 'work' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'
-                                                                    }`}>
-                                                                        {session.type === 'work' ? <Timer className="h-4 w-4" /> : <Coffee className="h-4 w-4" />}
-                                                                    </span>
-                                                                    <div>
-                                                                        <div className="text-sm font-semibold text-slate-100">
-                                                                            {session.type === 'work' ? 'Work Session' : 'Break'}
-                                                                        </div>
-                                                                        <div className="text-xs text-slate-500">
-                                                                            {session.start_time} to {session.end_time || 'Ongoing'}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                <div className="text-sm font-bold text-slate-100">{session.duration}</div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            />
-                                        )
-                                )}
+                                <Button variant="secondary" icon={<CalendarRange className="h-4 w-4" />} onClick={openCalendarDialog}>
+                                    Calendar
+                                </Button>
+                                <Button variant="ghost" icon={<History className="h-4 w-4" />} onClick={openHistoryDialog}>
+                                    Audit
+                                </Button>
                             </>
                         )}
-                    </section>
+
+                        {canSendSlack && isMonthly && (
+                            <Button variant="primary" icon={<Send className="h-4 w-4" />} onClick={openSlackDialog}>
+                                Send to Slack
+                            </Button>
+                        )}
+
+                        {canExport && !isMonthly && (
+                            <Button variant="primary" icon={<Download className="h-4 w-4" />} onClick={downloadCSV}>
+                                Export CSV
+                            </Button>
+                        )}
+                    </div>
                 </div>
+
+                {/* Metric tiles */}
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    {summaryMetrics.map((metric) => {
+                        const Icon = metric.icon;
+                        return (
+                            <StatCard
+                                key={metric.label}
+                                label={metric.label}
+                                value={metric.value}
+                                icon={<Icon className="h-5 w-5" />}
+                            />
+                        );
+                    })}
+                </div>
+
+                {/* Content */}
+                <Card padded={false} className="overflow-hidden">
+                    <div className="flex flex-col gap-3 border-b border-line p-4 lg:flex-row lg:items-center lg:justify-between">
+                        <Tabs
+                            tabs={TABS.map((tab) => {
+                                const Icon = tab.icon;
+                                return { key: tab.id, label: tab.label, icon: <Icon className="h-4 w-4" /> };
+                            })}
+                            value={activeTab}
+                            onChange={setActiveTab}
+                            className="flex-wrap"
+                        />
+
+                        <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+                            <label className="relative min-w-0 flex-1 sm:min-w-64">
+                                <span className="sr-only">Search</span>
+                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                                <Input
+                                    type="search"
+                                    value={searchQuery}
+                                    onChange={(event) => setSearchQuery(event.target.value)}
+                                    placeholder="Search employee or designation"
+                                    className="pl-9"
+                                />
+                            </label>
+
+                            {activeTab === 'summary' && (
+                                <Select
+                                    value={filterStatus}
+                                    onChange={(event) => setFilterStatus(event.target.value)}
+                                    className="w-auto"
+                                    style={{ colorScheme }}
+                                >
+                                    {STATUS_OPTIONS.map((status) => (
+                                        <option key={status} value={status}>
+                                            {status === 'all' ? 'All statuses' : status}
+                                        </option>
+                                    ))}
+                                </Select>
+                            )}
+                        </div>
+                    </div>
+
+                    {loading ? (
+                        <ContentSkeleton monthly={isMonthly} />
+                    ) : (
+                        <>
+                            {activeTab === 'monthly' && (
+                                filteredMonthlyEmployees.length === 0
+                                    ? (
+                                        <EmptyState
+                                            icon={<Users className="h-5 w-5" />}
+                                            title="No attendance records for this period"
+                                            description="No employees match the selected month and search."
+                                        />
+                                    )
+                                    : (
+                                        <MonthlyAttendanceGrid
+                                            days={monthlyGridData.days}
+                                            employees={filteredMonthlyEmployees}
+                                            statusOptions={monthlyGridData.statusOptions}
+                                            canManualMark={canManualMark}
+                                            markingCell={markingCell}
+                                            onStatusChange={updateManualStatus}
+                                            canEditTimes={canEditTimes}
+                                            onEditTimes={openDayDialog}
+                                        />
+                                    )
+                            )}
+
+                            {activeTab === 'summary' && (
+                                filteredEmployees.length === 0
+                                    ? (
+                                        <EmptyState
+                                            icon={<Users className="h-5 w-5" />}
+                                            title="No attendance records for this period"
+                                            description="No employees match the selected date and filters."
+                                        />
+                                    )
+                                    : (
+                                        <Table>
+                                            <THead>
+                                                <Tr>
+                                                    <Th>Employee</Th>
+                                                    <Th>Status</Th>
+                                                    <Th className="text-right">Work Hours</Th>
+                                                    <Th className="text-right">Break</Th>
+                                                    <Th>First In</Th>
+                                                    <Th>Last Activity</Th>
+                                                    <Th className="text-right">Actions</Th>
+                                                </Tr>
+                                            </THead>
+                                            <TBody>
+                                                {filteredEmployees.map((employee) => (
+                                                    <Tr key={employee.user_id}>
+                                                        <Td><EmployeeIdentity employee={employee} /></Td>
+                                                        <Td>
+                                                            <Badge tone={LIVE_STATUS_TONE[employee.current_status] || 'neutral'} dot>
+                                                                {employee.current_status}
+                                                            </Badge>
+                                                        </Td>
+                                                        <Td className="text-right font-semibold tabular-nums">{formatHours(employee.total_work_hours)}</Td>
+                                                        <Td className="text-right text-muted tabular-nums">{formatHours(employee.total_break_hours)}</Td>
+                                                        <Td className="text-muted">{employee.first_clock_in || '-'}</Td>
+                                                        <Td className="text-muted">{employee.last_action_time || '-'}</Td>
+                                                        <Td className="text-right">
+                                                            <div className="flex items-center justify-end gap-3">
+                                                                <span className="text-muted tabular-nums">{employee.total_entries}</span>
+                                                                {canEditTimes && (
+                                                                    <Button
+                                                                        variant="secondary"
+                                                                        size="sm"
+                                                                        icon={<Pencil className="h-3.5 w-3.5" />}
+                                                                        onClick={() => openDayDialog(employee, selectedDate)}
+                                                                        title="Open this day — view punches, correct clock times, or clock out"
+                                                                    >
+                                                                        Times
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        </Td>
+                                                    </Tr>
+                                                ))}
+                                            </TBody>
+                                        </Table>
+                                    )
+                            )}
+
+                            {activeTab === 'detailed' && (
+                                filteredActivities.length === 0
+                                    ? (
+                                        <EmptyState
+                                            icon={<List className="h-5 w-5" />}
+                                            title="No activity records for this period"
+                                            description="No activity matches the selected date and search."
+                                        />
+                                    )
+                                    : (
+                                        <AccordionList
+                                            items={filteredActivities}
+                                            expandedEmployees={expandedEmployees}
+                                            toggleEmployee={toggleEmployee}
+                                            setAllExpanded={setAllExpanded}
+                                            renderContent={(activity) => (
+                                                <div className="space-y-2">
+                                                    {activity.entries.map((entry) => {
+                                                        const meta = actionMeta(entry.action_type);
+                                                        const Icon = meta.icon;
+                                                        return (
+                                                            <div key={entry.id} className="flex items-center gap-3 rounded-lg border border-line bg-surface p-3">
+                                                                <span className={cx('flex h-9 w-9 items-center justify-center rounded-lg', meta.tone)}>
+                                                                    <Icon className="h-4 w-4" />
+                                                                </span>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="text-sm font-semibold text-body">{meta.label}</div>
+                                                                    <div className="text-xs text-subtle">{entry.formatted_time}</div>
+                                                                </div>
+                                                                {entry.notes && <div className="text-sm text-muted">{entry.notes}</div>}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        />
+                                    )
+                            )}
+
+                            {activeTab === 'timeline' && (
+                                filteredTimelines.length === 0
+                                    ? (
+                                        <EmptyState
+                                            icon={<Timer className="h-5 w-5" />}
+                                            title="No timeline records for this period"
+                                            description="No sessions match the selected date and search."
+                                        />
+                                    )
+                                    : (
+                                        <AccordionList
+                                            items={filteredTimelines}
+                                            expandedEmployees={expandedEmployees}
+                                            toggleEmployee={toggleEmployee}
+                                            setAllExpanded={setAllExpanded}
+                                            renderContent={(timeline) => (
+                                                <div className="space-y-2">
+                                                    {timeline.sessions.map((session, index) => (
+                                                        <div key={`${timeline.user_id}-${index}`} className="flex flex-col gap-2 rounded-lg border border-line bg-surface p-3 sm:flex-row sm:items-center sm:justify-between">
+                                                            <div className="flex items-center gap-3">
+                                                                <span className={cx(
+                                                                    'flex h-9 w-9 items-center justify-center rounded-lg',
+                                                                    session.type === 'work' ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning'
+                                                                )}>
+                                                                    {session.type === 'work' ? <Timer className="h-4 w-4" /> : <Coffee className="h-4 w-4" />}
+                                                                </span>
+                                                                <div>
+                                                                    <div className="text-sm font-semibold text-body">
+                                                                        {session.type === 'work' ? 'Work Session' : 'Break'}
+                                                                    </div>
+                                                                    <div className="text-xs text-subtle">
+                                                                        {session.start_time} to {session.end_time || 'Ongoing'}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-sm font-bold text-body tabular-nums">{session.duration}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        />
+                                    )
+                            )}
+                        </>
+                    )}
+                </Card>
             </div>
 
-            {showCalendarDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-                    <div className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-lg border border-slate-200 bg-white shadow-xl">
-                        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
-                            <div>
-                                <h2 className="text-lg font-bold text-slate-950">Attendance calendar</h2>
-                                <p className="mt-1 text-sm text-slate-600">Schedule or remove attendance statuses for a date range.</p>
+            {/* Attendance calendar modal */}
+            <DialogShell
+                show={showCalendarDialog}
+                onClose={() => setShowCalendarDialog(false)}
+                title="Attendance calendar"
+                description="Schedule or remove attendance statuses for a date range."
+                footer={(
+                    <>
+                        <Button variant="ghost" onClick={() => setShowCalendarDialog(false)}>Cancel</Button>
+                        <Button
+                            variant={calendarOperation === 'clear' ? 'danger' : 'primary'}
+                            loading={isUpdatingCalendar}
+                            disabled={
+                                calendarPreview.personDays === 0
+                                || (calendarScope === 'selected' && calendarUserIds.length === 0)
+                            }
+                            onClick={updateAttendanceCalendar}
+                        >
+                            {calendarOperation === 'clear' ? 'Remove marks' : 'Apply status'}
+                        </Button>
+                    </>
+                )}
+            >
+                <div className="space-y-5">
+                    <Field label="Action">
+                        <Tabs
+                            tabs={[
+                                { key: 'apply', label: 'Apply or replace' },
+                                { key: 'clear', label: 'Remove scheduled marks' },
+                            ]}
+                            value={calendarOperation}
+                            onChange={setCalendarOperation}
+                            className="flex w-full"
+                        />
+                    </Field>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <Field label="Start date" htmlFor="cal-start">
+                            <Input
+                                id="cal-start"
+                                type="date"
+                                value={calendarStartDate}
+                                style={{ colorScheme }}
+                                onChange={(event) => {
+                                    setCalendarStartDate(event.target.value);
+                                    if (calendarEndDate < event.target.value) setCalendarEndDate(event.target.value);
+                                }}
+                            />
+                        </Field>
+                        <Field label="End date" htmlFor="cal-end">
+                            <Input
+                                id="cal-end"
+                                type="date"
+                                min={calendarStartDate}
+                                value={calendarEndDate}
+                                style={{ colorScheme }}
+                                onChange={(event) => setCalendarEndDate(event.target.value)}
+                            />
+                        </Field>
+                    </div>
+
+                    <Field label="People">
+                        <Tabs
+                            tabs={[
+                                { key: 'company', label: 'Whole company' },
+                                { key: 'selected', label: 'Selected people' },
+                            ]}
+                            value={calendarScope}
+                            onChange={setCalendarScope}
+                            className="flex w-full"
+                        />
+                    </Field>
+
+                    {calendarScope === 'selected' && (
+                        <div>
+                            <div className="mb-2 flex items-center justify-between">
+                                <span className="text-sm font-medium text-body">Select people</span>
+                                <div className="flex gap-1">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setCalendarUserIds(monthlyGridData.employees.map((employee) => String(employee.user_id)))}
+                                    >
+                                        Select all
+                                    </Button>
+                                    <Button variant="ghost" size="sm" onClick={() => setCalendarUserIds([])}>Clear</Button>
+                                </div>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowCalendarDialog(false)}
-                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                                title="Close"
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-
-                        <div className="space-y-5 overflow-y-auto px-5 py-4">
-                            <fieldset>
-                                <legend className="text-sm font-semibold text-slate-800">Action</legend>
-                                <div className="mt-2 grid grid-cols-2 gap-2">
-                                    {[
-                                        ['apply', 'Apply or replace'],
-                                        ['clear', 'Remove scheduled marks'],
-                                    ].map(([value, label]) => (
-                                        <button
-                                            key={value}
-                                            type="button"
-                                            onClick={() => setCalendarOperation(value)}
-                                            className={`rounded-lg border px-3 py-2 text-sm font-semibold ${
-                                                calendarOperation === value
-                                                    ? 'border-blue-500 bg-blue-50 text-blue-900'
-                                                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                                            }`}
-                                        >
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </fieldset>
-
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <label>
-                                    <span className="mb-1.5 block text-sm font-semibold text-slate-800">Start date</span>
-                                    <input
-                                        type="date"
-                                        value={calendarStartDate}
-                                        onChange={(event) => {
-                                            setCalendarStartDate(event.target.value);
-                                            if (calendarEndDate < event.target.value) setCalendarEndDate(event.target.value);
-                                        }}
-                                        className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
-                                    />
-                                </label>
-                                <label>
-                                    <span className="mb-1.5 block text-sm font-semibold text-slate-800">End date</span>
-                                    <input
-                                        type="date"
-                                        min={calendarStartDate}
-                                        value={calendarEndDate}
-                                        onChange={(event) => setCalendarEndDate(event.target.value)}
-                                        className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
-                                    />
-                                </label>
-                            </div>
-
-                            <fieldset>
-                                <legend className="text-sm font-semibold text-slate-800">People</legend>
-                                <div className="mt-2 grid grid-cols-2 gap-2">
-                                    {[
-                                        ['company', 'Whole company'],
-                                        ['selected', 'Selected people'],
-                                    ].map(([value, label]) => (
-                                        <button
-                                            key={value}
-                                            type="button"
-                                            onClick={() => setCalendarScope(value)}
-                                            className={`rounded-lg border px-3 py-2 text-sm font-semibold ${
-                                                calendarScope === value
-                                                    ? 'border-blue-500 bg-blue-50 text-blue-900'
-                                                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                                            }`}
-                                        >
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </fieldset>
-
-                            {calendarScope === 'selected' && (
-                                <div>
-                                    <div className="mb-2 flex items-center justify-between">
-                                        <span className="text-sm font-semibold text-slate-800">Select people</span>
-                                        <div className="flex gap-3">
-                                            <button
-                                                type="button"
-                                                onClick={() => setCalendarUserIds(monthlyGridData.employees.map((employee) => String(employee.user_id)))}
-                                                className="text-xs font-semibold text-blue-700 hover:text-blue-900"
-                                            >
-                                                Select all
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setCalendarUserIds([])}
-                                                className="text-xs font-semibold text-slate-500 hover:text-slate-800"
-                                            >
-                                                Clear
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="grid max-h-48 grid-cols-1 gap-1 overflow-y-auto rounded-lg border border-slate-200 p-2 sm:grid-cols-2">
-                                        {monthlyGridData.employees.map((employee) => (
-                                            <label key={employee.user_id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={calendarUserIds.includes(String(employee.user_id))}
-                                                    onChange={() => toggleCalendarUser(employee.user_id)}
-                                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                                />
-                                                <span className="text-sm font-medium text-slate-800">{employee.user_name}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {calendarOperation === 'apply' && (
-                                <div className="grid gap-4 sm:grid-cols-2">
-                                    <label>
-                                        <span className="mb-1.5 block text-sm font-semibold text-slate-800">Status</span>
-                                        <select
-                                            value={calendarStatus}
-                                            onChange={(event) => setCalendarStatus(event.target.value)}
-                                            className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
-                                        >
-                                            {calendarStatusOptions.map((status) => (
-                                                <option key={status.value} value={status.value}>{status.label}</option>
-                                            ))}
-                                        </select>
-                                    </label>
-                                    <label>
-                                        <span className="mb-1.5 block text-sm font-semibold text-slate-800">Note</span>
-                                        <input
-                                            value={calendarNote}
-                                            maxLength={255}
-                                            onChange={(event) => setCalendarNote(event.target.value)}
-                                            placeholder="Optional reason"
-                                            className="w-full rounded-lg border-slate-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+                            <div className="grid max-h-48 grid-cols-1 gap-1 overflow-y-auto rounded-lg border border-line bg-surface-2/40 p-2 sm:grid-cols-2">
+                                {monthlyGridData.employees.map((employee) => (
+                                    <div key={employee.user_id} className="rounded-md px-2 py-1.5 hover:bg-surface-2">
+                                        <Checkbox
+                                            className="w-full"
+                                            checked={calendarUserIds.includes(String(employee.user_id))}
+                                            onChange={() => toggleCalendarUser(employee.user_id)}
+                                            label={employee.user_name}
                                         />
-                                    </label>
-                                </div>
-                            )}
-
-                            <div className={`rounded-lg border px-4 py-3 ${
-                                calendarOperation === 'clear'
-                                    ? 'border-rose-200 bg-rose-50'
-                                    : 'border-blue-200 bg-blue-50'
-                            }`}>
-                                <div className="text-sm font-bold text-slate-950">
-                                    Preview: {calendarPreview.users} people x {calendarPreview.days} {calendarPreview.days === 1 ? 'day' : 'days'} = {calendarPreview.personDays} person-days
-                                </div>
-                                <p className="mt-1 text-xs leading-5 text-slate-600">
-                                    {calendarOperation === 'clear'
-                                        ? 'This removes all manual attendance marks in the selected range. Automatic attendance will appear again.'
-                                        : 'Existing manual marks in the selected range will be replaced with this status.'}
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="flex flex-col-reverse gap-2 border-t border-slate-200 px-5 py-4 sm:flex-row sm:justify-end">
-                            <button
-                                type="button"
-                                onClick={() => setShowCalendarDialog(false)}
-                                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={updateAttendanceCalendar}
-                                disabled={
-                                    isUpdatingCalendar
-                                    || calendarPreview.personDays === 0
-                                    || (calendarScope === 'selected' && calendarUserIds.length === 0)
-                                }
-                                className={`rounded-lg px-4 py-2 text-sm font-semibold text-body disabled:cursor-not-allowed disabled:bg-slate-300 ${
-                                    calendarOperation === 'clear'
-                                        ? 'bg-rose-600 hover:bg-rose-700'
-                                        : 'bg-blue-600 hover:bg-blue-700'
-                                }`}
-                            >
-                                {isUpdatingCalendar
-                                    ? 'Updating...'
-                                    : calendarOperation === 'clear'
-                                        ? 'Remove marks'
-                                        : 'Apply status'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {showHistoryDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-                    <div className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-lg border border-slate-200 bg-white shadow-xl">
-                        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
-                            <div>
-                                <h2 className="text-lg font-bold text-slate-950">Manual attendance audit</h2>
-                                <p className="mt-1 text-sm text-slate-600">Latest manual changes for {selectedMonth}.</p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowHistoryDialog(false)}
-                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                                title="Close"
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-
-                        <div className="overflow-y-auto px-5 py-4">
-                            {historyLoading ? (
-                                <div className="flex items-center justify-center gap-3 py-12 text-sm font-medium text-slate-600">
-                                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
-                                    Loading audit history...
-                                </div>
-                            ) : manualHistory.length === 0 ? (
-                                <div className="py-12 text-center">
-                                    <History className="mx-auto h-10 w-10 text-slate-400" />
-                                    <h3 className="mt-3 font-semibold text-slate-900">No manual changes</h3>
-                                    <p className="mt-1 text-sm text-slate-500">No manual attendance edits were recorded for this month.</p>
-                                </div>
-                            ) : (
-                                <div className="overflow-x-auto rounded-lg border border-slate-200">
-                                    <table className="min-w-full divide-y divide-slate-200 text-sm">
-                                        <thead className="bg-slate-900">
-                                            <tr>
-                                                {['Date', 'Employee', 'Change', 'Changed by', 'Changed at', 'Reason'].map((heading) => (
-                                                    <th key={heading} className="whitespace-nowrap px-4 py-3 text-left text-xs font-bold uppercase text-body">
-                                                        {heading}
-                                                    </th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-200 bg-white">
-                                            {manualHistory.map((entry) => (
-                                                <tr key={entry.id} className="hover:bg-slate-50">
-                                                    <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-900">{entry.attendance_date}</td>
-                                                    <td className="px-4 py-3">
-                                                        <div className="font-semibold text-slate-900">{entry.employee_name}</div>
-                                                        <div className="text-xs text-slate-500">{entry.employee_designation || 'Member'}</div>
-                                                    </td>
-                                                    <td className="whitespace-nowrap px-4 py-3">
-                                                        <div className="flex items-center gap-2">
-                                                            <AuditStatusChip code={entry.old_status_code} label={entry.old_status_label} />
-                                                            <span className="text-slate-400">to</span>
-                                                            <AuditStatusChip code={entry.new_status_code} label={entry.new_status_label} />
-                                                        </div>
-                                                    </td>
-                                                    <td className="whitespace-nowrap px-4 py-3 text-slate-700">{entry.changed_by}</td>
-                                                    <td className="whitespace-nowrap px-4 py-3 text-slate-700">{entry.changed_at || '-'}</td>
-                                                    <td className="min-w-48 px-4 py-3 text-slate-700">{entry.reason || '-'}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex justify-end border-t border-slate-200 px-5 py-4">
-                            <button
-                                type="button"
-                                onClick={() => setShowHistoryDialog(false)}
-                                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                            >
-                                Close
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {showSlackDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-                    <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-lg border border-slate-200 bg-white shadow-xl">
-                        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
-                            <div>
-                                <h2 className="text-lg font-bold text-slate-950">Send attendance to Slack</h2>
-                                <p className="mt-1 text-sm text-slate-600">Choose users and summary columns for {selectedMonth}.</p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowSlackDialog(false)}
-                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                                title="Close"
-                            >
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-
-                        <div className="space-y-5 overflow-y-auto px-5 py-4">
-                            <div className={`rounded-lg border px-3 py-2 text-sm ${
-                                slackConfigured
-                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                                    : 'border-amber-200 bg-amber-50 text-amber-800'
-                            }`}>
-                                {slackConfigured ? 'Slack webhook connected.' : 'Slack webhook is not configured.'}
-                            </div>
-
-                            <div>
-                                <div className="mb-2 flex items-center justify-between">
-                                    <h3 className="text-sm font-semibold text-slate-800">Users to include</h3>
-                                    <div className="flex gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setSlackUserIds(monthlyGridData.employees.map((employee) => String(employee.user_id)))}
-                                            className="text-xs font-semibold text-blue-700 hover:text-blue-900"
-                                        >
-                                            Select all
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setSlackUserIds([])}
-                                            className="text-xs font-semibold text-slate-500 hover:text-slate-800"
-                                        >
-                                            Clear
-                                        </button>
                                     </div>
-                                </div>
-                                <div className="grid max-h-48 grid-cols-1 gap-2 overflow-y-auto rounded-lg border border-slate-200 p-2 sm:grid-cols-2">
-                                    {monthlyGridData.employees.map((employee) => (
-                                        <label key={employee.user_id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50">
-                                            <input
-                                                type="checkbox"
-                                                checked={slackUserIds.includes(String(employee.user_id))}
-                                                onChange={() => toggleSlackUser(employee.user_id)}
-                                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                            />
-                                            <span className="text-sm font-medium text-slate-800">{employee.user_name}</span>
-                                        </label>
-                                    ))}
-                                </div>
+                                ))}
                             </div>
+                        </div>
+                    )}
 
-                            <fieldset>
-                                <legend className="text-sm font-semibold text-slate-800">Data to include</legend>
-                                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                                    {attendanceSlackFieldOptions.map((field) => {
-                                        const checked = slackFields.includes(field.value);
+                    {calendarOperation === 'apply' && (
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <Field label="Status" htmlFor="cal-status">
+                                <Select
+                                    id="cal-status"
+                                    value={calendarStatus}
+                                    style={{ colorScheme }}
+                                    onChange={(event) => setCalendarStatus(event.target.value)}
+                                >
+                                    {calendarStatusOptions.map((status) => (
+                                        <option key={status.value} value={status.value}>{status.label}</option>
+                                    ))}
+                                </Select>
+                            </Field>
+                            <Field label="Note" htmlFor="cal-note">
+                                <Input
+                                    id="cal-note"
+                                    value={calendarNote}
+                                    maxLength={255}
+                                    onChange={(event) => setCalendarNote(event.target.value)}
+                                    placeholder="Optional reason"
+                                />
+                            </Field>
+                        </div>
+                    )}
 
+                    <div className={cx(
+                        'rounded-lg border px-4 py-3',
+                        calendarOperation === 'clear'
+                            ? 'border-danger/30 bg-danger-soft'
+                            : 'border-accent/30 bg-accent/10'
+                    )}>
+                        <div className="text-sm font-semibold text-body">
+                            Preview: {calendarPreview.users} people x {calendarPreview.days} {calendarPreview.days === 1 ? 'day' : 'days'} = {calendarPreview.personDays} person-days
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-muted">
+                            {calendarOperation === 'clear'
+                                ? 'This removes all manual attendance marks in the selected range. Automatic attendance will appear again.'
+                                : 'Existing manual marks in the selected range will be replaced with this status.'}
+                        </p>
+                    </div>
+                </div>
+            </DialogShell>
+
+            {/* Manual audit history modal */}
+            <DialogShell
+                show={showHistoryDialog}
+                onClose={() => setShowHistoryDialog(false)}
+                title="Manual attendance audit"
+                description={`Latest manual changes for ${selectedMonth}.`}
+                footer={<Button variant="ghost" onClick={() => setShowHistoryDialog(false)}>Close</Button>}
+            >
+                {historyLoading ? (
+                    <div className="space-y-2">
+                        {Array.from({ length: 5 }).map((_, index) => (
+                            <Skeleton key={index} className="h-10 w-full" />
+                        ))}
+                    </div>
+                ) : manualHistory.length === 0 ? (
+                    <EmptyState
+                        icon={<History className="h-5 w-5" />}
+                        title="No manual changes"
+                        description="No manual attendance edits were recorded for this month."
+                    />
+                ) : (
+                    <div className="rounded-lg border border-line">
+                        <Table>
+                            <THead>
+                                <Tr>
+                                    <Th>Date</Th>
+                                    <Th>Employee</Th>
+                                    <Th>Change</Th>
+                                    <Th>Changed by</Th>
+                                    <Th>Changed at</Th>
+                                    <Th>Reason</Th>
+                                </Tr>
+                            </THead>
+                            <TBody>
+                                {manualHistory.map((entry) => (
+                                    <Tr key={entry.id}>
+                                        <Td className="whitespace-nowrap font-semibold">{entry.attendance_date}</Td>
+                                        <Td>
+                                            <div className="font-semibold text-body">{entry.employee_name}</div>
+                                            <div className="text-xs text-subtle">{entry.employee_designation || 'Member'}</div>
+                                        </Td>
+                                        <Td>
+                                            <div className="flex items-center gap-2">
+                                                <AuditStatusChip code={entry.old_status_code} label={entry.old_status_label} />
+                                                <span className="text-subtle">to</span>
+                                                <AuditStatusChip code={entry.new_status_code} label={entry.new_status_label} />
+                                            </div>
+                                        </Td>
+                                        <Td className="whitespace-nowrap text-muted">{entry.changed_by}</Td>
+                                        <Td className="whitespace-nowrap text-muted">{entry.changed_at || '-'}</Td>
+                                        <Td className="min-w-48 text-muted">{entry.reason || '-'}</Td>
+                                    </Tr>
+                                ))}
+                            </TBody>
+                        </Table>
+                    </div>
+                )}
+            </DialogShell>
+
+            {/* Send to Slack modal */}
+            <DialogShell
+                show={showSlackDialog}
+                onClose={() => setShowSlackDialog(false)}
+                title="Send attendance to Slack"
+                description={`Choose users and summary columns for ${selectedMonth}.`}
+                footer={(
+                    <>
+                        <Button variant="ghost" onClick={() => setShowSlackDialog(false)}>Cancel</Button>
+                        <Button
+                            variant="primary"
+                            loading={isSendingSlack}
+                            disabled={!effectiveSlackConfigured || slackUserIds.length === 0 || slackFields.length === 0}
+                            onClick={sendAttendanceToSlack}
+                        >
+                            Send report
+                        </Button>
+                    </>
+                )}
+            >
+                <div className="space-y-5">
+                    <div className={cx(
+                        'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium',
+                        effectiveSlackConfigured ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning'
+                    )}>
+                        <span aria-hidden="true" className="h-2 w-2 rounded-full bg-current" />
+                        {effectiveSlackConfigured ? 'Slack webhook connected.' : 'Slack webhook is not configured.'}
+                    </div>
+
+                    <div>
+                        <div className="mb-2 flex items-center justify-between">
+                            <h3 className="text-sm font-medium text-body">Users to include</h3>
+                            <div className="flex gap-1">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setSlackUserIds(monthlyGridData.employees.map((employee) => String(employee.user_id)))}
+                                >
+                                    Select all
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => setSlackUserIds([])}>Clear</Button>
+                            </div>
+                        </div>
+                        <div className="grid max-h-48 grid-cols-1 gap-1 overflow-y-auto rounded-lg border border-line bg-surface-2/40 p-2 sm:grid-cols-2">
+                            {monthlyGridData.employees.map((employee) => (
+                                <div key={employee.user_id} className="rounded-md px-2 py-1.5 hover:bg-surface-2">
+                                    <Checkbox
+                                        className="w-full"
+                                        checked={slackUserIds.includes(String(employee.user_id))}
+                                        onChange={() => toggleSlackUser(employee.user_id)}
+                                        label={employee.user_name}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <fieldset>
+                        <legend className="mb-2 text-sm font-medium text-body">Data to include</legend>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            {attendanceSlackFieldOptions.map((field) => {
+                                const checked = slackFields.includes(field.value);
+                                return (
+                                    <div
+                                        key={field.value}
+                                        className={cx(
+                                            'rounded-lg border p-3 text-sm transition',
+                                            checked
+                                                ? 'border-accent bg-accent/10'
+                                                : 'border-line bg-surface-2/40 hover:bg-surface-2'
+                                        )}
+                                    >
+                                        <Checkbox
+                                            className="w-full"
+                                            checked={checked}
+                                            onChange={() => toggleSlackField(field.value)}
+                                            label={field.label}
+                                        />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </fieldset>
+
+                    <p className="rounded-lg bg-surface-2/60 px-3 py-2 text-xs leading-5 text-muted">
+                        Late coming is calculated from each person&apos;s shift start time and grace period, and counts in both Present and Late coming totals. Late joining is for days before the employee&apos;s joining date.
+                    </p>
+                </div>
+            </DialogShell>
+
+            {/* Day drill-in: punches + clock-time editing + force clock-out */}
+            <DialogShell
+                show={showDayDialog}
+                onClose={closeDayDialog}
+                title="Clock times"
+                description={dayTarget ? `${dayTarget.user_name} · ${dayTarget.date}` : ''}
+                footer={(
+                    <>
+                        <Button variant="ghost" onClick={closeDayDialog}>Cancel</Button>
+                        <Button
+                            variant="primary"
+                            loading={isSavingClock}
+                            disabled={dayLoading || !clockForm.clock_in || !clockForm.reason.trim()}
+                            onClick={saveClockTimes}
+                        >
+                            Save clock times
+                        </Button>
+                    </>
+                )}
+            >
+                {dayLoading ? (
+                    <div className="space-y-2">
+                        {Array.from({ length: 4 }).map((_, index) => (
+                            <Skeleton key={index} className="h-10 w-full" />
+                        ))}
+                    </div>
+                ) : (
+                    <div className="space-y-5">
+                        {dayTzLabel && (
+                            <p className="rounded-lg bg-info-soft px-3 py-2 text-xs font-medium text-info">
+                                Times are shown and saved in {dayTzLabel} — this workspace&apos;s business timezone.
+                            </p>
+                        )}
+
+                        {/* This day's punches, exactly as recorded. */}
+                        <div>
+                            <h3 className="mb-2 text-sm font-medium text-body">Punches on this day</h3>
+                            {dayEntries.length === 0 ? (
+                                <p className="rounded-lg border border-line bg-surface-2/40 px-3 py-3 text-sm text-muted">
+                                    No clock punches were recorded on this day.
+                                </p>
+                            ) : (
+                                <ul className="divide-y divide-line rounded-lg border border-line">
+                                    {dayEntries.map((entry) => {
+                                        const meta = actionMeta(entry.action_type);
+                                        const Icon = meta.icon;
                                         return (
-                                            <label
-                                                key={field.value}
-                                                className={`flex cursor-pointer items-center gap-2 rounded-lg border p-3 text-sm font-semibold transition ${
-                                                    checked
-                                                        ? 'border-blue-300 bg-blue-50 text-blue-900'
-                                                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                                                }`}
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={checked}
-                                                    onChange={() => toggleSlackField(field.value)}
-                                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                                />
-                                                {field.label}
-                                            </label>
+                                            <li key={entry.id} className="flex items-center gap-3 px-3 py-2.5">
+                                                <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', meta.tone)}>
+                                                    <Icon className="h-4 w-4" />
+                                                </span>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="text-sm font-semibold text-body">{meta.label}</div>
+                                                    {entry.notes && <div className="truncate text-xs text-subtle">{entry.notes}</div>}
+                                                </div>
+                                                <span className="shrink-0 text-sm text-muted tabular-nums">{entry.time}</span>
+                                            </li>
                                         );
                                     })}
-                                </div>
-                            </fieldset>
-
-                            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
-                                Late coming is calculated from each person's shift start time and grace period, and counts in both Present and Late coming totals. Late joining is for days before the employee's joining date.
-                            </p>
+                                </ul>
+                            )}
                         </div>
 
-                        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
-                            <button
-                                type="button"
-                                onClick={() => setShowSlackDialog(false)}
-                                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={sendAttendanceToSlack}
-                                disabled={!slackConfigured || isSendingSlack || slackUserIds.length === 0 || slackFields.length === 0}
-                                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                            >
-                                {isSendingSlack ? 'Sending...' : 'Send report'}
-                            </button>
+                        {/* Still on the clock — offer to close the session. */}
+                        {dayIsClockedIn && (
+                            <div className="rounded-lg border border-warning/30 bg-warning-soft px-4 py-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="min-w-0">
+                                        <div className="text-sm font-semibold text-warning">Still clocked in</div>
+                                        <p className="mt-0.5 text-xs leading-5 text-muted">
+                                            This person never clocked out. Closing the session writes a real clock-out
+                                            (defaulting to their shift end, not &quot;now&quot;) so their hours stay accurate.
+                                        </p>
+                                    </div>
+                                    {!showForceClockOut && (
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            icon={<LogOut className="h-4 w-4" />}
+                                            onClick={() => setShowForceClockOut(true)}
+                                        >
+                                            Clock them out
+                                        </Button>
+                                    )}
+                                </div>
+
+                                {showForceClockOut && (
+                                    <div className="mt-3 space-y-3 border-t border-warning/30 pt-3">
+                                        <div className="grid gap-3 sm:grid-cols-2">
+                                            <Field label="Clock-out time" htmlFor="force-clockout-time" hint="Leave blank to use their shift end.">
+                                                <Input
+                                                    id="force-clockout-time"
+                                                    type="time"
+                                                    value={clockOutForm.time}
+                                                    style={{ colorScheme }}
+                                                    onChange={(event) => setClockOutForm((form) => ({ ...form, time: event.target.value }))}
+                                                />
+                                            </Field>
+                                            <Field label="Note" htmlFor="force-clockout-note">
+                                                <Input
+                                                    id="force-clockout-note"
+                                                    value={clockOutForm.note}
+                                                    maxLength={255}
+                                                    placeholder="Optional — why you closed it"
+                                                    onChange={(event) => setClockOutForm((form) => ({ ...form, note: event.target.value }))}
+                                                />
+                                            </Field>
+                                        </div>
+                                        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                                            <Button variant="ghost" size="sm" onClick={() => setShowForceClockOut(false)}>Cancel</Button>
+                                            <Button variant="danger" size="sm" loading={isClockingOut} onClick={forceClockOut}>
+                                                Clock out now
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Correct the day's clock times. */}
+                        <div className="space-y-4">
+                            <p className="rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-xs leading-5 text-muted">
+                                Set this employee&apos;s real clock-in and clock-out (and any break). Saving replaces the
+                                whole day with one clean sequence, keeps it filed on the correct attendance day for their
+                                shift, and records the change in the audit log. Leave a field blank to omit it.
+                            </p>
+
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <Field label="Clock in" htmlFor="clock-in" required>
+                                    <Input
+                                        id="clock-in"
+                                        type="time"
+                                        value={clockForm.clock_in}
+                                        style={{ colorScheme }}
+                                        onChange={(event) => setClockForm((form) => ({ ...form, clock_in: event.target.value }))}
+                                    />
+                                </Field>
+                                <Field label="Clock out" htmlFor="clock-out">
+                                    <Input
+                                        id="clock-out"
+                                        type="time"
+                                        value={clockForm.clock_out}
+                                        style={{ colorScheme }}
+                                        onChange={(event) => setClockForm((form) => ({ ...form, clock_out: event.target.value }))}
+                                    />
+                                </Field>
+                                <Field label="Break start" htmlFor="break-start">
+                                    <Input
+                                        id="break-start"
+                                        type="time"
+                                        value={clockForm.break_start}
+                                        style={{ colorScheme }}
+                                        onChange={(event) => setClockForm((form) => ({ ...form, break_start: event.target.value }))}
+                                    />
+                                </Field>
+                                <Field label="Break end" htmlFor="break-end">
+                                    <Input
+                                        id="break-end"
+                                        type="time"
+                                        value={clockForm.break_end}
+                                        style={{ colorScheme }}
+                                        onChange={(event) => setClockForm((form) => ({ ...form, break_end: event.target.value }))}
+                                    />
+                                </Field>
+                            </div>
+
+                            <Field label="Reason" htmlFor="clock-reason" required>
+                                <Input
+                                    id="clock-reason"
+                                    value={clockForm.reason}
+                                    maxLength={255}
+                                    placeholder="e.g. Forgot to clock in; arrived 9:00, confirmed with manager"
+                                    onChange={(event) => setClockForm((form) => ({ ...form, reason: event.target.value }))}
+                                />
+                            </Field>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </DialogShell>
         </AuthenticatedLayout>
     );
 }
 
-function AuditStatusChip({ code, label }) {
-    const statusClass = gridStatusStyles[code] || gridStatusStyles.empty;
+// A themed dialog shell over the shared Modal — header (title/description/close),
+// a scrollable body and an optional footer, all on semantic tokens. Reused by all
+// three attendance dialogs so they share one look.
+function DialogShell({ show, onClose, title, description, children, footer, maxWidth = '2xl' }) {
+    return (
+        <Modal show={show} onClose={onClose} maxWidth={maxWidth}>
+            <div className="flex max-h-[85vh] flex-col">
+                <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
+                    <div className="min-w-0">
+                        <h2 className="text-base font-semibold text-body">{title}</h2>
+                        {description && <p className="mt-0.5 text-sm text-muted">{description}</p>}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Close"
+                        className="-mr-1 shrink-0 rounded-md p-1.5 text-muted transition hover:bg-surface-2 hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-app"
+                    >
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
 
+                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+
+                {footer && (
+                    <div className="flex flex-col-reverse gap-2 border-t border-line px-5 py-4 sm:flex-row sm:justify-end">
+                        {footer}
+                    </div>
+                )}
+            </div>
+        </Modal>
+    );
+}
+
+function ContentSkeleton({ monthly }) {
+    return (
+        <div className="space-y-3 p-4">
+            <Skeleton className="h-8 w-64" />
+            {Array.from({ length: monthly ? 6 : 5 }).map((_, index) => (
+                <Skeleton key={index} className={cx('w-full', monthly ? 'h-12' : 'h-14')} />
+            ))}
+        </div>
+    );
+}
+
+function AuditStatusChip({ code, label }) {
+    const toneClass = GRID_TONE[code] || GRID_TONE.empty;
     return (
         <span
-            className={`inline-flex min-w-14 items-center justify-center rounded border px-2 py-1 text-xs font-bold ${statusClass}`}
+            className={cx('inline-flex min-w-14 items-center justify-center rounded-md px-2 py-1 text-xs font-bold', toneClass)}
             title={label}
         >
             {code || 'Auto'}
@@ -1164,24 +1754,12 @@ function AuditStatusChip({ code, label }) {
 function AccordionList({ items, expandedEmployees, toggleEmployee, setAllExpanded, renderContent }) {
     return (
         <div>
-            <div className="flex justify-end gap-2 border-b border-slate-800 px-4 py-3">
-                <button
-                    type="button"
-                    onClick={() => setAllExpanded(items, true)}
-                    className="rounded-lg px-3 py-2 text-sm font-semibold text-orange-400 transition hover:bg-orange-500/10"
-                >
-                    Expand all
-                </button>
-                <button
-                    type="button"
-                    onClick={() => setAllExpanded(items, false)}
-                    className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-400 transition hover:bg-slate-800"
-                >
-                    Collapse all
-                </button>
+            <div className="flex justify-end gap-1 border-b border-line px-4 py-3">
+                <Button variant="ghost" size="sm" onClick={() => setAllExpanded(items, true)}>Expand all</Button>
+                <Button variant="ghost" size="sm" onClick={() => setAllExpanded(items, false)}>Collapse all</Button>
             </div>
 
-            <div className="divide-y divide-slate-800">
+            <div className="divide-y divide-line">
                 {items.map((item) => {
                     const expanded = Boolean(expandedEmployees[item.user_id]);
                     return (
@@ -1189,20 +1767,20 @@ function AccordionList({ items, expandedEmployees, toggleEmployee, setAllExpande
                             <button
                                 type="button"
                                 onClick={() => toggleEmployee(item.user_id)}
-                                className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left transition hover:bg-slate-800/40"
+                                className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left transition hover:bg-surface-2/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
                             >
                                 <EmployeeIdentity employee={item} size="large" />
                                 <div className="flex items-center gap-3">
-                                    {item.entries && <span className="text-sm font-semibold text-slate-400">{item.entries.length} actions</span>}
+                                    {item.entries && <span className="text-sm font-semibold text-muted">{item.entries.length} actions</span>}
                                     {item.sessions && (
-                                        <span className="hidden text-sm text-slate-400 sm:inline">
+                                        <span className="hidden text-sm text-muted sm:inline">
                                             {formatHours(item.total_work_hours)} work, {formatHours(item.total_break_hours)} break
                                         </span>
                                     )}
-                                    {expanded ? <ChevronUp className="h-5 w-5 text-slate-500" /> : <ChevronDown className="h-5 w-5 text-slate-500" />}
+                                    {expanded ? <ChevronUp className="h-5 w-5 text-subtle" /> : <ChevronDown className="h-5 w-5 text-subtle" />}
                                 </div>
                             </button>
-                            {expanded && <div className="border-t border-slate-800 bg-slate-950/40 p-4">{renderContent(item)}</div>}
+                            {expanded && <div className="border-t border-line bg-surface-2/30 p-4">{renderContent(item)}</div>}
                         </div>
                     );
                 })}
@@ -1211,7 +1789,16 @@ function AccordionList({ items, expandedEmployees, toggleEmployee, setAllExpande
     );
 }
 
-function MonthlyAttendanceGrid({ days, employees, statusOptions, canManualMark, markingCell, onStatusChange }) {
+function MonthlyAttendanceGrid({
+    days,
+    employees,
+    statusOptions,
+    canManualMark,
+    markingCell,
+    onStatusChange,
+    canEditTimes = false,
+    onEditTimes,
+}) {
     const [openCell, setOpenCell] = useState(null);
     const [menuPosition, setMenuPosition] = useState(null);
     const summaryColumns = [
@@ -1236,7 +1823,6 @@ function MonthlyAttendanceGrid({ days, employees, statusOptions, canManualMark, 
             ) {
                 return;
             }
-
             setOpenCell(null);
             setMenuPosition(null);
         };
@@ -1265,7 +1851,7 @@ function MonthlyAttendanceGrid({ days, employees, statusOptions, canManualMark, 
         }
 
         const rect = event.currentTarget.getBoundingClientRect();
-        const menuWidth = 192;
+        const menuWidth = 208;
         const estimatedMenuHeight = 380;
         const viewportPadding = 8;
         const left = Math.min(
@@ -1284,137 +1870,172 @@ function MonthlyAttendanceGrid({ days, employees, statusOptions, canManualMark, 
     };
 
     return (
-        <div>
-            <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-300">
-                <span className="font-semibold uppercase tracking-wide text-slate-400">Legend:</span>
+        <div className="p-4">
+            {/* Legend */}
+            <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted">
+                <span className="font-medium uppercase tracking-wide text-subtle">Legend</span>
                 {gridLegend.map(([code, label]) => (
                     <span key={code} className="inline-flex items-center gap-1.5">
-                        <span className={`inline-flex h-5 min-w-7 items-center justify-center rounded border px-1 text-[10px] font-bold ${gridStatusStyles[code]}`}>{code}</span>
+                        <span className={cx('inline-flex h-6 min-w-8 items-center justify-center rounded-md px-1.5 text-xs font-bold', GRID_TONE[code])}>{code}</span>
                         {label}
                     </span>
                 ))}
             </div>
-            <div className="overflow-x-auto">
-            <table className="min-w-max border-separate border-spacing-0 text-sm">
-                <thead>
-                    <tr>
-                        <th className="sticky left-0 z-20 min-w-56 border-b border-r border-slate-800 bg-slate-950 px-4 py-3 text-left text-xs font-bold uppercase text-slate-300">
-                            Employee
-                        </th>
-                        {days.map((day) => (
-                            <th
-                                key={day.date}
-                                className={`min-w-11 border-b border-r border-slate-800 px-2 py-2 text-center text-xs font-bold uppercase ${
-                                    day.is_weekend ? 'bg-sky-500/15 text-sky-300' : 'bg-slate-950 text-slate-300'
-                                }`}
-                            >
-                                <div>{day.weekday}</div>
-                                <div className="mt-1 text-sm">{day.day}</div>
-                            </th>
-                        ))}
-                        {summaryColumns.map((column) => (
-                            <th key={column.key} className="min-w-20 border-b border-r border-slate-800 bg-slate-950 px-3 py-3 text-center text-xs font-bold uppercase text-slate-300">
-                                {column.label}
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody>
-                    {employees.map((employee) => (
-                        <tr key={employee.user_id} className="group">
-                            <td className="sticky left-0 z-10 border-b border-r border-slate-800 bg-slate-900 px-4 py-2 group-hover:bg-slate-800/60">
-                                <EmployeeIdentity employee={employee} />
-                            </td>
-                            {employee.days.map((cell) => {
-                                const cellKey = `${employee.user_id}-${cell.date}`;
-                                const statusCode = cell.status_code || '';
-                                const statusClass = gridStatusStyles[statusCode] || gridStatusStyles.empty;
-                                const isManual = cell.source === 'manual';
-                                const loading = markingCell === cellKey;
-                                const open = openCell === cellKey;
-                                const titleParts = [
-                                    cell.status_label,
-                                    cell.work_hours ? `${formatHours(cell.work_hours)} worked` : null,
-                                    cell.first_clock_in ? `First in ${cell.first_clock_in}` : null,
-                                    isManual ? 'Manual mark' : null,
-                                ].filter(Boolean);
 
-                                return (
-                                    <td key={cell.date} className="relative border-b border-r border-slate-800 p-1 text-center">
-                                        <div className={`relative flex h-9 min-w-10 items-center justify-center rounded border text-xs font-bold ${statusClass}`} title={titleParts.join(' | ')}>
-                                            {canManualMark ? (
-                                                <button
-                                                    type="button"
-                                                    disabled={loading}
-                                                    onClick={(event) => toggleCellMenu(event, cellKey)}
-                                                    className="h-full w-full rounded px-1 text-xs font-bold text-inherit outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-wait disabled:opacity-60"
-                                                    aria-label={`Attendance for ${employee.user_name} on ${cell.date}`}
-                                                    aria-expanded={open}
-                                                    aria-haspopup="menu"
-                                                    data-attendance-trigger
-                                                >
-                                                    {loading ? '...' : statusCode || '-'}
-                                                </button>
-                                            ) : (
-                                                <span>{statusCode || '-'}</span>
-                                            )}
-                                            {isManual && <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-white ring-1 ring-slate-500" />}
-                                        </div>
-                                        {canManualMark && open && menuPosition && typeof document !== 'undefined' && createPortal(
-                                            <div
-                                                className="fixed z-[100] max-h-[calc(100vh-1rem)] w-48 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-2 text-left shadow-xl"
-                                                style={menuPosition}
-                                                role="menu"
-                                                data-attendance-menu
-                                            >
-                                                <div className="mb-1 px-2 text-xs font-semibold text-slate-500">{cell.date}</div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        onStatusChange(employee.user_id, cell.date, '');
-                                                        setOpenCell(null);
-                                                        setMenuPosition(null);
-                                                    }}
-                                                    className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm font-semibold text-slate-200 hover:bg-slate-800"
-                                                    role="menuitem"
-                                                >
-                                                    <span>Auto</span>
-                                                    <span>{statusCode || '-'}</span>
-                                                </button>
-                                                <div className="my-1 border-t border-slate-800" />
-                                                {statusOptions.map((option) => (
-                                                    <button
-                                                        key={option.code}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            onStatusChange(employee.user_id, cell.date, option.code);
-                                                            setOpenCell(null);
-                                                            setMenuPosition(null);
-                                                        }}
-                                                        className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm text-slate-300 hover:bg-orange-500/10 hover:text-orange-300"
-                                                        role="menuitem"
-                                                    >
-                                                        <span>{option.label}</span>
-                                                        <span className="font-bold">{option.code}</span>
-                                                    </button>
-                                                ))}
-                                            </div>,
-                                            document.body
-                                        )}
-                                    </td>
-                                );
-                            })}
+            <div className="overflow-x-auto rounded-lg border border-line">
+                <table className="min-w-max border-separate border-spacing-0 text-sm">
+                    <thead>
+                        <tr>
+                            <th className="sticky left-0 z-20 min-w-56 border-b border-r border-line bg-surface-2 px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted">
+                                Employee
+                            </th>
+                            {days.map((day) => (
+                                <th
+                                    key={day.date}
+                                    className={cx(
+                                        'min-w-12 border-b border-r border-line px-2 py-2.5 text-center text-xs font-medium uppercase',
+                                        day.is_weekend ? 'bg-surface-2 text-accent' : 'bg-surface-2 text-muted'
+                                    )}
+                                >
+                                    <div className="tracking-wide">{day.weekday}</div>
+                                    <div className="mt-1 text-sm font-semibold text-body">{day.day}</div>
+                                </th>
+                            ))}
                             {summaryColumns.map((column) => (
-                                <td key={column.key} className="border-b border-r border-slate-800 bg-slate-900 px-3 py-2 text-center font-semibold text-slate-100">
-                                    {column.format
-                                        ? column.format(employee.summary?.[column.key] || 0)
-                                        : employee.summary?.[column.key] || 0}
-                                </td>
+                                <th key={column.key} className="min-w-20 border-b border-r border-line bg-surface-2 px-3 py-3 text-center text-xs font-medium uppercase tracking-wide text-muted">
+                                    {column.label}
+                                </th>
                             ))}
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {employees.map((employee) => (
+                            <tr key={employee.user_id} className="group">
+                                <td className="sticky left-0 z-10 border-b border-r border-line bg-surface px-4 py-2.5 group-hover:bg-surface-2/60">
+                                    <EmployeeIdentity employee={employee} />
+                                </td>
+                                {employee.days.map((cell) => {
+                                    const cellKey = `${employee.user_id}-${cell.date}`;
+                                    const statusCode = cell.status_code || '';
+                                    const toneClass = GRID_TONE[statusCode] || GRID_TONE.empty;
+                                    const isManual = cell.source === 'manual';
+                                    const isLoading = markingCell === cellKey;
+                                    const open = openCell === cellKey;
+                                    // The cell menu is offered to anyone who can act on the day —
+                                    // marking status manually, editing clock times, or both.
+                                    const cellInteractive = canManualMark || canEditTimes;
+                                    const titleParts = [
+                                        cell.status_label,
+                                        cell.work_hours ? `${formatHours(cell.work_hours)} worked` : null,
+                                        cell.first_clock_in ? `First in ${cell.first_clock_in}` : null,
+                                        isManual ? 'Manual mark' : null,
+                                    ].filter(Boolean);
+
+                                    return (
+                                        <td key={cell.date} className="relative border-b border-r border-line p-1.5 text-center">
+                                            <div
+                                                className={cx('relative mx-auto flex h-11 min-w-11 items-center justify-center rounded-md text-sm font-bold', toneClass)}
+                                                title={titleParts.join(' | ')}
+                                            >
+                                                {cellInteractive ? (
+                                                    <button
+                                                        type="button"
+                                                        disabled={isLoading}
+                                                        onClick={(event) => toggleCellMenu(event, cellKey)}
+                                                        className="h-full w-full rounded-md px-1 text-sm font-bold text-inherit outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-app disabled:cursor-wait disabled:opacity-60"
+                                                        aria-label={`Attendance for ${employee.user_name} on ${cell.date}`}
+                                                        aria-expanded={open}
+                                                        aria-haspopup="menu"
+                                                        data-attendance-trigger
+                                                    >
+                                                        {isLoading ? '...' : statusCode || '-'}
+                                                    </button>
+                                                ) : (
+                                                    <span>{statusCode || '-'}</span>
+                                                )}
+                                                {isManual && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-current opacity-70" />}
+                                            </div>
+                                            {cellInteractive && open && menuPosition && typeof document !== 'undefined' && createPortal(
+                                                <div
+                                                    className="fixed z-[100] max-h-[calc(100vh-1rem)] w-52 overflow-y-auto rounded-lg border border-line bg-surface p-2 text-left shadow-xl"
+                                                    style={menuPosition}
+                                                    role="menu"
+                                                    data-attendance-menu
+                                                >
+                                                    <div className="mb-1 px-2 text-xs font-medium text-subtle">{cell.date}</div>
+
+                                                    {canEditTimes && (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setOpenCell(null);
+                                                                    setMenuPosition(null);
+                                                                    onEditTimes?.(employee, cell.date);
+                                                                }}
+                                                                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold text-body transition hover:bg-accent/10 hover:text-accent"
+                                                                role="menuitem"
+                                                            >
+                                                                <Clock className="h-4 w-4" />
+                                                                <span>Clock times…</span>
+                                                            </button>
+                                                            {canManualMark && <div className="my-1 border-t border-line" />}
+                                                        </>
+                                                    )}
+
+                                                    {canManualMark && (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    onStatusChange(employee.user_id, cell.date, '');
+                                                                    setOpenCell(null);
+                                                                    setMenuPosition(null);
+                                                                }}
+                                                                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm font-semibold text-body transition hover:bg-surface-2"
+                                                                role="menuitem"
+                                                            >
+                                                                <span>Auto</span>
+                                                                <span className="text-muted">{statusCode || '-'}</span>
+                                                            </button>
+                                                            <div className="my-1 border-t border-line" />
+                                                            {statusOptions.map((option) => (
+                                                                <button
+                                                                    key={option.code}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        onStatusChange(employee.user_id, cell.date, option.code);
+                                                                        setOpenCell(null);
+                                                                        setMenuPosition(null);
+                                                                    }}
+                                                                    className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm text-muted transition hover:bg-accent/10 hover:text-accent"
+                                                                    role="menuitem"
+                                                                >
+                                                                    <span>{option.label}</span>
+                                                                    <span className={cx('inline-flex min-w-8 items-center justify-center rounded px-1.5 py-0.5 text-xs font-bold', GRID_TONE[option.code] || GRID_TONE.empty)}>
+                                                                        {option.code}
+                                                                    </span>
+                                                                </button>
+                                                            ))}
+                                                        </>
+                                                    )}
+                                                </div>,
+                                                document.body
+                                            )}
+                                        </td>
+                                    );
+                                })}
+                                {summaryColumns.map((column) => (
+                                    <td key={column.key} className="border-b border-r border-line bg-surface px-3 py-2.5 text-center font-semibold text-body tabular-nums group-hover:bg-surface-2/60">
+                                        {column.format
+                                            ? column.format(employee.summary?.[column.key] || 0)
+                                            : employee.summary?.[column.key] || 0}
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
         </div>
     );

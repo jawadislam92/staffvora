@@ -120,7 +120,7 @@ export default function Welcome({ auth }) {
 
     return (
         <>
-            <Head title="Tracksuite — Time tracking for teams" />
+            <Head title="Staffvora — Time tracking for teams" />
 
             <div className="min-h-screen text-gray-100" style={{ background: "linear-gradient(135deg, #282a2a 0%, #1f2020 50%, #161717 100%)" }}>
                 {/* Nav */}
@@ -131,12 +131,12 @@ export default function Welcome({ auth }) {
                                 <img
                                     src={logoSrc}
                                     className="h-9 w-9 object-contain"
-                                    alt="Tracksuite"
+                                    alt="Staffvora"
                                     onError={(e) => { e.target.src = BUNDLED_LOGO; }}
                                 />
                             </div>
                             <div className="leading-tight">
-                                <span className="block font-bold">Tracksuite</span>
+                                <span className="block font-bold">Staffvora</span>
                                 <span className="block text-xs text-gray-400">Time tracking</span>
                             </div>
                         </div>
@@ -232,7 +232,7 @@ export default function Welcome({ auth }) {
                                 alt=""
                                 onError={(e) => { e.target.src = BUNDLED_LOGO; }}
                             />
-                            <span>© 2026 Tracksuite. Crafted with ❤️ for productive teams.</span>
+                            <span>© 2026 Staffvora. Crafted with ❤️ for productive teams.</span>
                         </div>
                     </footer>
                 </main>

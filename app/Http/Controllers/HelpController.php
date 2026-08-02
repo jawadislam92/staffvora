@@ -14,7 +14,7 @@ class HelpController extends Controller
     public function index(): Response
     {
         return Inertia::render('Help/Index', [
-            'supportEmail' => config('billing.support_email'),
+            'supportEmail' => config('billing.support_email') ?: config('brand.support_email'),
         ]);
     }
 }

@@ -44,7 +44,7 @@ return [
             'provider' => 'users',
         ],
 
-        // Operator/landlord portal (platform.satimetracker.com) — fully separate
+        // Operator/landlord portal (platform.staffvora.com) — fully separate
         // from the customer `web` guard, its own table + session.
         'platform' => [
             'driver' => 'session',

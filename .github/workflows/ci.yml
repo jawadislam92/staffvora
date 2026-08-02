@@ -1,0 +1,84 @@
+name: Quality checks
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_sqlite, sqlite3
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Validate and audit PHP dependencies
+        run: |
+          composer validate --strict
+          composer audit --locked
+
+      - name: Prepare application
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Run application tests
+        run: php artisan test
+
+      - name: Install and audit web dependencies
+        run: |
+          npm ci
+          npm audit --omit=dev
+
+      - name: Build web application
+        run: npm run build
+
+      - name: Verify cached routes and configuration
+        run: |
+          php artisan route:cache
+          php artisan config:cache
+
+  desktop-renderer:
+    name: Desktop renderer
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      # Native tracking modules are platform-specific; this job verifies the
+      # cross-platform renderer while signed packaging runs on release runners.
+      - name: Install renderer dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build desktop renderer
+        run: npm run build:renderer

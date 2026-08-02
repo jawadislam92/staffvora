@@ -29,9 +29,19 @@ class UpworkProfile extends Model
         return $this->hasMany(WorkHour::class, 'tracker', 'name');
     }
 
+    /**
+     * Active (not archived) profiles — the only ones offered in dropdowns and
+     * assignment pickers. Tenant scoping comes from the OrganizationScope.
+     */
     public function scopeActive($query)
     {
         return $query->where('is_active', true);
+    }
+
+    /** Archived profiles only — the "Archived" list tab. */
+    public function scopeArchived($query)
+    {
+        return $query->where('is_active', false);
     }
 
     public function clients()

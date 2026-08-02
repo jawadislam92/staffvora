@@ -10,25 +10,24 @@
 | vars seeded from `colors` below). Rebranding = edit this file (+ the logo
 | asset + the favicon set) and nothing else.
 |
-| Current identity = the chosen "Measured System" brand direction (calm green)
-| from the Claude Design handoff. Values marked REPLACE are business details
-| the owner will finalise.
+| Business-owned identity fields are environment-driven so this public product
+| cannot silently inherit details from the internal company application.
 |
 */
 
 return [
-    'name' => 'Tracksuite',                 // working product name
-    'legal_name' => 'Sparking Asia (Pvt.) Ltd.', // REPLACE: registered company
+    'name' => env('BRAND_NAME', 'Staffvora'),
+    'legal_name' => env('BRAND_LEGAL_NAME', 'Staffvora'),
     'tagline' => 'We measure the work, not the worker.',
     'description' => 'A calm, honest time tracker for remote teams — insight without surveillance.',
 
-    // Contact / conversion (REPLACE with real details before launch).
-    'support_email' => 'hello@satimetracker.com',
-    'sales_email' => 'hello@satimetracker.com',
-    'whatsapp' => '',                       // REPLACE: full intl number, e.g. 923001234567
-    'phone' => '',                          // REPLACE
-    'address' => 'Rawalpindi, Pakistan',    // REPLACE: full office address
-    'demo_url' => '',                       // REPLACE: Calendly / demo-booking link
+    // Contact / conversion. Configure real public details before launch.
+    'support_email' => env('BRAND_SUPPORT_EMAIL', 'hello@staffvora.com'),
+    'sales_email' => env('BRAND_SALES_EMAIL', 'hello@staffvora.com'),
+    'whatsapp' => env('BRAND_WHATSAPP', ''),
+    'phone' => env('BRAND_PHONE', ''),
+    'address' => env('BRAND_ADDRESS', ''),
+    'demo_url' => env('BRAND_DEMO_URL', ''),
 
     // Social profiles (blank = hidden in header/footer).
     'socials' => [

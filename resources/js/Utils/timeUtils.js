@@ -3,6 +3,142 @@
  */
 
 /**
+ * Time zones offered by the per-viewer display preference picker, grouped by
+ * region. These are only DISPLAY zones — they never change how a timestamp is
+ * stored, nor which attendance day it buckets into (that stays the workspace's
+ * business timezone on the server).
+ */
+export const TIMEZONE_GROUPS = [
+    {
+        label: 'Asia & Middle East',
+        zones: [
+            'Asia/Karachi', 'Asia/Kolkata', 'Asia/Dhaka', 'Asia/Kathmandu',
+            'Asia/Dubai', 'Asia/Riyadh', 'Asia/Qatar', 'Asia/Tehran',
+            'Asia/Jakarta', 'Asia/Bangkok', 'Asia/Singapore', 'Asia/Hong_Kong',
+            'Asia/Shanghai', 'Asia/Tokyo', 'Asia/Seoul', 'Asia/Manila',
+        ],
+    },
+    {
+        label: 'Europe & Africa',
+        zones: [
+            'Europe/London', 'Europe/Dublin', 'Europe/Lisbon', 'Europe/Madrid',
+            'Europe/Paris', 'Europe/Berlin', 'Europe/Amsterdam', 'Europe/Rome',
+            'Europe/Warsaw', 'Europe/Kyiv', 'Europe/Istanbul', 'Europe/Moscow',
+            'Africa/Lagos', 'Africa/Cairo', 'Africa/Nairobi', 'Africa/Johannesburg',
+        ],
+    },
+    {
+        label: 'Americas',
+        zones: [
+            'America/Sao_Paulo', 'America/Argentina/Buenos_Aires', 'America/Bogota',
+            'America/New_York', 'America/Toronto', 'America/Chicago',
+            'America/Mexico_City', 'America/Denver', 'America/Phoenix',
+            'America/Los_Angeles', 'America/Vancouver', 'America/Anchorage',
+            'Pacific/Honolulu',
+        ],
+    },
+    {
+        label: 'Oceania',
+        zones: [
+            'Australia/Perth', 'Australia/Adelaide', 'Australia/Brisbane',
+            'Australia/Sydney', 'Australia/Melbourne', 'Pacific/Auckland',
+        ],
+    },
+    {
+        label: 'Other',
+        zones: ['UTC'],
+    },
+];
+
+/** Every zone in TIMEZONE_GROUPS, flattened — handy for "is this one we list?". */
+export const TIMEZONE_OPTIONS = TIMEZONE_GROUPS.flatMap((group) => group.zones);
+
+/**
+ * Human label for an IANA zone: "Asia/Karachi" -> "Karachi",
+ * "America/Argentina/Buenos_Aires" -> "Buenos Aires".
+ * @param {string} tz
+ * @returns {string}
+ */
+export const timezoneCityLabel = (tz) => {
+    if (!tz) return '';
+    return String(tz).split('/').pop().replace(/_/g, ' ');
+};
+
+/**
+ * Current UTC offset label for a zone, e.g. "UTC+5" / "UTC-04:00".
+ * DST-aware because it is resolved against a real instant. Returns '' when the
+ * runtime can't resolve the zone, so callers can just append it.
+ * @param {string} tz
+ * @param {Date|string|number} [at] - Instant to resolve the offset at.
+ * @returns {string}
+ */
+export const timezoneOffsetLabel = (tz, at = new Date()) => {
+    if (!tz) return '';
+    try {
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: tz,
+            timeZoneName: 'shortOffset',
+        }).formatToParts(new Date(at));
+        const name = parts.find((p) => p.type === 'timeZoneName')?.value || '';
+        if (!name) return '';
+        return name === 'GMT' ? 'UTC+0' : name.replace('GMT', 'UTC');
+    } catch {
+        return '';
+    }
+};
+
+/** The viewer's own device time zone, or '' when it can't be resolved. */
+export const deviceTimezone = () => {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    } catch {
+        return '';
+    }
+};
+
+/**
+ * Wall-clock time for an instant in a given zone, honouring the 12/24h choice.
+ * @param {Date|string|number} at
+ * @param {string} tz - IANA zone.
+ * @param {boolean} [hour12] - true = 12-hour (3:45 PM), false = 24-hour (15:45).
+ * @param {boolean} [withSeconds]
+ * @returns {string}
+ */
+export const formatClock = (at, tz, hour12 = true, withSeconds = false) => {
+    try {
+        return new Date(at).toLocaleTimeString('en-US', {
+            timeZone: tz || undefined,
+            hour: hour12 ? 'numeric' : '2-digit',
+            minute: '2-digit',
+            ...(withSeconds ? { second: '2-digit' } : {}),
+            hour12,
+        });
+    } catch {
+        return '';
+    }
+};
+
+/**
+ * Calendar date for an instant in a given zone, e.g. "Wed, Jul 29".
+ * Useful next to formatClock so a viewer can see when their zone is a day off.
+ * @param {Date|string|number} at
+ * @param {string} tz
+ * @returns {string}
+ */
+export const formatClockDate = (at, tz) => {
+    try {
+        return new Date(at).toLocaleDateString('en-US', {
+            timeZone: tz || undefined,
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+        });
+    } catch {
+        return '';
+    }
+};
+
+/**
  * Format hours and minutes from decimal hours
  * @param {number} hours - Decimal hours (e.g., 2.5 for 2 hours 30 minutes)
  * @returns {string} Formatted time string

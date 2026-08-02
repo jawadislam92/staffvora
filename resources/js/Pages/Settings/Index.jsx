@@ -4,25 +4,46 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import {
+    Button, Card, CardHeader, Badge, Field, Input, Select, Toggle,
+    LockedFeature, LockBadge,
+} from '@/Components/ui';
+import {
     Activity,
     Bell,
     Calendar,
     CalendarDays,
     Camera,
+    ChevronRight,
     Clock,
     DollarSign,
     Globe,
     Laptop,
-    Lock,
     MessageSquare,
     PauseCircle,
+    Tags,
     Timer,
     Clock3,
+    Wallet,
 } from 'lucide-react';
 
+const cx = (...a) => a.filter(Boolean).join(' ');
+
+// Ziggy throws on a name it doesn't know, which would take this whole page
+// down. Nav items that link to their own screen resolve through this so a
+// not-yet-regenerated route manifest degrades to the literal path instead.
+function safeRoute(name, fallback) {
+    try {
+        return route(name);
+    } catch {
+        return fallback;
+    }
+}
+
 // Which settings sections are gated behind a plan feature flag. A section whose
-// flag is off for the tenant is shown locked with an upgrade prompt; the server
-// rejects the write independently (see SettingsController::enforceEntitlements).
+// flag is off for the tenant is SHOWN, NOT HIDDEN: the real panel still renders,
+// greyed and inert, under an "Upgrade to unlock" callout, so the customer can
+// see exactly what they'd be buying. The server rejects the write independently
+// (see SettingsController::enforceEntitlements) — the lock is presentation only.
 const SECTION_LOCKS = {
     activity: 'activity_tracking',
     app_url: 'app_url_tracking',
@@ -30,22 +51,87 @@ const SECTION_LOCKS = {
     attendance_slack: 'attendance_alerts',
 };
 
-function LockedNotice({ label }) {
-    return (
-        <div className="rounded-lg border border-line bg-surface p-8 text-center">
-            <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-surface-2">
-                <Lock className="h-6 w-6 text-subtle" />
-            </span>
-            <h3 className="mt-4 text-base font-semibold text-body">{label} isn&apos;t in your plan</h3>
-            <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
-                This feature is available on a higher plan. Upgrade to unlock it, or contact us if you need it added to your workspace.
-            </p>
-            <Link href={route('billing.index')} className="mt-4 inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
-                View plans
-            </Link>
-        </div>
-    );
-}
+// One line per gated section on what unlocking actually buys. Sales copy lives
+// here rather than in the component so the wording stays with the section.
+const SECTION_LOCK_BLURBS = {
+    activity_tracking: 'See a keyboard/mouse activity level on every tracked session.',
+    app_url_tracking: 'Record the active application and browser URL alongside tracked time.',
+    weekly_limit: 'Cap how many hours a person may track in a week, per person or team-wide.',
+    attendance_alerts: 'Post clock-in and clock-out events straight into your Slack channel.',
+};
+
+/*
+ * DEV_SAMPLE — offline visual-QA fixture. Used ONLY when `preview` is true so
+ * the whole page renders from memory (no props, no network) with a mock
+ * super-admin. Live behavior is unchanged.
+ */
+const DEV_SAMPLE = {
+    auth: {
+        user: {
+            id: 1,
+            name: 'Jawad',
+            email: 'jawad@staffvora.com',
+            is_super_admin: true,
+            permissions: [],
+        },
+    },
+    entitlements: {
+        activity_tracking: true,
+        app_url_tracking: true,
+        weekly_limit: true,
+        attendance_alerts: true,
+        max_screenshots_per_hour: 20,
+        min_auto_pause_minutes: 3,
+    },
+    team: {
+        screenshots_per_hour: 6,
+        blur_screenshots: false,
+        capture_enabled: true,
+        activity_tracking_enabled: true,
+        app_url_tracking_enabled: true,
+        weekly_time_limit_hours: 40,
+        auto_pause_minutes: 5,
+        allow_offline_time: true,
+        manual_time_overlap_policy: 'warn',
+        notify_on_screenshot: false,
+        week_starts_on: 'monday',
+        currency_symbol: '$',
+        desktop_auto_start: true,
+        desktop_force_quit_on_idle: false,
+        display_timezone: 'Asia/Karachi',
+        time_format: '12',
+        slack_connected: true,
+        slack_clockin_enabled: true,
+        slack_clockout_enabled: false,
+        slack_attendance_channel: '#attendance',
+        attendance_tracking_start_date: '2026-01-01',
+        attendance_week_off_days: [0],
+        attendance_auto_absent: true,
+        attendance_holidays: ['2026-08-14', '2026-12-25'],
+    },
+    payPeriod: {
+        cadence: 'weekly',
+        anchor_date: '2026-01-05',
+        options: [
+            { key: 'weekly', label: 'Weekly' },
+            { key: 'biweekly', label: 'Bi-weekly (every 2 weeks)' },
+            { key: 'semimonthly', label: 'Semi-monthly (1st–15th, 16th–end)' },
+            { key: 'monthly', label: 'Monthly' },
+        ],
+        preview: [
+            { key: 'weekly:2026-07-13', label: '13 – 19 Jul 2026', start: '2026-07-13', end: '2026-07-19', is_current: false },
+            { key: 'weekly:2026-07-20', label: '20 – 26 Jul 2026', start: '2026-07-20', end: '2026-07-26', is_current: false },
+            { key: 'weekly:2026-07-27', label: '27 Jul – 2 Aug 2026', start: '2026-07-27', end: '2026-08-02', is_current: true },
+        ],
+        current: { key: 'weekly:2026-07-27', label: '27 Jul – 2 Aug 2026', start: '2026-07-27', end: '2026-08-02', is_current: true },
+    },
+    users: [
+        { id: 1, name: 'Jawad', email: 'jawad@staffvora.com', role: 'super_admin', overrides: {} },
+        { id: 2, name: 'Aqsa Malik', email: 'aqsa@staffvora.com', role: 'member', overrides: { override_screenshots: true, capture_enabled: true, screenshots_per_hour: 12, blur_screenshots: true } },
+        { id: 3, name: 'Bilal Ahmed', email: 'bilal@staffvora.com', role: 'member', overrides: {} },
+        { id: 4, name: 'Sana Riaz', email: 'sana@staffvora.com', role: 'manager', overrides: {} },
+    ],
+};
 
 const TIMEZONES = [
     'Asia/Karachi', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Dhaka', 'Asia/Riyadh',
@@ -63,10 +149,19 @@ const CATEGORIES = [
     { key: 'offline_time', label: 'Allow adding Offline Time', icon: Clock, summary: (t) => (t.allow_offline_time ? 'Yes' : 'No') },
     { key: 'notify_screenshot', label: 'Notify when screenshot is taken', icon: Bell, summary: (t) => (t.notify_on_screenshot ? 'Yes' : 'No') },
     { key: 'attendance_policy', label: 'Attendance policy', icon: CalendarDays, summary: (t) => (t.attendance_auto_absent ? 'Auto-absent on' : 'Auto-absent off') },
+    // The payroll window a timesheet covers. Its value lives in its own
+    // `payPeriod` prop (not the tracker settings payload), so the summary reads
+    // the second argument.
+    { key: 'pay_period', label: 'Pay period', icon: Wallet, summary: (t, pp) => (pp?.options || []).find((o) => o.key === pp?.cadence)?.label?.split(' (')[0] || 'Weekly' },
     { key: 'attendance_slack', label: 'Attendance Slack alerts', icon: MessageSquare, summary: (t) => [t.slack_clockin_enabled && 'in', t.slack_clockout_enabled && 'out'].filter(Boolean).join(' + ') || 'Off' },
     { key: 'week_starts_on', label: 'Week starts on', icon: Calendar, summary: (t) => (t.week_starts_on === 'sunday' ? 'Sun' : 'Mon') },
     { key: 'currency', label: 'Currency symbol', icon: DollarSign, summary: (t) => t.currency_symbol },
     { key: 'desktop_app', label: 'Employee desktop application settings', icon: Laptop, summary: () => '' },
+    // A `route` key turns the nav item into a link to its own screen instead of
+    // an in-page panel. Work categories is the workspace's editable "what the
+    // work was" list — it needs a table, ordering and an archive tab, so it
+    // lives at /settings/work-categories.
+    { key: 'work_categories', label: 'Work categories', icon: Tags, route: 'settings.work-categories', path: '/settings/work-categories', summary: () => '' },
 ];
 
 const CATEGORY_OVERRIDE_KEY = {
@@ -81,33 +176,16 @@ const CATEGORY_OVERRIDE_KEY = {
     display: 'override_display',
 };
 
-function Toggle({ checked, onChange, disabled }) {
-    return (
-        <button
-            type="button"
-            onClick={() => !disabled && onChange(!checked)}
-            disabled={disabled}
-            className={[
-                'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition',
-                checked ? 'bg-emerald-500' : 'bg-slate-300',
-                disabled ? 'opacity-50' : '',
-            ].join(' ')}
-            aria-pressed={checked}
-        >
-            <span className={['inline-block h-4 w-4 transform rounded-full bg-surface shadow transition', checked ? 'translate-x-6' : 'translate-x-1'].join(' ')} />
-        </button>
-    );
-}
+// Native radio/checkbox tinted with the electric-blue accent.
+const radioCls = 'h-4 w-4 shrink-0 border-line text-accent accent-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-app';
 
 function SectionShell({ title, blurb, children }) {
     return (
-        <div className="space-y-5">
-            <h2 className="text-xl font-semibold text-body">{title}</h2>
-            {blurb && (
-                <div className="rounded-lg bg-slate-700 px-4 py-3 text-sm text-slate-100">{blurb}</div>
-            )}
-            {children}
-        </div>
+        <Card
+            header={<CardHeader title={title} description={blurb} />}
+        >
+            <div className="space-y-5">{children}</div>
+        </Card>
     );
 }
 
@@ -134,9 +212,12 @@ function patchUser(user, category, enabled, values) {
 // The override rows render deep inside each section, but the users list
 // lives in page state — this dispatch lets a row flip its toggle in that
 // state so the UI shows the save (the axios call never refreshes props).
+// A no-op `saveTeam` is injected in preview so nothing hits the network.
 const OverridesDispatchContext = createContext(() => {});
+const SaveContext = createContext({ saveTeam: patchTeam, saveUser: patchUser });
 
 function ScreenshotsSection({ team, users, setTeam, maxShots }) {
+    const { saveTeam } = useContext(SaveContext);
     const captureOff = !team.capture_enabled || team.screenshots_per_hour === 0;
     const cap = maxShots ?? 60;
     const rateOptions = [1, 2, 3, 4, 6, 8, 10, 12, 15, 20, 30].filter((n) => n <= cap);
@@ -146,57 +227,59 @@ function ScreenshotsSection({ team, users, setTeam, maxShots }) {
             blurb={<>How frequently screenshots will be taken.<br />This number is an average since screenshots are taken at random intervals.</>}
         >
             {maxShots != null && (
-                <p className="mb-3 text-xs text-muted">Your plan allows up to <strong>{maxShots}</strong> screenshots per hour.</p>
+                <p className="text-xs text-muted">Your plan allows up to <strong className="text-body">{maxShots}</strong> screenshots per hour.</p>
             )}
-            <div className="flex flex-wrap items-center gap-6 text-sm">
+            <div className="flex flex-wrap items-center gap-6 text-sm text-body">
                 <label className="flex items-center gap-2">
                     <input
                         type="radio"
+                        className={radioCls}
                         checked={!captureOff}
                         onChange={() => {
                             const next = { ...team, capture_enabled: true, screenshots_per_hour: team.screenshots_per_hour || 6 };
                             setTeam(next);
-                            patchTeam(next);
+                            saveTeam(next);
                         }}
                     />
                     <span>Take</span>
-                    <select
-                        className="rounded border-line text-sm"
+                    <Select
+                        className="w-auto"
                         value={team.screenshots_per_hour || 6}
                         disabled={captureOff}
                         onChange={(e) => {
                             const next = { ...team, screenshots_per_hour: Number(e.target.value) };
                             setTeam(next);
-                            patchTeam(next);
+                            saveTeam(next);
                         }}
                     >
                         {rateOptions.map((n) => (
                             <option key={n} value={n}>{n}</option>
                         ))}
-                    </select>
+                    </Select>
                     <span>screenshots per hour</span>
-                    <select
-                        className="rounded border-line text-sm"
+                    <Select
+                        className="w-auto"
                         value={team.blur_screenshots ? 'allow' : 'disallow'}
                         disabled={captureOff}
                         onChange={(e) => {
                             const next = { ...team, blur_screenshots: e.target.value === 'allow' };
                             setTeam(next);
-                            patchTeam(next);
+                            saveTeam(next);
                         }}
                     >
                         <option value="disallow">Disallow blur</option>
                         <option value="allow">Allow blur</option>
-                    </select>
+                    </Select>
                 </label>
                 <label className="flex items-center gap-2">
                     <input
                         type="radio"
+                        className={radioCls}
                         checked={captureOff}
                         onChange={() => {
                             const next = { ...team, capture_enabled: false, screenshots_per_hour: 0 };
                             setTeam(next);
-                            patchTeam(next);
+                            saveTeam(next);
                         }}
                     />
                     <span>Do not take</span>
@@ -215,10 +298,11 @@ function ScreenshotsSection({ team, users, setTeam, maxShots }) {
                 editor={(override, setValues) => {
                     const off = !override.capture_enabled || override.screenshots_per_hour === 0;
                     return (
-                        <div className="flex flex-wrap items-center gap-4 text-xs">
+                        <div className="flex flex-wrap items-center gap-4 text-xs text-body">
                             <label className="flex items-center gap-1.5">
                                 <input
                                     type="radio"
+                                    className={radioCls}
                                     checked={!off}
                                     onChange={() => setValues({
                                         capture_enabled: true,
@@ -227,8 +311,8 @@ function ScreenshotsSection({ team, users, setTeam, maxShots }) {
                                     })}
                                 />
                                 Take
-                                <select
-                                    className="rounded border-line text-xs"
+                                <Select
+                                    className="w-auto py-1 text-xs"
                                     value={override.screenshots_per_hour || team.screenshots_per_hour || 6}
                                     disabled={off}
                                     onChange={(e) => setValues({
@@ -240,10 +324,10 @@ function ScreenshotsSection({ team, users, setTeam, maxShots }) {
                                     {[1, 2, 3, 4, 6, 8, 10, 12, 15, 20, 30].map((n) => (
                                         <option key={n} value={n}>{n}</option>
                                     ))}
-                                </select>
+                                </Select>
                                 / hr
-                                <select
-                                    className="rounded border-line text-xs"
+                                <Select
+                                    className="w-auto py-1 text-xs"
                                     value={override.blur_screenshots ? 'allow' : 'disallow'}
                                     disabled={off}
                                     onChange={(e) => setValues({
@@ -254,11 +338,12 @@ function ScreenshotsSection({ team, users, setTeam, maxShots }) {
                                 >
                                     <option value="disallow">Disallow blur</option>
                                     <option value="allow">Allow blur</option>
-                                </select>
+                                </Select>
                             </label>
                             <label className="flex items-center gap-1.5">
                                 <input
                                     type="radio"
+                                    className={radioCls}
                                     checked={off}
                                     onChange={() => setValues({
                                         capture_enabled: false,
@@ -277,17 +362,19 @@ function ScreenshotsSection({ team, users, setTeam, maxShots }) {
 }
 
 function BooleanSection({ team, users, setTeam, title, blurb, field, category, label = 'Track', offLabel = 'Do not track' }) {
+    const { saveTeam } = useContext(SaveContext);
     return (
         <SectionShell title={title} blurb={blurb}>
-            <div className="flex flex-wrap items-center gap-6 text-sm">
+            <div className="flex flex-wrap items-center gap-6 text-sm text-body">
                 <label className="flex items-center gap-2">
                     <input
                         type="radio"
+                        className={radioCls}
                         checked={!!team[field]}
                         onChange={() => {
                             const next = { ...team, [field]: true };
                             setTeam(next);
-                            patchTeam(next);
+                            saveTeam(next);
                         }}
                     />
                     {label}
@@ -295,11 +382,12 @@ function BooleanSection({ team, users, setTeam, title, blurb, field, category, l
                 <label className="flex items-center gap-2">
                     <input
                         type="radio"
+                        className={radioCls}
                         checked={!team[field]}
                         onChange={() => {
                             const next = { ...team, [field]: false };
                             setTeam(next);
-                            patchTeam(next);
+                            saveTeam(next);
                         }}
                     />
                     {offLabel}
@@ -312,10 +400,11 @@ function BooleanSection({ team, users, setTeam, title, blurb, field, category, l
                 flagKey={CATEGORY_OVERRIDE_KEY[category]}
                 defaultValues={{ [field]: team[field] }}
                 editor={(override, setValues) => (
-                    <div className="flex flex-wrap items-center gap-4 text-xs">
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-body">
                         <label className="flex items-center gap-1.5">
                             <input
                                 type="radio"
+                                className={radioCls}
                                 checked={!!override[field]}
                                 onChange={() => setValues({ [field]: true })}
                             />
@@ -324,6 +413,7 @@ function BooleanSection({ team, users, setTeam, title, blurb, field, category, l
                         <label className="flex items-center gap-1.5">
                             <input
                                 type="radio"
+                                className={radioCls}
                                 checked={!override[field]}
                                 onChange={() => setValues({ [field]: false })}
                             />
@@ -337,6 +427,7 @@ function BooleanSection({ team, users, setTeam, title, blurb, field, category, l
 }
 
 function WeeklyLimitSection({ team, users, setTeam }) {
+    const { saveTeam } = useContext(SaveContext);
     const limit = team.weekly_time_limit_hours;
     const enabled = limit !== null && limit !== undefined && limit !== '';
     return (
@@ -344,19 +435,20 @@ function WeeklyLimitSection({ team, users, setTeam }) {
             title="Weekly time limit"
             blurb={<>Number of hours your employees are allowed to work. The tracking will stop when the limit is reached.<br />The time zone for the time limit is always UTC.</>}
         >
-            <div className="flex flex-wrap items-center gap-6 text-sm">
+            <div className="flex flex-wrap items-center gap-6 text-sm text-body">
                 <label className="flex items-center gap-2">
                     <input
                         type="radio"
+                        className={radioCls}
                         checked={enabled}
                         onChange={() => {
                             const next = { ...team, weekly_time_limit_hours: limit || 40 };
                             setTeam(next);
-                            patchTeam(next);
+                            saveTeam(next);
                         }}
                     />
                     <span>Limit to</span>
-                    <input
+                    <Input
                         type="number"
                         min={0}
                         max={168}
@@ -365,20 +457,21 @@ function WeeklyLimitSection({ team, users, setTeam }) {
                         onChange={(e) => {
                             const next = { ...team, weekly_time_limit_hours: Number(e.target.value) };
                             setTeam(next);
-                            patchTeam(next);
+                            saveTeam(next);
                         }}
-                        className="w-20 rounded border-line text-sm"
+                        className="w-24"
                     />
                     <span>hours per week</span>
                 </label>
                 <label className="flex items-center gap-2">
                     <input
                         type="radio"
+                        className={radioCls}
                         checked={!enabled}
                         onChange={() => {
                             const next = { ...team, weekly_time_limit_hours: null };
                             setTeam(next);
-                            patchTeam(next);
+                            saveTeam(next);
                         }}
                     />
                     Do not limit
@@ -392,28 +485,30 @@ function WeeklyLimitSection({ team, users, setTeam }) {
                 editor={(override, setValues) => {
                     const en = override.weekly_time_limit_hours !== null && override.weekly_time_limit_hours !== undefined;
                     return (
-                        <div className="flex flex-wrap items-center gap-4 text-xs">
+                        <div className="flex flex-wrap items-center gap-4 text-xs text-body">
                             <label className="flex items-center gap-1.5">
                                 <input
                                     type="radio"
+                                    className={radioCls}
                                     checked={en}
                                     onChange={() => setValues({ weekly_time_limit_hours: override.weekly_time_limit_hours || 40 })}
                                 />
                                 Limit to
-                                <input
+                                <Input
                                     type="number"
                                     min={0}
                                     max={168}
                                     value={en ? override.weekly_time_limit_hours : 0}
                                     disabled={!en}
                                     onChange={(e) => setValues({ weekly_time_limit_hours: Number(e.target.value) })}
-                                    className="w-16 rounded border-line text-xs"
+                                    className="w-20 py-1 text-xs"
                                 />
                                 hours/week
                             </label>
                             <label className="flex items-center gap-1.5">
                                 <input
                                     type="radio"
+                                    className={radioCls}
                                     checked={!en}
                                     onChange={() => setValues({ weekly_time_limit_hours: null })}
                                 />
@@ -428,6 +523,7 @@ function WeeklyLimitSection({ team, users, setTeam }) {
 }
 
 function AutoPauseSection({ team, users, setTeam, minMinutes }) {
+    const { saveTeam } = useContext(SaveContext);
     const enabled = team.auto_pause_minutes > 0;
     const floor = minMinutes ?? 1;
     return (
@@ -436,21 +532,22 @@ function AutoPauseSection({ team, users, setTeam, minMinutes }) {
             blurb="Tracking will automatically pause after the specified period of inactivity and will automatically resume when user becomes active again."
         >
             {minMinutes != null && minMinutes > 1 && (
-                <p className="mb-3 text-xs text-muted">Your plan&apos;s minimum auto-pause is <strong>{minMinutes}</strong> minutes. Upgrade for a tighter idle limit.</p>
+                <p className="text-xs text-muted">Your plan&apos;s minimum auto-pause is <strong className="text-body">{minMinutes}</strong> minutes. Upgrade for a tighter idle limit.</p>
             )}
-            <div className="flex flex-wrap items-center gap-6 text-sm">
+            <div className="flex flex-wrap items-center gap-6 text-sm text-body">
                 <label className="flex items-center gap-2">
                     <input
                         type="radio"
+                        className={radioCls}
                         checked={enabled}
                         onChange={() => {
                             const next = { ...team, auto_pause_minutes: team.auto_pause_minutes || floor };
                             setTeam(next);
-                            patchTeam(next);
+                            saveTeam(next);
                         }}
                     />
                     <span>Pause after</span>
-                    <input
+                    <Input
                         type="number"
                         min={floor}
                         max={120}
@@ -459,20 +556,21 @@ function AutoPauseSection({ team, users, setTeam, minMinutes }) {
                         onChange={(e) => {
                             const next = { ...team, auto_pause_minutes: Number(e.target.value) };
                             setTeam(next);
-                            patchTeam(next);
+                            saveTeam(next);
                         }}
-                        className="w-20 rounded border-line text-sm"
+                        className="w-24"
                     />
                     <span>minutes of user inactivity</span>
                 </label>
                 <label className="flex items-center gap-2">
                     <input
                         type="radio"
+                        className={radioCls}
                         checked={!enabled}
                         onChange={() => {
                             const next = { ...team, auto_pause_minutes: 0 };
                             setTeam(next);
-                            patchTeam(next);
+                            saveTeam(next);
                         }}
                     />
                     Do not pause
@@ -487,28 +585,30 @@ function AutoPauseSection({ team, users, setTeam, minMinutes }) {
                     const mins = Number(override.auto_pause_minutes || 0);
                     const en = mins > 0;
                     return (
-                        <div className="flex flex-wrap items-center gap-4 text-xs">
+                        <div className="flex flex-wrap items-center gap-4 text-xs text-body">
                             <label className="flex items-center gap-1.5">
                                 <input
                                     type="radio"
+                                    className={radioCls}
                                     checked={en}
                                     onChange={() => setValues({ auto_pause_minutes: mins || team.auto_pause_minutes || 5 })}
                                 />
                                 Pause after
-                                <input
+                                <Input
                                     type="number"
                                     min={1}
                                     max={120}
                                     value={en ? mins : 5}
                                     disabled={!en}
                                     onChange={(e) => setValues({ auto_pause_minutes: Number(e.target.value) })}
-                                    className="w-16 rounded border-line text-xs"
+                                    className="w-20 py-1 text-xs"
                                 />
                                 min idle
                             </label>
                             <label className="flex items-center gap-1.5">
                                 <input
                                     type="radio"
+                                    className={radioCls}
                                     checked={!en}
                                     onChange={() => setValues({ auto_pause_minutes: 0 })}
                                 />
@@ -523,47 +623,47 @@ function AutoPauseSection({ team, users, setTeam, minMinutes }) {
 }
 
 function DisplaySection({ team, users, setTeam }) {
+    const { saveTeam } = useContext(SaveContext);
     return (
         <SectionShell
             title="Time zone & format"
             blurb="All dates and times shown across the website and desktop app render in this time zone and format. Set this to where your team works (e.g. Asia/Karachi for Pakistan)."
         >
             <div className="flex flex-wrap items-end gap-6 text-sm">
-                <label className="flex flex-col gap-1">
-                    <span className="text-xs font-medium text-subtle">Time zone</span>
-                    <select
-                        className="rounded border-line text-sm"
+                <Field label="Time zone" className="w-auto">
+                    <Select
+                        className="w-auto"
                         value={team.display_timezone || 'Asia/Karachi'}
                         onChange={(e) => {
                             const next = { ...team, display_timezone: e.target.value };
                             setTeam(next);
-                            patchTeam(next);
+                            saveTeam(next);
                         }}
                     >
                         {TIMEZONES.map((tz) => (
                             <option key={tz} value={tz}>{tz}</option>
                         ))}
-                    </select>
-                </label>
-                <label className="flex flex-col gap-1">
-                    <span className="text-xs font-medium text-subtle">Time format</span>
-                    <div className="flex items-center gap-4">
+                    </Select>
+                </Field>
+                <Field label="Time format" className="w-auto">
+                    <div className="flex items-center gap-4 text-body">
                         {[['12', '12-hour (1:30 PM)'], ['24', '24-hour (13:30)']].map(([val, label]) => (
                             <label key={val} className="flex items-center gap-1.5">
                                 <input
                                     type="radio"
+                                    className={radioCls}
                                     checked={(team.time_format || '12') === val}
                                     onChange={() => {
                                         const next = { ...team, time_format: val };
                                         setTeam(next);
-                                        patchTeam(next);
+                                        saveTeam(next);
                                     }}
                                 />
                                 {label}
                             </label>
                         ))}
                     </div>
-                </label>
+                </Field>
             </div>
 
             <IndividualSettings
@@ -573,23 +673,23 @@ function DisplaySection({ team, users, setTeam }) {
                 defaultValues={{ display_timezone: team.display_timezone || 'Asia/Karachi', time_format: team.time_format || '12' }}
                 editor={(override, setValues) => (
                     <div className="flex flex-wrap items-center gap-4 text-xs">
-                        <select
-                            className="rounded border-line text-xs"
+                        <Select
+                            className="w-auto py-1 text-xs"
                             value={override.display_timezone || team.display_timezone || 'Asia/Karachi'}
                             onChange={(e) => setValues({ display_timezone: e.target.value, time_format: override.time_format || team.time_format || '12' })}
                         >
                             {TIMEZONES.map((tz) => (
                                 <option key={tz} value={tz}>{tz}</option>
                             ))}
-                        </select>
-                        <select
-                            className="rounded border-line text-xs"
+                        </Select>
+                        <Select
+                            className="w-auto py-1 text-xs"
                             value={override.time_format || team.time_format || '12'}
                             onChange={(e) => setValues({ display_timezone: override.display_timezone || team.display_timezone || 'Asia/Karachi', time_format: e.target.value })}
                         >
                             <option value="12">12-hour</option>
                             <option value="24">24-hour</option>
-                        </select>
+                        </Select>
                     </div>
                 )}
             />
@@ -598,18 +698,20 @@ function DisplaySection({ team, users, setTeam }) {
 }
 
 function WeekStartsSection({ team, setTeam }) {
+    const { saveTeam } = useContext(SaveContext);
     return (
         <SectionShell title="Week starts on" blurb="Used for the Report week ranges and the Attendance grid.">
-            <div className="flex items-center gap-6 text-sm">
+            <div className="flex items-center gap-6 text-sm text-body">
                 {['monday', 'sunday'].map((day) => (
                     <label key={day} className="flex items-center gap-2 capitalize">
                         <input
                             type="radio"
+                            className={radioCls}
                             checked={team.week_starts_on === day}
                             onChange={() => {
                                 const next = { ...team, week_starts_on: day };
                                 setTeam(next);
-                                patchTeam(next);
+                                saveTeam(next);
                             }}
                         />
                         {day}
@@ -621,56 +723,54 @@ function WeekStartsSection({ team, setTeam }) {
 }
 
 function CurrencySection({ team, setTeam }) {
+    const { saveTeam } = useContext(SaveContext);
     return (
         <SectionShell title="Currency symbol" blurb="Cosmetic. Shown in cost columns when hourly rates are configured.">
-            <input
+            <Input
                 type="text"
                 maxLength={8}
                 value={team.currency_symbol}
                 onChange={(e) => setTeam({ ...team, currency_symbol: e.target.value })}
-                onBlur={() => patchTeam(team)}
-                className="w-24 rounded border-line text-sm"
+                onBlur={() => saveTeam(team)}
+                className="w-24"
             />
         </SectionShell>
     );
 }
 
 function DesktopAppSection({ team, users, setTeam }) {
+    const { saveTeam } = useContext(SaveContext);
     return (
         <SectionShell
             title="Employee desktop application settings"
             blurb="Default behaviour for the desktop tracker on employees' machines."
         >
-            <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">
+            <div className="rounded-lg border border-warning/40 bg-warning-soft px-4 py-3 text-xs leading-5 text-warning">
                 <strong>How these apply:</strong> each employee also has a “Launch on startup” switch
                 inside the desktop app itself, which they control on their own machine. Central enforcement
                 of the options below reaches a machine only after that employee updates to the latest
                 desktop app. “Force quit on prolonged idle” is not enforced by the app yet — tracking
                 already auto-pauses on idle (see <em>Auto-pause</em>).
             </div>
-            <div className="space-y-3 text-sm">
-                <label className="flex items-center gap-3">
-                    <Toggle
-                        checked={!!team.desktop_auto_start}
-                        onChange={(v) => {
-                            const next = { ...team, desktop_auto_start: v };
-                            setTeam(next);
-                            patchTeam(next);
-                        }}
-                    />
-                    Launch on system startup (default)
-                </label>
-                <label className="flex items-center gap-3">
-                    <Toggle
-                        checked={!!team.desktop_force_quit_on_idle}
-                        onChange={(v) => {
-                            const next = { ...team, desktop_force_quit_on_idle: v };
-                            setTeam(next);
-                            patchTeam(next);
-                        }}
-                    />
-                    Force quit on prolonged idle
-                </label>
+            <div className="space-y-3">
+                <Toggle
+                    label="Launch on system startup (default)"
+                    checked={!!team.desktop_auto_start}
+                    onChange={(v) => {
+                        const next = { ...team, desktop_auto_start: v };
+                        setTeam(next);
+                        saveTeam(next);
+                    }}
+                />
+                <Toggle
+                    label="Force quit on prolonged idle"
+                    checked={!!team.desktop_force_quit_on_idle}
+                    onChange={(v) => {
+                        const next = { ...team, desktop_force_quit_on_idle: v };
+                        setTeam(next);
+                        saveTeam(next);
+                    }}
+                />
             </div>
             <IndividualSettings
                 category="desktop_app"
@@ -681,27 +781,23 @@ function DesktopAppSection({ team, users, setTeam }) {
                     desktop_force_quit_on_idle: team.desktop_force_quit_on_idle,
                 }}
                 editor={(override, setValues) => (
-                    <div className="space-y-2 text-xs">
-                        <label className="flex items-center gap-2">
-                            <Toggle
-                                checked={!!override.desktop_auto_start}
-                                onChange={(v) => setValues({
-                                    desktop_auto_start: v,
-                                    desktop_force_quit_on_idle: !!override.desktop_force_quit_on_idle,
-                                })}
-                            />
-                            Launch on system startup
-                        </label>
-                        <label className="flex items-center gap-2">
-                            <Toggle
-                                checked={!!override.desktop_force_quit_on_idle}
-                                onChange={(v) => setValues({
-                                    desktop_auto_start: !!override.desktop_auto_start,
-                                    desktop_force_quit_on_idle: v,
-                                })}
-                            />
-                            Force quit on prolonged idle
-                        </label>
+                    <div className="space-y-2">
+                        <Toggle
+                            label="Launch on system startup"
+                            checked={!!override.desktop_auto_start}
+                            onChange={(v) => setValues({
+                                desktop_auto_start: v,
+                                desktop_force_quit_on_idle: !!override.desktop_force_quit_on_idle,
+                            })}
+                        />
+                        <Toggle
+                            label="Force quit on prolonged idle"
+                            checked={!!override.desktop_force_quit_on_idle}
+                            onChange={(v) => setValues({
+                                desktop_auto_start: !!override.desktop_auto_start,
+                                desktop_force_quit_on_idle: v,
+                            })}
+                        />
                     </div>
                 )}
             />
@@ -709,11 +805,12 @@ function DesktopAppSection({ team, users, setTeam }) {
     );
 }
 
-function AttendanceSlackSection({ team, setTeam }) {
+function AttendanceSlackSection({ team, setTeam, preview }) {
+    const { saveTeam } = useContext(SaveContext);
     const set = (patch) => {
         const next = { ...team, ...patch };
         setTeam(next);
-        patchTeam(next);
+        saveTeam(next);
     };
     const [token, setToken] = useState('');
     const [connected, setConnected] = useState(!!team.slack_connected);
@@ -721,6 +818,7 @@ function AttendanceSlackSection({ team, setTeam }) {
 
     const connect = () => {
         if (!token.trim()) return;
+        if (preview) { setConnected(true); setToken(''); toast.success('Slack connected.'); return; }
         setBusy(true);
         axios.put(route('settings.slack.update'), { slack_bot_token: token.trim() })
             .then((r) => { setConnected(r.data?.connected ?? true); setToken(''); toast.success('Slack connected.'); })
@@ -728,6 +826,7 @@ function AttendanceSlackSection({ team, setTeam }) {
             .finally(() => setBusy(false));
     };
     const disconnect = () => {
+        if (preview) { setConnected(false); toast.success('Slack disconnected.'); return; }
         setBusy(true);
         axios.put(route('settings.slack.update'), { disconnect: true })
             .then(() => { setConnected(false); toast.success('Slack disconnected.'); })
@@ -748,52 +847,55 @@ function AttendanceSlackSection({ team, setTeam }) {
                             {connected ? 'Connected — your workspace bot token is saved.' : 'Not connected. Paste your Slack bot token (xoxb-…) to enable posts.'}
                         </p>
                     </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${connected ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-muted'}`}>
+                    <Badge tone={connected ? 'success' : 'neutral'} dot>
                         {connected ? 'Connected' : 'Not connected'}
-                    </span>
+                    </Badge>
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <input
+                    <Input
                         type="password"
                         value={token}
                         onChange={(e) => setToken(e.target.value)}
                         placeholder={connected ? 'Paste a new token to replace' : 'xoxb-your-bot-token'}
-                        className="w-72 rounded border-line text-sm"
+                        className="w-72"
                         autoComplete="off"
                     />
-                    <button type="button" onClick={connect} disabled={busy || !token.trim()} className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+                    <Button type="button" size="sm" onClick={connect} disabled={busy || !token.trim()}>
                         {connected ? 'Replace' : 'Connect'}
-                    </button>
+                    </Button>
                     {connected && (
-                        <button type="button" onClick={disconnect} disabled={busy} className="rounded-md border border-line px-3 py-1.5 text-sm text-muted hover:bg-surface-2 disabled:opacity-50">
+                        <Button type="button" size="sm" variant="secondary" onClick={disconnect} disabled={busy}>
                             Disconnect
-                        </button>
+                        </Button>
                     )}
                 </div>
             </div>
 
-            <div className="space-y-4 text-sm">
-                <label className="flex items-center gap-3">
-                    <Toggle checked={!!team.slack_clockin_enabled} onChange={(v) => set({ slack_clockin_enabled: v })} />
-                    <span>Post to Slack when someone <strong>clocks in</strong></span>
-                </label>
-                <label className="flex items-center gap-3">
-                    <Toggle checked={!!team.slack_clockout_enabled} onChange={(v) => set({ slack_clockout_enabled: v })} />
-                    <span>Post to Slack when someone <strong>clocks out</strong></span>
-                </label>
+            <div className="space-y-4 text-sm text-body">
+                <Toggle
+                    checked={!!team.slack_clockin_enabled}
+                    onChange={(v) => set({ slack_clockin_enabled: v })}
+                    label={<span>Post to Slack when someone <strong>clocks in</strong></span>}
+                />
+                <Toggle
+                    checked={!!team.slack_clockout_enabled}
+                    onChange={(v) => set({ slack_clockout_enabled: v })}
+                    label={<span>Post to Slack when someone <strong>clocks out</strong></span>}
+                />
                 <div className="pt-2">
-                    <label className="flex flex-col gap-1">
-                        <span className="text-xs font-medium text-subtle">Attendance channel</span>
-                        <input
+                    <Field
+                        label="Attendance channel"
+                        hint="Channel name (e.g. #attendance) or ID. Leave blank to use the server default."
+                        className="max-w-xs"
+                    >
+                        <Input
                             type="text"
                             value={team.slack_attendance_channel || ''}
                             onChange={(e) => setTeam({ ...team, slack_attendance_channel: e.target.value })}
-                            onBlur={() => patchTeam(team)}
+                            onBlur={() => saveTeam(team)}
                             placeholder="#attendance"
-                            className="w-64 rounded border-line text-sm"
                         />
-                        <span className="text-xs text-subtle">Channel name (e.g. #attendance) or ID. Leave blank to use the server default.</span>
-                    </label>
+                    </Field>
                 </div>
             </div>
         </SectionShell>
@@ -802,6 +904,7 @@ function AttendanceSlackSection({ team, setTeam }) {
 
 function IndividualSettings({ category, users, flagKey, defaultValues, editor }) {
     const updateOverrides = useContext(OverridesDispatchContext);
+    const { saveUser } = useContext(SaveContext);
     return (
         <div className="space-y-3 pt-6">
             <h3 className="text-base font-semibold text-body">Individual settings</h3>
@@ -818,11 +921,11 @@ function IndividualSettings({ category, users, flagKey, defaultValues, editor })
                     const enabled = !isExempt && !!user.overrides?.[flagKey];
                     const setEnabled = (en) => {
                         updateOverrides(user.id, { [flagKey]: en, ...(en ? defaultValues : {}) });
-                        patchUser(user, category, en, en ? defaultValues : {});
+                        saveUser(user, category, en, en ? defaultValues : {});
                     };
                     const setValues = (values) => {
                         updateOverrides(user.id, values);
-                        patchUser(user, category, true, values);
+                        saveUser(user, category, true, values);
                     };
                     return (
                         <div key={user.id} className="space-y-2 py-3">
@@ -830,12 +933,12 @@ function IndividualSettings({ category, users, flagKey, defaultValues, editor })
                                 <Toggle checked={enabled} onChange={setEnabled} disabled={isExempt} />
                                 <span className="flex-1 text-sm text-muted">{user.name}</span>
                                 {isExempt && (
-                                    <span
-                                        className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-medium text-muted"
+                                    <Badge
+                                        tone="neutral"
                                         title="Super Admins aren't monitored, so team/individual tracking settings don't apply to them."
                                     >
                                         Exempt · Super Admin
-                                    </span>
+                                    </Badge>
                                 )}
                             </div>
                             {!isExempt && enabled && editor && (
@@ -858,7 +961,7 @@ const WEEKDAYS = [
 
 // Phase 5F — the humane attendance policy. Saves on its own endpoint so the
 // owner can stop the grid from auto-marking people Absent.
-function AttendanceSection({ team, setTeam }) {
+function AttendanceSection({ team, setTeam, preview }) {
     const [start, setStart] = useState(team.attendance_tracking_start_date || '');
     const [weekOff, setWeekOff] = useState(team.attendance_week_off_days || [0]);
     const [autoAbsent, setAutoAbsent] = useState(team.attendance_auto_absent ?? true);
@@ -875,13 +978,18 @@ function AttendanceSection({ team, setTeam }) {
     };
 
     const save = () => {
-        setSaving(true);
         const payload = {
             attendance_tracking_start_date: start || null,
             attendance_week_off_days: weekOff,
             attendance_holidays: holidays,
             attendance_auto_absent: autoAbsent,
         };
+        if (preview) {
+            setTeam({ ...team, ...payload });
+            toast.success('Attendance policy saved.');
+            return;
+        }
+        setSaving(true);
         router.put(route('settings.attendance.update'), payload, {
             preserveScroll: true,
             onSuccess: () => { setTeam({ ...team, ...payload }); toast.success('Attendance policy saved.'); },
@@ -899,78 +1007,221 @@ function AttendanceSection({ team, setTeam }) {
                 <div>
                     <label className="mb-1 block font-semibold text-body">Tracking start date</label>
                     <p className="mb-2 text-xs text-subtle">Days before this show as “Not tracked”, never Absent. Leave blank to track the whole history.</p>
-                    <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="rounded-md border-line text-sm" />
+                    <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="w-auto" />
                 </div>
 
                 <div>
                     <label className="mb-1 block font-semibold text-body">Weekly off days</label>
                     <div className="flex flex-wrap gap-1.5">
-                        {WEEKDAYS.map(({ n, label }) => (
-                            <button
-                                key={n}
-                                type="button"
-                                onClick={() => toggleDay(n)}
-                                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${weekOff.includes(n) ? 'bg-orange-500 text-body' : 'border border-line text-muted hover:bg-surface-2'}`}
-                            >
-                                {label}
-                            </button>
-                        ))}
+                        {WEEKDAYS.map(({ n, label }) => {
+                            const on = weekOff.includes(n);
+                            return (
+                                <button
+                                    key={n}
+                                    type="button"
+                                    onClick={() => toggleDay(n)}
+                                    className={cx(
+                                        'rounded-md px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-app',
+                                        on ? 'bg-accent text-white' : 'border border-line text-muted hover:bg-surface-2'
+                                    )}
+                                    aria-pressed={on}
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
                 <div>
                     <label className="mb-1 block font-semibold text-body">Public holidays</label>
                     <div className="flex items-center gap-2">
-                        <input type="date" value={newHoliday} onChange={(e) => setNewHoliday(e.target.value)} className="rounded-md border-line text-sm" />
-                        <button type="button" onClick={addHoliday} className="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-muted hover:bg-surface-2">Add</button>
+                        <Input type="date" value={newHoliday} onChange={(e) => setNewHoliday(e.target.value)} className="w-auto" />
+                        <Button type="button" size="sm" variant="secondary" onClick={addHoliday}>Add</Button>
                     </div>
                     {holidays.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
                             {holidays.map((d) => (
                                 <span key={d} className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-1 text-xs text-muted">
                                     {d}
-                                    <button type="button" onClick={() => setHolidays(holidays.filter((h) => h !== d))} className="text-subtle hover:text-rose-500">×</button>
+                                    <button type="button" onClick={() => setHolidays(holidays.filter((h) => h !== d))} className="text-subtle transition hover:text-danger">×</button>
                                 </span>
                             ))}
                         </div>
                     )}
                 </div>
 
-                <label className="flex items-center gap-3">
-                    <Toggle checked={autoAbsent} onChange={setAutoAbsent} />
-                    <span>
-                        <span className="block font-semibold text-body">Auto-mark Absent</span>
-                        <span className="block text-xs text-subtle">When off, a working day with no clock-in shows a neutral “No record” instead of Absent.</span>
-                    </span>
-                </label>
+                <Toggle
+                    checked={autoAbsent}
+                    onChange={setAutoAbsent}
+                    label={
+                        <span>
+                            <span className="block font-semibold text-body">Auto-mark Absent</span>
+                            <span className="block text-xs text-subtle">When off, a working day with no clock-in shows a neutral “No record” instead of Absent.</span>
+                        </span>
+                    }
+                />
 
-                <button
-                    type="button"
-                    onClick={save}
-                    disabled={saving}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-body hover:bg-orange-400 disabled:opacity-50"
-                >
-                    {saving ? 'Saving…' : 'Save attendance policy'}
-                </button>
+                <Button type="button" onClick={save} loading={saving}>
+                    Save attendance policy
+                </Button>
             </div>
         </SectionShell>
     );
 }
 
-export default function SettingsIndex({ auth, team: initialTeam, users: initialUsers }) {
-    const [team, setTeam] = useState(initialTeam);
-    const [users, setUsers] = useState(initialUsers);
+/**
+ * PAY PERIOD — the payroll window a timesheet covers.
+ *
+ * Periods are DERIVED from (cadence, anchor), never stored, so this choice
+ * reshapes future periods the moment it is saved. It does NOT reshape history:
+ * an approved timesheet snapshots its own cadence and dates, so everything
+ * already signed off stays exactly as it was. The live preview below shows the
+ * real dates the current choice produces, so nobody has to guess.
+ *
+ * The anchor only means anything for the rolling cadences — semi-monthly and
+ * monthly are pinned to the calendar — so the field disappears for those, and
+ * the server clears it rather than storing something it would never read.
+ */
+function PayPeriodSection({ payPeriod, setPayPeriod, preview }) {
+    const [cadence, setCadence] = useState(payPeriod?.cadence || 'weekly');
+    const [anchor, setAnchor] = useState(payPeriod?.anchor_date || '');
+    const [saving, setSaving] = useState(false);
+
+    const rolling = cadence === 'weekly' || cadence === 'biweekly';
+    const dirty = cadence !== (payPeriod?.cadence || 'weekly')
+        || (rolling && (anchor || '') !== (payPeriod?.anchor_date || ''));
+
+    const save = () => {
+        const payload = {
+            pay_period_cadence: cadence,
+            pay_period_anchor_date: rolling ? (anchor || null) : null,
+        };
+
+        if (preview) {
+            setPayPeriod({ ...payPeriod, cadence, anchor_date: payload.pay_period_anchor_date });
+            toast.success('Pay period saved.');
+            return;
+        }
+
+        setSaving(true);
+        axios.put(route('settings.pay-period.update'), payload)
+            .then(({ data }) => {
+                setPayPeriod(data?.payPeriod || { ...payPeriod, cadence, anchor_date: payload.pay_period_anchor_date });
+                toast.success('Pay period saved.');
+            })
+            .catch(() => toast.error('Could not save the pay period.'))
+            .finally(() => setSaving(false));
+    };
+
+    return (
+        <SectionShell
+            title="Pay period"
+            blurb="How often payroll closes. Each period becomes one timesheet per person, which they submit and an approver signs off — approving freezes that period's time entries."
+        >
+            <div className="space-y-5 text-sm">
+                <div>
+                    <label className="mb-1 block font-semibold text-body">Cadence</label>
+                    <div className="flex flex-wrap gap-2">
+                        {(payPeriod?.options || []).map((option) => {
+                            const on = cadence === option.key;
+                            return (
+                                <button
+                                    key={option.key}
+                                    type="button"
+                                    onClick={() => setCadence(option.key)}
+                                    className={cx(
+                                        'rounded-lg border px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-app',
+                                        on ? 'border-accent bg-accent text-white' : 'border-line bg-surface-2 text-muted hover:bg-surface'
+                                    )}
+                                    aria-pressed={on}
+                                >
+                                    {option.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {rolling && (
+                    <div>
+                        <label className="mb-1 block font-semibold text-body">Period start anchor</label>
+                        <p className="mb-2 text-xs text-subtle">
+                            The first day of any one period — every other period is a whole number of
+                            {cadence === 'biweekly' ? ' fortnights ' : ' weeks '}
+                            from it. Leave blank to start each period on the day your week starts.
+                        </p>
+                        <Input type="date" value={anchor} onChange={(e) => setAnchor(e.target.value)} className="w-auto" />
+                    </div>
+                )}
+
+                <div className="rounded-lg border border-line bg-surface-2 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">
+                        {dirty ? 'Currently saved periods' : 'Recent periods'}
+                    </p>
+                    <div className="space-y-1">
+                        {(payPeriod?.preview || []).map((p) => (
+                            <div key={p.key} className="flex items-center justify-between gap-3 text-sm">
+                                <span className={p.is_current ? 'font-medium text-body' : 'text-muted'}>{p.label}</span>
+                                <span className="text-xs tabular-nums text-subtle">
+                                    {p.start} → {p.end}{p.is_current ? ' · current' : ''}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                    {dirty && (
+                        <p className="mt-2 text-xs text-warning">Save to see the periods this cadence produces.</p>
+                    )}
+                </div>
+
+                <p className="text-xs text-subtle">
+                    Changing this only affects periods from here on. Timesheets that were already approved keep the
+                    dates they were signed off with.
+                </p>
+
+                <Button type="button" onClick={save} loading={saving} disabled={!dirty}>
+                    Save pay period
+                </Button>
+            </div>
+        </SectionShell>
+    );
+}
+
+/**
+ * SettingsIndex — workspace monitoring & attendance settings.
+ *
+ * @param {object} props.auth - Authenticated user wrapper.
+ * @param {object} props.team - Team-level monitoring payload (MonitoringSetting::teamPayload()).
+ * @param {Array}  props.users - Roster with per-user overrides.
+ * @param {boolean} [props.preview=false] - Render fully from DEV_SAMPLE (offline QA),
+ *        skipping all real props/network. Non-preview behavior is unchanged.
+ */
+export default function SettingsIndex({ auth, team: initialTeam, users: initialUsers, payPeriod: initialPayPeriod, preview = false }) {
+    const pageEntitlements = usePage().props?.entitlements || {};
+
+    const [team, setTeam] = useState(preview ? DEV_SAMPLE.team : initialTeam);
+    const [users, setUsers] = useState(preview ? DEV_SAMPLE.users : initialUsers);
+    const [payPeriod, setPayPeriod] = useState(preview ? DEV_SAMPLE.payPeriod : initialPayPeriod);
     const [active, setActive] = useState('screenshots');
+
+    const user = preview ? DEV_SAMPLE.auth.user : auth.user;
 
     // Effective plan entitlements (shared globally) drive the UI locks. The
     // server enforces them too — this just shows the locks/caps.
-    const entitlements = usePage().props?.entitlements || {};
+    const entitlements = preview ? DEV_SAMPLE.entitlements : pageEntitlements;
     const isLocked = (key) => {
         const flag = SECTION_LOCKS[key];
         return !!flag && entitlements[flag] === false;
     };
     const maxShots = entitlements.max_screenshots_per_hour ?? null;
     const minMinutes = entitlements.min_auto_pause_minutes ?? null;
+
+    // In preview, saves stay in local state — no axios, no Inertia visit.
+    const saveApi = useMemo(() => (
+        preview
+            ? { saveTeam: () => {}, saveUser: () => {} }
+            : { saveTeam: patchTeam, saveUser: patchUser }
+    ), [preview]);
 
     const updateOverrides = useCallback((userId, patch) => {
         setUsers((prev) => prev.map((u) => (
@@ -980,148 +1231,188 @@ export default function SettingsIndex({ auth, team: initialTeam, users: initialU
 
     const items = useMemo(() => CATEGORIES.map((cat) => ({
         ...cat,
-        summary: cat.summary(team),
-    })), [team]);
+        // The pay-period row summarises its own prop, not the tracker payload.
+        summary: cat.summary(team, payPeriod),
+    })), [team, payPeriod]);
 
     const activeLabel = (CATEGORIES.find((c) => c.key === active) || {}).label || 'This feature';
 
     return (
-        <AuthenticatedLayout user={auth.user} header={<h2 className="text-xl font-semibold text-body">Settings</h2>}>
+        <AuthenticatedLayout user={user} header={<h2 className="text-xl font-semibold text-body">Settings</h2>}>
             <Head title="Settings" />
 
+            <SaveContext.Provider value={saveApi}>
             <OverridesDispatchContext.Provider value={updateOverrides}>
-            <div className="min-h-screen bg-slate-950">
-            <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-                <div className="overflow-hidden rounded-lg bg-surface shadow">
-                    <div className="border-b border-line bg-surface-2 px-6 py-4">
-                        <h1 className="text-lg font-semibold text-body">Settings</h1>
-                    </div>
+                <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-[280px_1fr]">
+                        <Card padded={false} className="h-max overflow-hidden">
+                            <nav>
+                                {items.map((item) => {
+                                    const Icon = item.icon;
+                                    const isActive = active === item.key;
 
-                    <div className="grid grid-cols-1 gap-0 md:grid-cols-[280px_1fr]">
-                        <nav className="border-b border-line md:border-b-0 md:border-r">
-                            {items.map((item) => {
-                                const Icon = item.icon;
-                                const isActive = active === item.key;
-                                return (
-                                    <button
-                                        key={item.key}
-                                        type="button"
-                                        onClick={() => setActive(item.key)}
-                                        className={[
-                                            'flex w-full items-center justify-between gap-3 border-l-2 px-5 py-3 text-left text-sm transition',
-                                            isActive
-                                                ? 'border-emerald-500 bg-surface-2 font-medium text-body'
-                                                : 'border-transparent text-muted hover:bg-surface-2',
-                                        ].join(' ')}
-                                    >
-                                        <span className="flex items-center gap-3">
-                                            <Icon className="h-4 w-4 text-subtle" />
-                                            {item.label}
-                                        </span>
-                                        {isLocked(item.key)
-                                            ? <Lock className="h-3.5 w-3.5 text-subtle" />
-                                            : <span className="text-xs text-subtle">{item.summary}</span>}
-                                    </button>
-                                );
-                            })}
-                        </nav>
+                                    // Items that own a screen navigate instead of
+                                    // switching the in-page panel.
+                                    if (item.route) {
+                                        return (
+                                            <Link
+                                                key={item.key}
+                                                href={preview ? '#' : safeRoute(item.route, item.path)}
+                                                className="flex w-full items-center justify-between gap-3 border-l-2 border-transparent px-5 py-3 text-left text-sm text-muted transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+                                            >
+                                                <span className="flex items-center gap-3">
+                                                    <Icon className="h-4 w-4 text-subtle" />
+                                                    {item.label}
+                                                </span>
+                                                <ChevronRight className="h-3.5 w-3.5 text-subtle" />
+                                            </Link>
+                                        );
+                                    }
 
-                        <div className="px-6 py-6">
-                            {isLocked(active) ? <LockedNotice label={activeLabel} /> : <>
-                            {active === 'screenshots' && <ScreenshotsSection team={team} users={users} setTeam={setTeam} maxShots={maxShots} />}
-                            {active === 'activity' && (
-                                <BooleanSection
-                                    title="Activity Level tracking"
-                                    blurb="Track mouse and keyboard Activity Level"
-                                    field="activity_tracking_enabled"
-                                    category="activity"
-                                    team={team}
-                                    users={users}
-                                    setTeam={setTeam}
-                                />
-                            )}
-                            {active === 'app_url' && (
-                                <BooleanSection
-                                    title="App & URL tracking"
-                                    blurb="Track what applications your team members use and what websites they visit."
-                                    field="app_url_tracking_enabled"
-                                    category="app_url"
-                                    team={team}
-                                    users={users}
-                                    setTeam={setTeam}
-                                />
-                            )}
-                            {active === 'weekly_limit' && <WeeklyLimitSection team={team} users={users} setTeam={setTeam} />}
-                            {active === 'auto_pause' && <AutoPauseSection team={team} users={users} setTeam={setTeam} minMinutes={minMinutes} />}
-                            {active === 'offline_time' && (
-                                <div className="space-y-6">
+                                    return (
+                                        <button
+                                            key={item.key}
+                                            type="button"
+                                            onClick={() => setActive(item.key)}
+                                            className={cx(
+                                                'flex w-full items-center justify-between gap-3 border-l-2 px-5 py-3 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent',
+                                                isActive
+                                                    ? 'border-accent bg-surface-2 font-medium text-body'
+                                                    : 'border-transparent text-muted hover:bg-surface-2'
+                                            )}
+                                        >
+                                            <span className="flex items-center gap-3">
+                                                <Icon className={cx('h-4 w-4', isActive ? 'text-accent' : 'text-subtle')} />
+                                                {item.label}
+                                            </span>
+                                            {isLocked(item.key)
+                                                ? <LockBadge iconOnly title={`${item.label} isn't in your plan`} />
+                                                : <span className="text-xs text-subtle">{item.summary}</span>}
+                                        </button>
+                                    );
+                                })}
+                            </nav>
+                        </Card>
+
+                        <div>
+                            {/* SHOWN, NOT HIDDEN — a section the plan doesn't include
+                                still renders, greyed and inert, behind the upgrade
+                                callout. `locked={false}` is a zero-cost passthrough,
+                                so an entitled workspace sees no wrapper at all. */}
+                            <LockedFeature
+                                locked={isLocked(active)}
+                                feature={SECTION_LOCKS[active]}
+                                name={activeLabel}
+                                blurb={SECTION_LOCK_BLURBS[SECTION_LOCKS[active]]}
+                                href={preview ? '#' : safeRoute('billing.index', '/billing')}
+                                minHeight={280}
+                            >
+                                <>
+                                {active === 'screenshots' && <ScreenshotsSection team={team} users={users} setTeam={setTeam} maxShots={maxShots} />}
+                                {active === 'activity' && (
                                     <BooleanSection
-                                        title="Allow adding Offline Time"
-                                        blurb="When enabled, employees can manually add work entries outside the tracker."
-                                        field="allow_offline_time"
-                                        category="offline_time"
+                                        title="Activity Level tracking"
+                                        blurb="Track mouse and keyboard Activity Level"
+                                        field="activity_tracking_enabled"
+                                        category="activity"
                                         team={team}
                                         users={users}
                                         setTeam={setTeam}
-                                        label="Allow"
-                                        offLabel="Do not allow"
                                     />
-                                    {team.allow_offline_time && (
-                                        <div className="rounded-lg border border-line bg-surface p-4">
-                                            <h3 className="text-sm font-semibold text-body">Manual time as a start–end range</h3>
-                                            <p className="mt-1 max-w-prose text-xs text-muted">
-                                                Employees can log offline time as a clock range (e.g. 2:08–3:05&nbsp;pm), not just a duration. Choose what happens when a range overlaps another entry on their own diary.
-                                            </p>
-                                            <div className="mt-3 flex flex-wrap gap-2">
-                                                {[['warn', 'Warn but allow'], ['block', 'Block overlap'], ['allow', 'Allow silently']].map(([val, lbl]) => (
-                                                    <button
-                                                        key={val}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            const next = { ...team, manual_time_overlap_policy: val };
-                                                            setTeam(next);
-                                                            patchTeam(next);
-                                                        }}
-                                                        className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
-                                                            (team.manual_time_overlap_policy || 'warn') === val
-                                                                ? 'border-accent bg-accent text-white'
-                                                                : 'border-line bg-surface-2 text-muted hover:bg-surface'
-                                                        }`}
-                                                    >
-                                                        {lbl}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            {active === 'notify_screenshot' && (
-                                <BooleanSection
-                                    title="Notify when screenshot is taken"
-                                    blurb="The desktop app will show a tray notification each time a screenshot is captured."
-                                    field="notify_on_screenshot"
-                                    category="notify_screenshot"
-                                    team={team}
-                                    users={users}
-                                    setTeam={setTeam}
-                                    label="Notify"
-                                    offLabel="Do not notify"
-                                />
-                            )}
-                            {active === 'attendance_policy' && <AttendanceSection team={team} setTeam={setTeam} />}
-                            {active === 'attendance_slack' && <AttendanceSlackSection team={team} setTeam={setTeam} />}
-                            {active === 'display' && <DisplaySection team={team} users={users} setTeam={setTeam} />}
-                            {active === 'week_starts_on' && <WeekStartsSection team={team} setTeam={setTeam} />}
-                            {active === 'currency' && <CurrencySection team={team} setTeam={setTeam} />}
-                            {active === 'desktop_app' && <DesktopAppSection team={team} users={users} setTeam={setTeam} />}
-                            </>}
+                                )}
+                                {active === 'app_url' && (
+                                    <BooleanSection
+                                        title="App & URL tracking"
+                                        blurb="Track what applications your team members use and what websites they visit."
+                                        field="app_url_tracking_enabled"
+                                        category="app_url"
+                                        team={team}
+                                        users={users}
+                                        setTeam={setTeam}
+                                    />
+                                )}
+                                {active === 'weekly_limit' && <WeeklyLimitSection team={team} users={users} setTeam={setTeam} />}
+                                {active === 'auto_pause' && <AutoPauseSection team={team} users={users} setTeam={setTeam} minMinutes={minMinutes} />}
+                                {active === 'offline_time' && (
+                                    <div className="space-y-6">
+                                        <BooleanSection
+                                            title="Allow adding Offline Time"
+                                            blurb="When enabled, employees can manually add work entries outside the tracker."
+                                            field="allow_offline_time"
+                                            category="offline_time"
+                                            team={team}
+                                            users={users}
+                                            setTeam={setTeam}
+                                            label="Allow"
+                                            offLabel="Do not allow"
+                                        />
+                                        {team.allow_offline_time && (
+                                            <OverlapPolicyCard team={team} setTeam={setTeam} preview={preview} />
+                                        )}
+                                    </div>
+                                )}
+                                {active === 'notify_screenshot' && (
+                                    <BooleanSection
+                                        title="Notify when screenshot is taken"
+                                        blurb="The desktop app will show a tray notification each time a screenshot is captured."
+                                        field="notify_on_screenshot"
+                                        category="notify_screenshot"
+                                        team={team}
+                                        users={users}
+                                        setTeam={setTeam}
+                                        label="Notify"
+                                        offLabel="Do not notify"
+                                    />
+                                )}
+                                {active === 'attendance_policy' && <AttendanceSection team={team} setTeam={setTeam} preview={preview} />}
+                                {active === 'pay_period' && <PayPeriodSection payPeriod={payPeriod} setPayPeriod={setPayPeriod} preview={preview} />}
+                                {active === 'attendance_slack' && <AttendanceSlackSection team={team} setTeam={setTeam} preview={preview} />}
+                                {active === 'display' && <DisplaySection team={team} users={users} setTeam={setTeam} />}
+                                {active === 'week_starts_on' && <WeekStartsSection team={team} setTeam={setTeam} />}
+                                {active === 'currency' && <CurrencySection team={team} setTeam={setTeam} />}
+                                {active === 'desktop_app' && <DesktopAppSection team={team} users={users} setTeam={setTeam} />}
+                                </>
+                            </LockedFeature>
                         </div>
                     </div>
                 </div>
-            </div>
-            </div>
             </OverridesDispatchContext.Provider>
+            </SaveContext.Provider>
         </AuthenticatedLayout>
+    );
+}
+
+function OverlapPolicyCard({ team, setTeam }) {
+    const { saveTeam } = useContext(SaveContext);
+    return (
+        <Card>
+            <h3 className="text-sm font-semibold text-body">Manual time as a start–end range</h3>
+            <p className="mt-1 max-w-prose text-xs text-muted">
+                Employees can log offline time as a clock range (e.g. 2:08–3:05&nbsp;pm), not just a duration. Choose what happens when a range overlaps another entry on their own diary.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+                {[['warn', 'Warn but allow'], ['block', 'Block overlap'], ['allow', 'Allow silently']].map(([val, lbl]) => {
+                    const on = (team.manual_time_overlap_policy || 'warn') === val;
+                    return (
+                        <button
+                            key={val}
+                            type="button"
+                            onClick={() => {
+                                const next = { ...team, manual_time_overlap_policy: val };
+                                setTeam(next);
+                                saveTeam(next);
+                            }}
+                            className={cx(
+                                'rounded-lg border px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-app',
+                                on ? 'border-accent bg-accent text-white' : 'border-line bg-surface-2 text-muted hover:bg-surface'
+                            )}
+                            aria-pressed={on}
+                        >
+                            {lbl}
+                        </button>
+                    );
+                })}
+            </div>
+        </Card>
     );
 }

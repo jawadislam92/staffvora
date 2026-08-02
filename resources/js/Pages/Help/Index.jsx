@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { Head, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import PageHeader from '@/Components/PageHeader';
-import { Search, ChevronDown } from 'lucide-react';
+import { Search, ChevronDown, MessageSquarePlus } from 'lucide-react';
+import { Button } from '@/Components/ui';
 
 const SECTIONS = [
     {
@@ -105,11 +106,26 @@ export default function HelpIndex({ auth }) {
                         )}
                     </div>
 
-                    <p className="mt-6 text-center text-sm text-muted">
-                        Still stuck? {supportEmail
-                            ? <>Email <a href={`mailto:${supportEmail}`} className="font-medium text-accent hover:underline">{supportEmail}</a>.</>
-                            : 'Contact your workspace administrator.'}
-                    </p>
+                    {/* Didn't find it? Send a request — a search that came up empty
+                        is the moment people most need a way to ask a human. */}
+                    <div className="mt-6 flex flex-col items-center gap-3 rounded-xl border border-line bg-surface px-5 py-6 text-center">
+                        <MessageSquarePlus className="h-6 w-6 text-accent" aria-hidden="true" />
+                        <div>
+                            <p className="font-medium text-body">Still stuck?</p>
+                            <p className="mt-1 text-sm text-muted">
+                                Send us a request and we&apos;ll reply to you right here.
+                            </p>
+                        </div>
+                        <Button as="a" href={route('feedback.index')}>Send us a request</Button>
+                        {supportEmail && (
+                            <p className="text-xs text-subtle">
+                                Or email{' '}
+                                <a href={`mailto:${supportEmail}`} className="font-medium text-accent hover:underline">
+                                    {supportEmail}
+                                </a>
+                            </p>
+                        )}
+                    </div>
                 </div>
             </div>
         </AuthenticatedLayout>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 export default function Login({ initial, notice, onLoggedIn }) {
-  const [apiBaseUrl, setApiBaseUrl] = useState(initial?.apiBaseUrl || 'https://timetracker.sparkingasia.com');
+  const [apiBaseUrl, setApiBaseUrl] = useState(initial?.apiBaseUrl || 'https://staffvora.com');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -52,8 +52,8 @@ export default function Login({ initial, notice, onLoggedIn }) {
   return (
     <div className="login-wrapper">
       <form className="login-card" onSubmit={submit}>
-        <h1>Timetracker Desktop</h1>
-        <p className="subtitle">Sign in with your Timetracker account.</p>
+        <h1>Tracksuite Desktop</h1>
+        <p className="subtitle">Sign in with your Tracksuite account.</p>
 
         {notice && <div className="warning" style={{ marginBottom: 12 }}>{notice}</div>}
 
@@ -148,7 +148,7 @@ export default function Login({ initial, notice, onLoggedIn }) {
                 type="url"
                 value={apiBaseUrl}
                 onChange={(e) => setApiBaseUrl(e.target.value)}
-                placeholder="https://timetracker.sparkingasia.com"
+                placeholder="https://staffvora.com"
                 required
               />
             </div>

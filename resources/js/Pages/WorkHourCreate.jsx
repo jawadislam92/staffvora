@@ -1,17 +1,138 @@
 import React, { useState, useRef, useEffect } from 'react';
-import AuthenticatedLayout from '../Layouts/AuthenticatedLayout';
-import { Head, useForm, Link } from '@inertiajs/react';
-import PageHeader from '../Components/Layout/PageHeader';
-import PageShell from '../Components/Layout/PageShell';
+import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { Head, useForm, Link, usePage, router } from '@inertiajs/react';
+import { Button, Card, Badge, Field, Input, Select, Textarea, Toggle } from '@/Components/ui';
+import { ArrowLeft, Check, Clock, Building2, User as UserIcon, AlertCircle, CalendarClock, Info } from 'lucide-react';
 
-export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
+const cx = (...a) => a.filter(Boolean).join(' ');
+
+// ---------------------------------------------------------------------------
+// useColorScheme — mirror the active theme onto native <input type="date"/time>
+// controls so their OS picker/glyph render light-on-light or dark-on-dark.
+// ---------------------------------------------------------------------------
+function useColorScheme() {
+    const [scheme, setScheme] = useState(() => (
+        typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light'
+            ? 'light'
+            : 'dark'
+    ));
+
+    useEffect(() => {
+        if (typeof document === 'undefined') return undefined;
+        const root = document.documentElement;
+        const read = () => setScheme(root.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+        read();
+        const observer = new MutationObserver(read);
+        observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+        return () => observer.disconnect();
+    }, []);
+
+    return scheme;
+}
+
+const to12 = (hhmm) => {
+    if (!hhmm) return '';
+    const [h, m] = hhmm.split(':').map(Number);
+    const ap = h < 12 ? 'AM' : 'PM';
+    const hr = h % 12 === 0 ? 12 : h % 12;
+    return `${hr}:${String(m).padStart(2, '0')} ${ap}`;
+};
+
+const fmtMins = (mins) => {
+    const m = Math.max(0, Math.round(mins || 0));
+    return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`;
+};
+
+// ---------------------------------------------------------------------------
+// DEV_SAMPLE — used ONLY when `preview` is true so the form renders fully
+// offline for visual QA with a mock super-admin ("Jawad"). Mirrors the
+// controller's create() payload: the workspace's own work_categories, clients
+// (with their engagement type + profiles), the tracker/profile name list, and
+// workspace terminology. Never used live.
+// ---------------------------------------------------------------------------
+const DEV_SAMPLE = {
+    user: { id: 1, name: 'Jawad', email: 'jawad@staffvora.com', is_super_admin: true, permissions: [] },
+    workspace: { client_term: 'Client', profile_term: 'Profile', timezone: 'UTC' },
+    // Preview renders the AGENCY variant: the profile field appears because the
+    // ENTITLEMENT is on, exactly as it does live.
+    entitlements: { upwork_profiles: true },
+    // An AGENCY workspace's catalogue: the five approved General defaults plus
+    // the three agency starter rows. A General workspace is seeded with the
+    // first five only — same table, same code path, different seed rows.
+    workCategories: [
+        { id: 1, name: 'Client Work', slug: 'client_work', is_billable_default: true },
+        { id: 2, name: 'Internal/Admin', slug: 'internal_admin', is_billable_default: false },
+        { id: 3, name: 'Business Development', slug: 'business_development', is_billable_default: false },
+        { id: 4, name: 'Training/Onboarding', slug: 'training_onboarding', is_billable_default: false },
+        { id: 5, name: 'Meetings', slug: 'meetings', is_billable_default: false },
+        { id: 6, name: 'Bidding', slug: 'bidding', is_billable_default: false },
+        { id: 7, name: 'Outside Upwork', slug: 'outside_upwork', is_billable_default: true },
+        { id: 8, name: 'Trial/Test task', slug: 'trial_test_task', is_billable_default: false },
+    ],
+    clients: [
+        { id: 1, name: 'Acme Storefront Rebuild', work_type: 'tracker_manual', upwork_profiles: [{ id: 1, name: 'Primary Agency' }] },
+        { id: 2, name: 'Nimbus Mobile App', work_type: 'fixed', upwork_profiles: [{ id: 2, name: 'Design Studio' }] },
+        { id: 3, name: 'Helios Analytics Dashboard', work_type: 'tracker_manual', upwork_profiles: [{ id: 1, name: 'Primary Agency' }] },
+        { id: 4, name: 'Orion CRM Integration', work_type: 'outside_of_upwork', upwork_profiles: [] },
+    ],
+    trackers: ['Primary Agency', 'Design Studio'],
+    // The manual-time window the server will accept (see WorkHourController).
+    manualWindow: { earliest: '2026-07-01', latest: '2026-07-22' },
+    // A day with a clock-in/out where part of the time was never tracked.
+    gapDay: {
+        date: '2026-07-22',
+        has_attendance: true,
+        in_office: [{ start: '09:00', end: '18:00', label: '9:00 AM – 6:00 PM', minutes: 540 }],
+    },
+    gaps: [
+        { start: '12:30', end: '13:15', label: '12:30 PM – 1:15 PM', minutes: 45 },
+        { start: '16:40', end: '18:00', label: '4:40 PM – 6:00 PM', minutes: 80 },
+    ],
+};
+
+export default function WorkHourCreate({
+    auth,
+    clients = [],
+    trackers = [],
+    workCategories = [],
+    manualWindow = {},
+    gapDay = {},
+    gaps = [],
+    preview = false,
+}) {
+    const pageProps = usePage().props || {};
+    const pageWorkspace = pageProps.workspace || {};
+    const pageEntitlements = pageProps.entitlements || {};
+
+    const user = preview ? DEV_SAMPLE.user : auth?.user;
+    const workspace = preview ? DEV_SAMPLE.workspace : pageWorkspace;
+    // Capability from the ONE entitlement map; `workspace` is terminology only.
+    const entitlements = preview ? DEV_SAMPLE.entitlements : pageEntitlements;
+    // The workspace's OWN editable list — the single source for what work was.
+    // No hardcoded map lives on this page any more.
+    const categoryList = preview ? DEV_SAMPLE.workCategories : workCategories;
+    const clientList = preview ? DEV_SAMPLE.clients : clients;
+    const trackerList = preview ? DEV_SAMPLE.trackers : trackers;
+    const window_ = preview ? DEV_SAMPLE.manualWindow : (manualWindow || {});
+    const day = preview ? DEV_SAMPLE.gapDay : (gapDay || {});
+    const openGaps = preview ? DEV_SAMPLE.gaps : (gaps || []);
+    const colorScheme = useColorScheme();
+
+    const usesProfiles = entitlements.upwork_profiles === true;
+    const clientTerm = workspace.client_term || 'Project';
+    const profileTerm = workspace.profile_term || 'Profile';
+    const businessTimezone = workspace.timezone || 'UTC';
+
     const form = useForm({
         date: (() => {
-            // Get current date in Pakistan timezone (Asia/Karachi)
-            const pakistanDate = new Date().toLocaleDateString('en-CA', {
-                timeZone: 'Asia/Karachi'
+            const businessDate = new Date().toLocaleDateString('en-CA', {
+                timeZone: businessTimezone,
             });
-            return pakistanDate; // Returns YYYY-MM-DD format
+            // Never open on a date the server would reject (the workspace prop
+            // can be missing, in which case the browser guess may be a day out).
+            if (window_.latest && businessDate > window_.latest) return window_.latest;
+            if (window_.earliest && businessDate < window_.earliest) return window_.earliest;
+            return businessDate;
         })(),
         entry_mode: 'range',
         start_time: '',
@@ -19,65 +140,51 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
         hours: '0',
         minutes: '0',
         description: '',
-        work_type: '', // Explicitly empty - no default selection
+        // CONCEPT B — what the work was, chosen from the workspace's own list.
+        work_category_id: '',
+        // CONCEPT C — billable yes/no, seeded from the category's default and
+        // overridable per entry. (Concept A, the capture method, is system-set:
+        // anything typed in here is `manual` by definition, never a choice.)
+        is_billable: false,
         client_id: '',
         tracker: '',
         trackerSearch: '',
         clientSearch: '',
     });
-    
-    // Get filtered clients based on work type
-    const getFilteredClients = () => {
-        if (!form.data.work_type) return clients;
-        
-        // Map work types to client work types
-        const workTypeMapping = {
-            'tracker': ['tracker_manual'],
-            'manual': ['tracker_manual'], 
-            'fixed': ['fixed'],
-            'outside_of_upwork': ['outside_of_upwork']
-        };
-        
-        const possibleClientWorkTypes = workTypeMapping[form.data.work_type];
-        if (!possibleClientWorkTypes) return clients;
-        
-        const filtered = clients.filter(client => {
-            return possibleClientWorkTypes.includes(client.work_type);
-        });
-        
-        return filtered;
+
+    const selectedCategory = categoryList.find(
+        (category) => String(category.id) === String(form.data.work_category_id)
+    ) || null;
+
+    // The client list is no longer filtered by the work type — a category and a
+    // client are independent facts now, so every client stays selectable.
+    const getFilteredClients = () => clientList;
+
+    // Profiles attached to a client (agency workspaces only); also what decides
+    // whether a profile is even meaningful for the chosen client.
+    const clientProfileNames = (client) => {
+        if (!client) return [];
+        if (client.upwork_profiles?.length) return client.upwork_profiles.map((profile) => profile.name);
+        if (client.upwork_profile?.name) return [client.upwork_profile.name];
+        return [];
     };
 
     // Get filtered trackers based on selected client
     const getFilteredTrackers = () => {
-        if (!form.data.client_id) return trackers;
-        
-        // Find the selected client
-        const selectedClient = clients.find(client => client.id == form.data.client_id);
-        if (!selectedClient) return trackers;
-        
-        // Collect all associated profile names
-        let availableProfiles = [];
-        
-        // Check for multiple profiles first (new many-to-many relationship)
-        if (selectedClient.upwork_profiles && selectedClient.upwork_profiles.length > 0) {
-            availableProfiles = selectedClient.upwork_profiles.map(profile => profile.name);
-        }
-        // Fallback to single profile (old relationship) for backward compatibility
-        else if (selectedClient.upwork_profile && selectedClient.upwork_profile.name) {
-            availableProfiles = [selectedClient.upwork_profile.name];
-        }
-        
-        // If client has associated profiles, filter trackers to show only those profiles
+        if (!form.data.client_id) return trackerList;
+
+        const selectedClient = clientList.find(client => client.id == form.data.client_id);
+        if (!selectedClient) return trackerList;
+
+        const availableProfiles = clientProfileNames(selectedClient);
+
         if (availableProfiles.length > 0) {
-            const filteredTrackers = trackers.filter(tracker => availableProfiles.includes(tracker));
-            return filteredTrackers;
+            return trackerList.filter(tracker => availableProfiles.includes(tracker));
         }
-        
-        // If no specific profiles assigned to client, show all trackers
-        return trackers;
+
+        return trackerList;
     };
-    
+
     const [showTrackerOptions, setShowTrackerOptions] = useState(false);
     const [showClientOptions, setShowClientOptions] = useState(false);
     const [clientValidationError, setClientValidationError] = useState('');
@@ -90,13 +197,13 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
     // Close dropdowns when clicking outside
     useEffect(() => {
         function handleClickOutside(event) {
-            if (trackerRef.current && trackerDropdownRef.current && 
-                !trackerRef.current.contains(event.target) && 
+            if (trackerRef.current && trackerDropdownRef.current &&
+                !trackerRef.current.contains(event.target) &&
                 !trackerDropdownRef.current.contains(event.target)) {
                 setShowTrackerOptions(false);
             }
-            if (clientRef.current && clientDropdownRef.current && 
-                !clientRef.current.contains(event.target) && 
+            if (clientRef.current && clientDropdownRef.current &&
+                !clientRef.current.contains(event.target) &&
                 !clientDropdownRef.current.contains(event.target)) {
                 setShowClientOptions(false);
             }
@@ -108,13 +215,6 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
         };
     }, []);
 
-    // Helper function to check if time is entered
-    const hasTimeEntered = () => {
-        const hours = Number(form.data.hours) || 0;
-        const minutes = Number(form.data.minutes) || 0;
-        return hours > 0 || minutes > 0;
-    };
-
     // Validate client selection
     const validateClient = (searchValue) => {
         if (!isClientRequired()) {
@@ -123,19 +223,17 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
         }
 
         if (!searchValue || searchValue.trim() === '') {
-            setClientValidationError('Please select a client from the dropdown');
+            setClientValidationError('Please select a ' + clientTerm.toLowerCase() + ' from the dropdown');
             return false;
         }
 
-        // Check if the entered value exactly matches a filtered client name
         const filteredClients = getFilteredClients();
         const matchingClient = filteredClients.find(client => client.name === searchValue);
         if (!matchingClient) {
-            setClientValidationError('Please select a valid client from the dropdown');
+            setClientValidationError('Please select a valid ' + clientTerm.toLowerCase() + ' from the dropdown');
             return false;
         }
 
-        // Ensure client_id is set correctly
         if (form.data.client_id != matchingClient.id) {
             form.setData('client_id', matchingClient.id);
         }
@@ -144,27 +242,27 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
         return true;
     };
 
-    // Validate tracker selection
+    // Validate tracker selection. Anything TYPED must be a real profile — the
+    // server rejects an unknown name outright — but an empty box is fine unless
+    // the chosen client actually has profiles attached.
     const validateTracker = (searchValue) => {
-        if (!isTrackerRequired()) {
-            setTrackerValidationError('');
-            return true;
-        }
-
         if (!searchValue || searchValue.trim() === '') {
-            setTrackerValidationError('Please select a profile from the dropdown');
+            if (!isTrackerRequired()) {
+                setTrackerValidationError('');
+                return true;
+            }
+
+            setTrackerValidationError('Please select a ' + profileTerm.toLowerCase() + ' from the dropdown');
             return false;
         }
 
-        // Check if the entered value exactly matches a filtered tracker
         const filteredTrackers = getFilteredTrackers();
         const matchingTracker = filteredTrackers.find(tracker => tracker === searchValue);
         if (!matchingTracker) {
-            setTrackerValidationError('Please select a valid profile from the dropdown');
+            setTrackerValidationError('Please select a valid ' + profileTerm.toLowerCase() + ' from the dropdown');
             return false;
         }
 
-        // Ensure tracker is set correctly
         if (form.data.tracker !== matchingTracker) {
             form.setData('tracker', matchingTracker);
         }
@@ -186,8 +284,8 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
     const handleSubmit = (e) => {
         e.preventDefault();
 
-        if (!form.data.work_type) {
-            alert('Please select a work type.');
+        if (!form.data.work_category_id) {
+            alert('Please choose what kind of work this was.');
             return;
         }
 
@@ -205,12 +303,13 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
             }
         }
 
-        // Validate client selection
         const isClientValid = validateClient(form.data.clientSearch);
         const isTrackerValid = validateTracker(form.data.trackerSearch || form.data.tracker);
         if (!isClientValid || !isTrackerValid) {
-            return; // Don't submit if validation fails
+            return;
         }
+
+        if (preview) return;
 
         // The server reads entry_mode + start/end (range) or hours/minutes (duration).
         form.post(route('work-hours.store'));
@@ -223,15 +322,33 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
         return `${h}h ${m.toString().padStart(2, '0')}m`;
     };
 
-    const workTypes = [
-        { label: 'Tracker', value: 'tracker' },
-        { label: 'Manual Time', value: 'manual' },
-        { label: 'Fixed Client', value: 'fixed' },
-        { label: 'Outside of Upwork', value: 'outside_of_upwork' },
-        { label: 'Office Work', value: 'office_work' },
-        { label: 'Test Task', value: 'test_task' },
-        { label: 'Upwork Bidding', value: 'upwork_bidding' },
-    ];
+    // Changing the date re-asks the server for that day's open gaps. A partial
+    // reload of the create page keeps this on the existing route — no extra
+    // endpoint — and the server recomputes gaps from real attendance data.
+    const handleDateChange = (value) => {
+        form.setData('date', value);
+        if (preview || !value) return;
+        router.reload({
+            only: ['gaps', 'gapDay'],
+            data: { date: value },
+            preserveState: true,
+            preserveScroll: true,
+        });
+    };
+
+    // One-click "fill this gap": switches to range mode and drops the gap's
+    // clock endpoints in. The server still re-checks the window + overlap
+    // policy, so an edited or stale chip can never bypass the rules.
+    const fillGap = (gap) => {
+        form.setData((current) => ({
+            ...current,
+            entry_mode: 'range',
+            start_time: gap.start,
+            end_time: gap.end,
+        }));
+    };
+
+    const openGapMinutes = openGaps.reduce((sum, g) => sum + (g.minutes || 0), 0);
 
     const handleTrackerFocus = () => {
         setShowTrackerOptions(true);
@@ -243,49 +360,41 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
         setShowTrackerOptions(false);
     };
 
-    const handleWorkTypeChange = (workType) => {
-        // Clear fields that might not be needed for the new work type
-        const newData = {
-            ...form.data,
-            work_type: workType,
-        };
+    // Picking a category seeds the billable flag from that category's default.
+    // The person can still flip it — a category default is a starting point,
+    // not a rule. The client stays selected: it no longer depends on the
+    // category, so re-picking it would just be busywork.
+    const handleCategoryChange = (categoryId) => {
+        const category = categoryList.find((item) => String(item.id) === String(categoryId)) || null;
 
-        // Clear profile name if not needed for this work type
-        if (!['tracker', 'manual', 'fixed'].includes(workType)) {
-            newData.tracker = '';
-            newData.trackerSearch = '';
-            setTrackerValidationError('');
-        }
+        form.setData((current) => ({
+            ...current,
+            work_category_id: categoryId,
+            is_billable: category ? Boolean(category.is_billable_default) : current.is_billable,
+        }));
 
-        // Clear client if not needed for this work type
-        if (!['tracker', 'manual', 'fixed', 'outside_of_upwork'].includes(workType)) {
-            newData.client_id = '';
-            newData.clientSearch = '';
-            setClientValidationError('');
-        } else {
-            // Always clear client selection when work type changes to force reselection from filtered list
-            newData.client_id = '';
-            newData.clientSearch = '';
-            setClientValidationError('');
-        }
-
-        form.setData(newData);
+        setClientValidationError('');
     };
 
+    // A profile is only meaningful when the workspace uses profiles AND the
+    // chosen client actually has one attached — read from the client's own
+    // record rather than from a work-type lookup table.
     const isTrackerRequired = () => {
-        return ['tracker', 'manual', 'fixed'].includes(form.data.work_type);
+        if (!usesProfiles || !form.data.client_id) return false;
+        const client = clientList.find((item) => item.id == form.data.client_id);
+
+        return clientProfileNames(client).length > 0;
     };
 
-    const isClientRequired = () => {
-        return ['tracker', 'manual', 'fixed', 'outside_of_upwork'].includes(form.data.work_type);
-    };
+    // Billable time has to be attributable to someone, so a client is required
+    // whenever the entry bills — derived from concept C, not from a name list.
+    // (Never demanded when the workspace has no clients yet.)
+    const isClientRequired = () => Boolean(form.data.is_billable) && clientList.length > 0;
 
-    // Handle client search change
     const handleClientSearchChange = (e) => {
         const val = e.target.value;
         form.setData('clientSearch', val);
-        
-        // Clear client_id if the search doesn't match any client exactly
+
         const filteredClients = getFilteredClients();
         const matchingClient = filteredClients.find(client => client.name === val);
         if (!matchingClient) {
@@ -293,21 +402,18 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
         } else {
             form.setData('client_id', matchingClient.id);
         }
-        
-        // Clear validation error when user starts typing
+
         if (clientValidationError) {
             setClientValidationError('');
         }
-        
+
         setShowClientOptions(true);
     };
 
-    // Handle tracker search change
     const handleTrackerSearchChange = (e) => {
         const val = e.target.value;
         form.setData('trackerSearch', val);
-        
-        // Clear tracker if the search doesn't match any filtered tracker exactly
+
         const filteredTrackers = getFilteredTrackers();
         const matchingTracker = filteredTrackers.find(tracker => tracker === val);
         if (!matchingTracker) {
@@ -315,151 +421,183 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
         } else {
             form.setData('tracker', matchingTracker);
         }
-        
-        // Clear validation error when user starts typing
+
         if (trackerValidationError) {
             setTrackerValidationError('');
         }
-        
+
         setShowTrackerOptions(true);
     };
 
-    // Handle client selection from dropdown
     const handleClientSelect = (client) => {
         form.setData('client_id', client.id);
         form.setData('clientSearch', client.name);
-        setClientValidationError(''); // Clear any validation errors immediately
+        setClientValidationError('');
         setShowClientOptions(false);
-        
-        // Clear tracker selection when client changes to force reselection from filtered list
+
+        // Clear tracker selection when client changes to force reselection.
         form.setData('tracker', '');
         form.setData('trackerSearch', '');
         setTrackerValidationError('');
-        
-        // Ensure validation passes for this selection
+
         setTimeout(() => {
             validateClient(client.name);
         }, 50);
     };
 
-    // Handle tracker selection from dropdown
     const handleTrackerSelect = (tracker) => {
         form.setData('tracker', tracker);
         form.setData('trackerSearch', tracker);
-        setTrackerValidationError(''); // Clear any validation errors immediately
+        setTrackerValidationError('');
         setShowTrackerOptions(false);
-        
-        // Ensure validation passes for this selection
+
         setTimeout(() => {
             validateTracker(tracker);
         }, 50);
     };
 
-    // Handle client field blur - validate when user leaves the field
     const handleClientBlur = () => {
         setTimeout(() => {
             setShowClientOptions(false);
             if (isClientRequired()) {
                 validateClient(form.data.clientSearch);
             }
-        }, 300); // Increased timeout to allow dropdown click to complete
+        }, 300);
     };
 
-    // Handle tracker field blur - validate when user leaves the field
     const handleTrackerBlur = () => {
         setTimeout(() => {
             setShowTrackerOptions(false);
             if (isTrackerRequired()) {
                 validateTracker(form.data.trackerSearch || form.data.tracker);
             }
-        }, 300); // Increased timeout to allow dropdown click to complete
+        }, 300);
+    };
+
+    // Derived from what is actually required right now — no per-work-type table.
+    const requiredFieldsHint = () => {
+        const fields = [];
+        if (isClientRequired()) fields.push('Client Name');
+        if (isTrackerRequired()) fields.push('Profile Name');
+        fields.push('Description', form.data.entry_mode === 'range' ? 'Start & End time' : 'Hours/Minutes', 'Date');
+
+        return fields.join(', ');
     };
 
     return (
-        <AuthenticatedLayout user={auth.user}>
+        <AuthenticatedLayout
+            user={user}
+            header={<h2 className="text-xl font-semibold text-body">Add Work Entry</h2>}
+        >
             <Head title="Add Work Entry" />
-            
-            <PageShell width="max-w-6xl">
-                <PageHeader
-                    eyebrow="Work diary"
-                    title="Add Work Entry"
-                    description="Log time against the correct work type, client, and profile."
-                />
 
-                    {/* Form Section */}
-                    <div className="overflow-visible rounded-lg border border-line bg-surface shadow-sm">
-                        <div className="p-5 sm:p-6">
-                            <form onSubmit={handleSubmit}>
-                                <div className="mb-5 rounded-lg border border-emerald-200 bg-surface-2 p-4">
-                                    <div className="mb-4">
-                                        <div className="flex items-center gap-3 mb-3">
-                                            <div className="p-2 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-lg">
-                                                <svg className="w-5 h-5 text-body" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                                </svg>
-                                            </div>
-                                            <h3 className="text-lg font-bold text-body">Work Type</h3>
-                                        </div>
-                                        <p className="text-sm text-muted mb-4 pl-14">
-                                            {form.data.work_type ? (
-                                                <>
-                                                    <span className="font-semibold text-emerald-700">Required fields:</span> {' '}
-                                                    {form.data.work_type === 'tracker' && "Client Name, Profile Name, Description, Hours/Minutes, Tracking Date"}
-                                                    {form.data.work_type === 'manual' && "Client Name, Profile Name, Description, Hours/Minutes, Tracking Date"}
-                                                    {form.data.work_type === 'fixed' && "Client Name, Profile Name, Description, Hours/Minutes, Tracking Date"}
-                                                    {form.data.work_type === 'outside_of_upwork' && "Client Name, Description, Hours/Minutes, Tracking Date"}
-                                                    {form.data.work_type === 'office_work' && "Description, Hours/Minutes, Tracking Date"}
-                                                    {form.data.work_type === 'test_task' && "Description, Hours/Minutes, Tracking Date"}
-                                                    {form.data.work_type === 'upwork_bidding' && "Description, Hours/Minutes, Tracking Date"}
-                                                </>
-                                            ) : (
-                                                <span className="text-subtle italic">Please select a work type to see required fields</span>
-                                            )}
-                                        </p>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                        {workTypes.map((type) => (
-                                            <button
-                                                key={type.value}
-                                                type="button"
-                                                onClick={() => handleWorkTypeChange(type.value)}
-                                                className={`min-h-11 rounded-lg p-2.5 text-sm font-semibold transition ${
-                                                    form.data.work_type === type.value
-                                                        ? 'bg-emerald-600 text-white shadow-sm'
-                                                        : 'border border-line bg-surface text-muted hover:border-emerald-400 hover:bg-surface-2'
-                                                }`}
-                                            >
-                                                {type.label}
-                                            </button>
+            <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+                <p className="text-sm text-muted">
+                    Log time against the right category, client, and profile.
+                </p>
+
+                <Card padded>
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        {/* Work category (B) + billable (C). Capture method (A)
+                            is system-set — hand-logged time is always "manual" —
+                            so it is stated, never offered as a choice. */}
+                        <div className="rounded-lg border border-line bg-surface-2 p-4">
+                            <div className="mb-3 flex flex-wrap items-center gap-2">
+                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-accent/10 text-accent">
+                                    <Clock className="h-4 w-4" />
+                                </span>
+                                <h3 className="text-base font-semibold text-body">What kind of work?</h3>
+                                <Badge tone="warning" size="sm" title="Typed in by hand — not measured by the desktop tracker">
+                                    Manual entry
+                                </Badge>
+                            </div>
+                            <p className="mb-4 text-sm text-muted">
+                                {form.data.work_category_id ? (
+                                    <>
+                                        <span className="font-semibold text-accent">Required fields:</span>{' '}
+                                        {requiredFieldsHint()}
+                                    </>
+                                ) : (
+                                    <span className="italic text-subtle">Pick a category to see the required fields</span>
+                                )}
+                            </p>
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <Field
+                                    label="Work category"
+                                    required
+                                    htmlFor="work_category_id"
+                                    error={form.errors.work_category_id || undefined}
+                                    hint={
+                                        !form.errors.work_category_id
+                                            ? 'This list belongs to your workspace — an admin can rename or add to it.'
+                                            : undefined
+                                    }
+                                >
+                                    <Select
+                                        id="work_category_id"
+                                        value={form.data.work_category_id}
+                                        onChange={(e) => handleCategoryChange(e.target.value)}
+                                        required
+                                    >
+                                        <option value="">Select a category…</option>
+                                        {categoryList.map((category) => (
+                                            <option key={category.id} value={category.id}>{category.name}</option>
                                         ))}
-                                    </div>
-                                </div>
+                                    </Select>
+                                </Field>
 
-                                <div className={`grid gap-6 mb-6 ${
-                                    isTrackerRequired() && isClientRequired() ? 'md:grid-cols-2' : 
-                                    isClientRequired() ? 'md:grid-cols-1' : 
-                                    isTrackerRequired() ? 'md:grid-cols-1' : 
-                                    'md:grid-cols-1'
-                                }`}>
-                                    {/* Client Name */}
-                                    {isClientRequired() && (
-                                        <div className="relative">
-                                            <label htmlFor="client" className="block text-sm font-semibold text-muted mb-3">
-                                                Client Name <span className="text-red-500 ml-1">*</span>
-                                            </label>
+                                <Field
+                                    label="Billable"
+                                    hint={
+                                        selectedCategory
+                                            ? `${selectedCategory.name} normally counts as ${selectedCategory.is_billable_default ? 'billable' : 'non-billable'} — you can change it for this entry.`
+                                            : 'Set automatically from the category you pick.'
+                                    }
+                                >
+                                    <div className="flex min-h-[2.5rem] items-center">
+                                        <Toggle
+                                            checked={Boolean(form.data.is_billable)}
+                                            onChange={(next) => form.setData('is_billable', next)}
+                                            label={form.data.is_billable ? 'Billable time' : 'Non-billable time'}
+                                        />
+                                    </div>
+                                </Field>
+                            </div>
+                        </div>
+
+                        {/* Client + Profile. The client picker is always offered
+                            — a category no longer decides which clients exist —
+                            and is only *required* when the entry is billable. */}
+                        {(clientList.length > 0 || isTrackerRequired()) && (
+                            <div className={cx(
+                                'grid gap-6',
+                                isTrackerRequired() ? 'md:grid-cols-2' : 'md:grid-cols-1'
+                            )}>
+                                {/* Client Name */}
+                                {clientList.length > 0 && (
+                                    <div className="relative">
+                                        <Field
+                                            label="Client Name"
+                                            required={isClientRequired()}
+                                            htmlFor="client"
+                                            error={clientValidationError || undefined}
+                                            hint={
+                                                !clientValidationError
+                                                    ? (isClientRequired()
+                                                        ? `Billable time needs a client (${getFilteredClients().length} available).`
+                                                        : `Optional for non-billable time (${getFilteredClients().length} available).`)
+                                                    : undefined
+                                            }
+                                        >
                                             <div className="relative">
-                                                <div className="absolute left-0 inset-y-0 flex items-center pl-3 pointer-events-none text-emerald-500">
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                                                    </svg>
-                                                </div>
-                                                <input
+                                                <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-accent" />
+                                                <Input
+                                                    id="client"
                                                     ref={clientRef}
                                                     type="text"
                                                     placeholder="Search or select client..."
-                                                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-emerald-200 text-body placeholder-slate-400 transition-all ${
-                                                        clientValidationError ? 'border-red-500 focus:border-red-500' : 'border-line focus:border-emerald-500'
-                                                    }`}
+                                                    className={cx('pl-9', clientValidationError && 'border-danger')}
                                                     value={form.data.clientSearch}
                                                     onChange={handleClientSearchChange}
                                                     onFocus={handleClientFocus}
@@ -467,379 +605,346 @@ export default function WorkHourCreate({ auth, clients = [], trackers = [] }) {
                                                     required={isClientRequired()}
                                                 />
                                             </div>
-                                            {clientValidationError && (
-                                                <div className="flex items-center mt-2 text-red-600 text-sm">
-                                                    <svg className="w-4 h-4 mr-1.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                                                    </svg>
-                                                    {clientValidationError}
-                                                </div>
-                                            )}
-                                            {!clientValidationError && form.data.work_type && (
-                                                <div className="mt-2 text-xs text-muted flex items-center gap-1.5">
-                                                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                                    </svg>
-                                                    <span>
-                                                        Showing clients for: {' '}
-                                                        {form.data.work_type === 'tracker' && 'Tracker/Manual Time'}
-                                                        {form.data.work_type === 'manual' && 'Tracker/Manual Time'}
-                                                        {form.data.work_type === 'fixed' && 'Fixed Client'}
-                                                        {form.data.work_type === 'outside_of_upwork' && 'Outside of Upwork'}
-                                                        {' '}({getFilteredClients().length} available)
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {showClientOptions && (
-                                                <div 
-                                                    ref={clientDropdownRef}
-                                                    className="absolute z-50 w-full mt-2 bg-surface border-2 border-line rounded-xl max-h-64 overflow-y-auto shadow-xl"
-                                                >
-                                                    <div className="p-2">
-                                                        {getFilteredClients().filter(client => {
-                                                            const label = client.name;
-                                                            return !form.data.clientSearch || label.toLowerCase().includes(form.data.clientSearch.toLowerCase());
-                                                        }).map(client => (
-                                                            <button
-                                                                key={client.id}
-                                                                type="button"
-                                                                className="w-full text-left px-3 py-2.5 hover:bg-gradient-to-r hover:from-surface hover:to-surface rounded-lg text-muted transition-all border-b border-line last:border-0"
-                                                                onMouseDown={(e) => e.preventDefault()} // Prevent blur when clicking
-                                                                onClick={() => handleClientSelect(client)}
-                                                            >
-                                                                <div className="flex items-center justify-between">
-                                                                    <span className="font-medium">{client.name}</span>
-                                                                    <span className="text-xs px-2 py-1 bg-surface-2 text-emerald-700 rounded-md font-semibold">
-                                                                        {client.work_type === 'tracker_manual' && 'Tracker/Manual'}
-                                                                        {client.work_type === 'fixed' && 'Fixed'}
-                                                                        {client.work_type === 'outside_of_upwork' && 'Outside Upwork'}
-                                                                    </span>
-                                                                </div>
-                                                            </button>
-                                                        ))}
-                                                        {getFilteredClients().filter(client => {
-                                                            const label = client.name;
-                                                            return !form.data.clientSearch || label.toLowerCase().includes(form.data.clientSearch.toLowerCase());
-                                                        }).length === 0 && (
-                                                            <div className="px-3 py-4 text-subtle text-sm text-center">
-                                                                <svg className="w-12 h-12 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                                </svg>
-                                                                {form.data.clientSearch ? 
-                                                                    'No matching clients found for this work type.' : 
-                                                                    'No clients available for this work type.'}
-                                                            </div>
+                                        </Field>
+                                        {showClientOptions && (
+                                            <div
+                                                ref={clientDropdownRef}
+                                                className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-line bg-surface p-1.5 shadow-xl"
+                                            >
+                                                {getFilteredClients().filter(client =>
+                                                    !form.data.clientSearch || client.name.toLowerCase().includes(form.data.clientSearch.toLowerCase())
+                                                ).map(client => (
+                                                    <button
+                                                        key={client.id}
+                                                        type="button"
+                                                        className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm text-body transition hover:bg-surface-2"
+                                                        onMouseDown={(e) => e.preventDefault()}
+                                                        onClick={() => handleClientSelect(client)}
+                                                    >
+                                                        <span className="font-medium">{client.name}</span>
+                                                        {/* The client's attached profiles — read from its own
+                                                            record. The old engagement-code badge here was a
+                                                            fifth competing label map; it is gone. */}
+                                                        {usesProfiles && clientProfileNames(client).length > 0 && (
+                                                            <span className="rounded bg-surface-2 px-2 py-0.5 text-xs font-medium text-muted">
+                                                                {clientProfileNames(client).join(', ')}
+                                                            </span>
                                                         )}
+                                                    </button>
+                                                ))}
+                                                {getFilteredClients().filter(client =>
+                                                    !form.data.clientSearch || client.name.toLowerCase().includes(form.data.clientSearch.toLowerCase())
+                                                ).length === 0 && (
+                                                    <div className="px-3 py-4 text-center text-sm text-subtle">
+                                                        {form.data.clientSearch
+                                                            ? 'No matching clients found.'
+                                                            : 'No clients available yet.'}
                                                     </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
-                                    {/* Profile Name */}
-                                    {isTrackerRequired() && (
-                                        <div className="relative">
-                                            <label htmlFor="tracker" className="block text-sm font-semibold text-muted mb-3">
-                                                Profile Name <span className="text-red-500 ml-1">*</span>
-                                            </label>
+                                {/* Profile Name */}
+                                {isTrackerRequired() && (
+                                    <div className="relative">
+                                        <Field
+                                            label="Profile Name"
+                                            required
+                                            htmlFor="tracker"
+                                            error={trackerValidationError || undefined}
+                                        >
                                             <div className="relative">
-                                                <div className="absolute left-0 inset-y-0 flex items-center pl-3 pointer-events-none text-teal-500">
-                                                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
-                                                    </svg>
-                                                </div>
-                                                <input
+                                                <UserIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-accent" />
+                                                <Input
+                                                    id="tracker"
                                                     ref={trackerRef}
                                                     type="text"
                                                     placeholder="Search or select profile..."
-                                                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-lg focus:ring-2 focus:ring-emerald-200 text-body placeholder-slate-400 transition-all ${
-                                                        trackerValidationError ? 'border-red-500 focus:border-red-500' : 'border-line focus:border-emerald-500'
-                                                    }`}
-                                                    value={
-                                                        form.data.trackerSearch ||
-                                                        (form.data.tracker ? form.data.tracker : '')
-                                                    }
+                                                    className={cx('pl-9', trackerValidationError && 'border-danger')}
+                                                    value={form.data.trackerSearch || (form.data.tracker ? form.data.tracker : '')}
                                                     onChange={handleTrackerSearchChange}
                                                     onFocus={handleTrackerFocus}
                                                     onBlur={handleTrackerBlur}
                                                     required={isTrackerRequired()}
                                                 />
                                             </div>
-                                            {trackerValidationError && (
-                                                <div className="flex items-center mt-2 text-red-600 text-sm">
-                                                    <svg className="w-4 h-4 mr-1.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                                                    </svg>
-                                                    {trackerValidationError}
-                                                </div>
-                                            )}
-                                            {!trackerValidationError && form.data.client_id && (
-                                                <div className="mt-2 text-xs text-muted flex items-center gap-1.5">
-                                                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                                    </svg>
-                                                    <span>
-                                                        {(() => {
-                                                            const selectedClient = clients.find(client => client.id == form.data.client_id);
-                                                            if (selectedClient) {
-                                                                // Count available profiles
-                                                                let profileCount = 0;
-                                                                if (selectedClient.upwork_profiles && selectedClient.upwork_profiles.length > 0) {
-                                                                    profileCount = selectedClient.upwork_profiles.length;
-                                                                } else if (selectedClient.upwork_profile) {
-                                                                    profileCount = 1;
-                                                                }
-                                                                
-                                                                if (profileCount > 0) {
-                                                                    return `Showing ${profileCount} profile${profileCount > 1 ? 's' : ''} for: ${selectedClient.name} (${getFilteredTrackers().length} available)`;
-                                                                } else {
-                                                                    return `Showing all profiles for: ${selectedClient.name} (${getFilteredTrackers().length} available)`;
-                                                                }
-                                                            }
-                                                            return 'Select a client to see available profiles';
-                                                        })()}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {showTrackerOptions && (
-                                                <div 
-                                                    ref={trackerDropdownRef}
-                                                    className="absolute z-50 w-full mt-2 bg-surface border-2 border-line rounded-xl max-h-64 overflow-y-auto shadow-xl"
-                                                >
-                                                    <div className="p-2">
-                                                        {getFilteredTrackers().filter(tracker => 
-                                                            !form.data.trackerSearch || tracker.toLowerCase().includes(form.data.trackerSearch.toLowerCase())
-                                                        ).map((tracker, index) => (
-                                                            <button
-                                                                key={index}
-                                                                type="button"
-                                                                className="w-full text-left px-3 py-2.5 hover:bg-gradient-to-r hover:from-surface hover:to-surface rounded-lg text-muted transition-all border-b border-line last:border-0 font-medium"
-                                                                onMouseDown={(e) => e.preventDefault()} // Prevent blur when clicking
-                                                                onClick={() => handleTrackerSelect(tracker)}
-                                                            >
-                                                                <div className="flex items-center gap-2">
-                                                                    <svg className="w-4 h-4 text-teal-500" fill="currentColor" viewBox="0 0 20 20">
-                                                                        <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
-                                                                    </svg>
-                                                                    {tracker}
-                                                                </div>
-                                                            </button>
-                                                        ))}
-                                                        {getFilteredTrackers().filter(tracker => 
-                                                            !form.data.trackerSearch || tracker.toLowerCase().includes(form.data.trackerSearch.toLowerCase())
-                                                        ).length === 0 && (
-                                                            <div className="px-3 py-4 text-subtle text-sm text-center">
-                                                                <svg className="w-12 h-12 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                                </svg>
-                                                                {form.data.trackerSearch ? 
-                                                                    'No matching profiles found for this client.' : 
-                                                                    'No profiles available for this client.'}
-                                                            </div>
-                                                        )}
+                                        </Field>
+                                        {showTrackerOptions && (
+                                            <div
+                                                ref={trackerDropdownRef}
+                                                className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-line bg-surface p-1.5 shadow-xl"
+                                            >
+                                                {getFilteredTrackers().filter(tracker =>
+                                                    !form.data.trackerSearch || tracker.toLowerCase().includes(form.data.trackerSearch.toLowerCase())
+                                                ).map((tracker, index) => (
+                                                    <button
+                                                        key={index}
+                                                        type="button"
+                                                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-body transition hover:bg-surface-2"
+                                                        onMouseDown={(e) => e.preventDefault()}
+                                                        onClick={() => handleTrackerSelect(tracker)}
+                                                    >
+                                                        <UserIcon className="h-4 w-4 text-subtle" />
+                                                        {tracker}
+                                                    </button>
+                                                ))}
+                                                {getFilteredTrackers().filter(tracker =>
+                                                    !form.data.trackerSearch || tracker.toLowerCase().includes(form.data.trackerSearch.toLowerCase())
+                                                ).length === 0 && (
+                                                    <div className="px-3 py-4 text-center text-sm text-subtle">
+                                                        {form.data.trackerSearch
+                                                            ? 'No matching profiles found for this client.'
+                                                            : 'No profiles available for this client.'}
                                                     </div>
-                                                </div>
-                                            )}
-                                        </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Range vs Duration toggle */}
+                        <div className="inline-flex rounded-lg border border-line bg-surface-2 p-1 text-sm">
+                            {[['range', 'Start–End time'], ['duration', 'Duration']].map(([val, lbl]) => (
+                                <button
+                                    key={val}
+                                    type="button"
+                                    onClick={() => form.setData('entry_mode', val)}
+                                    className={cx(
+                                        'rounded-md px-3 py-1.5 font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                                        form.data.entry_mode === val ? 'bg-accent text-white' : 'text-muted hover:text-body'
                                     )}
-                                </div>
+                                >
+                                    {lbl}
+                                </button>
+                            ))}
+                        </div>
 
-                                {/* Range vs Duration toggle */}
-                                <div className="mb-4 inline-flex rounded-lg border border-line bg-surface-2 p-1 text-sm">
-                                    {[['range', 'Start–End time'], ['duration', 'Duration']].map(([val, lbl]) => (
-                                        <button
-                                            key={val}
-                                            type="button"
-                                            onClick={() => form.setData('entry_mode', val)}
-                                            className={`rounded-md px-3 py-1.5 font-semibold transition ${
-                                                form.data.entry_mode === val ? 'bg-accent text-white' : 'text-muted hover:text-body'
-                                            }`}
-                                        >
-                                            {lbl}
-                                        </button>
-                                    ))}
-                                </div>
+                        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                            {/* Date — restricted to the window the server accepts */}
+                            <Field
+                                label="Date"
+                                required
+                                htmlFor="date"
+                                error={form.errors.date || undefined}
+                                hint={
+                                    !form.errors.date
+                                        ? (window_.earliest
+                                            ? `You can log time from ${window_.earliest} up to ${window_.latest}.`
+                                            : `You can log time up to ${window_.latest} — no future dates.`)
+                                        : undefined
+                                }
+                            >
+                                <Input
+                                    type="date"
+                                    id="date"
+                                    value={form.data.date}
+                                    min={window_.earliest || undefined}
+                                    max={window_.latest || undefined}
+                                    onChange={(e) => handleDateChange(e.target.value)}
+                                    style={{ colorScheme }}
+                                    required
+                                />
+                            </Field>
 
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                                    {/* Date */}
-                                    <div>
-                                        <label htmlFor="date" className="block text-sm font-medium text-muted mb-3 font-semibold">
-                                            Date <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="date"
-                                            id="date"
-                                            value={form.data.date}
-                                            onChange={(e) => form.setData('date', e.target.value)}
-                                            className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body"
+                            {form.data.entry_mode === 'range' ? (
+                                <>
+                                    <Field label="Start time" required error={form.errors.start_time || undefined}>
+                                        <Input
+                                            type="time"
+                                            value={form.data.start_time}
+                                            onChange={(e) => form.setData('start_time', e.target.value)}
+                                            style={{ colorScheme }}
                                             required
                                         />
-                                    </div>
-
-                                    {form.data.entry_mode === 'range' ? (
-                                        <>
-                                            {/* Start time */}
-                                            <div>
-                                                <label className="block text-sm font-medium text-muted mb-3 font-semibold">
-                                                    Start time <span className="text-red-500">*</span>
-                                                </label>
-                                                <input
-                                                    type="time"
-                                                    value={form.data.start_time}
-                                                    onChange={(e) => form.setData('start_time', e.target.value)}
-                                                    className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body"
-                                                    required
-                                                />
-                                            </div>
-                                            {/* End time */}
-                                            <div>
-                                                <label className="block text-sm font-medium text-muted mb-3 font-semibold">
-                                                    End time <span className="text-red-500">*</span>
-                                                </label>
-                                                <input
-                                                    type="time"
-                                                    value={form.data.end_time}
-                                                    onChange={(e) => form.setData('end_time', e.target.value)}
-                                                    className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body"
-                                                    required
-                                                />
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <>
-                                            {/* Hours */}
-                                            <div>
-                                                <label htmlFor="hours" className="block text-sm font-medium text-muted mb-3 font-semibold">
-                                                    Hours <span className="text-red-500">*</span>
-                                                </label>
-                                                <input
-                                                    type="number"
-                                                    id="hours"
-                                                    min="0"
-                                                    max="24"
-                                                    step="1"
-                                                    value={form.data.hours}
-                                                    onChange={(e) => {
-                                                        let value = parseInt(e.target.value);
-                                                        if (isNaN(value) || value < 0) value = 0;
-                                                        if (value > 24) value = 24;
-                                                        form.setData('hours', value.toString());
-                                                    }}
-                                                    placeholder="Enter hours (0-24)"
-                                                    className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body placeholder-slate-400"
-                                                    required
-                                                />
-                                            </div>
-                                            {/* Minutes */}
-                                            <div>
-                                                <label htmlFor="minutes" className="block text-sm font-medium text-muted mb-3 font-semibold">
-                                                    Minutes
-                                                </label>
-                                                <input
-                                                    type="number"
-                                                    id="minutes"
-                                                    min="0"
-                                                    max="59"
-                                                    step="1"
-                                                    value={form.data.minutes}
-                                                    onChange={(e) => {
-                                                        let value = parseInt(e.target.value);
-                                                        if (isNaN(value) || value < 0) value = 0;
-                                                        if (value > 59) value = 59;
-                                                        form.setData('minutes', value.toString());
-                                                    }}
-                                                    placeholder="Enter minutes (0-59)"
-                                                    className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body placeholder-slate-400"
-                                                />
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-
-                                {/* Time summary (works for both range and duration) */}
-                                {(() => {
-                                    const mins = form.data.entry_mode === 'range'
-                                        ? rangeMinutes()
-                                        : ((parseInt(form.data.hours) || 0) * 60 + (parseInt(form.data.minutes) || 0));
-                                    const ok = mins != null && mins > 0;
-                                    const overnight = form.data.entry_mode === 'range' && ok
-                                        && form.data.start_time && form.data.end_time
-                                        && form.data.end_time <= form.data.start_time;
-                                    return (
-                                        <div className={`mb-6 p-4 rounded-xl border ${ok ? 'bg-surface-2 border-line' : 'bg-surface-2 border-red-400/30'}`}>
-                                            <div className="flex items-center gap-3">
-                                                <svg className={`w-6 h-6 ${ok ? 'text-accent' : 'text-red-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                <div>
-                                                    <div className={`text-sm font-medium ${ok ? 'text-muted' : 'text-red-600'}`}>Total time {!ok && '(required)'}</div>
-                                                    <div className={`text-2xl font-bold ${ok ? 'text-body' : 'text-red-600'}`}>
-                                                        {ok ? fmtDuration(mins) : (form.data.entry_mode === 'range' ? 'Enter a start and end time' : 'No time entered')}
-                                                    </div>
-                                                    {ok && (
-                                                        <div className="text-xs text-subtle">
-                                                            {(mins / 60).toFixed(2)} decimal hours{overnight ? ' · spans midnight' : ''}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-
-                                {/* Description */}
-                                <div className="mb-6">
-                                    <label htmlFor="description" className="block text-sm font-medium text-muted mb-3 font-semibold">
-                                        Description <span className="text-red-500">*</span>
-                                    </label>
-                                    <textarea
-                                        id="description"
-                                        rows={4}
-                                        value={form.data.description}
-                                        onChange={(e) => form.setData('description', e.target.value)}
-                                        className="w-full px-4 py-3 bg-surface border border-line rounded-xl focus:ring-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-body placeholder-slate-400"
-                                        placeholder="Describe the work you did..."
-                                        required
-                                    />
-                                </div>
-
-                                <div className="flex items-center justify-between">
-                                    <Link
-                                        href={route('work-hours.index')}
-                                        className="inline-flex items-center px-6 py-3 bg-surface hover:bg-surface-2 text-muted rounded-xl font-medium transition-all border border-line"
-                                    >
-                                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                                        </svg>
-                                        Cancel
-                                    </Link>
-                                    <button
-                                        type="submit"
-                                        disabled={form.processing}
-                                        className="inline-flex items-center rounded-lg bg-accent px-5 py-2.5 font-semibold text-white shadow-sm hover:bg-accent disabled:opacity-50"
-                                    >
-                                        {form.processing ? (
-                                            <>
-                                                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-body" fill="none" viewBox="0 0 24 24">
-                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                </svg>
-                                                Creating...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                </svg>
-                                                Create Entry
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
-                            </form>
+                                    </Field>
+                                    <Field label="End time" required error={form.errors.end_time || undefined}>
+                                        <Input
+                                            type="time"
+                                            value={form.data.end_time}
+                                            onChange={(e) => form.setData('end_time', e.target.value)}
+                                            style={{ colorScheme }}
+                                            required
+                                        />
+                                    </Field>
+                                </>
+                            ) : (
+                                <>
+                                    <Field label="Hours" required htmlFor="hours">
+                                        <Input
+                                            type="number"
+                                            id="hours"
+                                            min="0"
+                                            max="24"
+                                            step="1"
+                                            value={form.data.hours}
+                                            onChange={(e) => {
+                                                let value = parseInt(e.target.value);
+                                                if (isNaN(value) || value < 0) value = 0;
+                                                if (value > 24) value = 24;
+                                                form.setData('hours', value.toString());
+                                            }}
+                                            placeholder="Enter hours (0-24)"
+                                            required
+                                        />
+                                    </Field>
+                                    <Field label="Minutes" htmlFor="minutes">
+                                        <Input
+                                            type="number"
+                                            id="minutes"
+                                            min="0"
+                                            max="59"
+                                            step="1"
+                                            value={form.data.minutes}
+                                            onChange={(e) => {
+                                                let value = parseInt(e.target.value);
+                                                if (isNaN(value) || value < 0) value = 0;
+                                                if (value > 59) value = 59;
+                                                form.setData('minutes', value.toString());
+                                            }}
+                                            placeholder="Enter minutes (0-59)"
+                                        />
+                                    </Field>
+                                </>
+                            )}
                         </div>
-                    </div>
-            </PageShell>
+
+                        {/* Untracked time (gap-fill) — offer only the parts of the
+                            day the person was in office but nothing was tracked. */}
+                        <div className="rounded-lg border border-line bg-surface-2 p-4">
+                            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                                <h3 className="inline-flex items-center gap-2 text-sm font-semibold text-body">
+                                    <CalendarClock className="h-4 w-4 text-accent" />
+                                    Untracked time on {day.date || form.data.date}
+                                </h3>
+                                {openGaps.length > 0 && (
+                                    <span className="text-xs font-medium text-muted">{fmtMins(openGapMinutes)} open</span>
+                                )}
+                            </div>
+                            <p className="mb-3 max-w-prose text-xs text-muted">
+                                These are the stretches between your clock-in and clock-out that the tracker
+                                didn&apos;t record and you haven&apos;t already logged. Pick one to fill it in,
+                                or enter your own times above.
+                            </p>
+
+                            {!day.has_attendance ? (
+                                <p className="inline-flex items-start gap-2 text-xs text-subtle">
+                                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                    <span>
+                                        No clock-in was recorded for this day, so there&apos;s no in-office time to
+                                        compare against. You can still enter the times by hand above.
+                                    </span>
+                                </p>
+                            ) : openGaps.length === 0 ? (
+                                <p className="inline-flex items-start gap-2 text-xs text-subtle">
+                                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                    <span>
+                                        Nothing left to fill — every minute you were in office is already tracked,
+                                        on a break, or logged.
+                                    </span>
+                                </p>
+                            ) : (
+                                <div className="flex flex-wrap gap-2">
+                                    {openGaps.map((gap, i) => {
+                                        const active = form.data.entry_mode === 'range'
+                                            && form.data.start_time === gap.start
+                                            && form.data.end_time === gap.end;
+                                        return (
+                                            <button
+                                                key={`${gap.start}-${gap.end}-${i}`}
+                                                type="button"
+                                                onClick={() => fillGap(gap)}
+                                                title="Fill this untracked stretch"
+                                                aria-pressed={active}
+                                                className={cx(
+                                                    'inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-app',
+                                                    active
+                                                        ? 'border-accent bg-accent/10 text-accent'
+                                                        : 'border-line bg-surface text-body hover:border-accent hover:text-accent'
+                                                )}
+                                            >
+                                                <span>{gap.label || `${to12(gap.start)} – ${to12(gap.end)}`}</span>
+                                                <span className="text-subtle">{fmtMins(gap.minutes)}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Time summary */}
+                        {(() => {
+                            const mins = form.data.entry_mode === 'range'
+                                ? rangeMinutes()
+                                : ((parseInt(form.data.hours) || 0) * 60 + (parseInt(form.data.minutes) || 0));
+                            const ok = mins != null && mins > 0;
+                            const overnight = form.data.entry_mode === 'range' && ok
+                                && form.data.start_time && form.data.end_time
+                                && form.data.end_time <= form.data.start_time;
+                            return (
+                                <div className={cx(
+                                    'rounded-lg border p-4',
+                                    ok ? 'border-line bg-surface-2' : 'border-danger/30 bg-danger-soft'
+                                )}>
+                                    <div className="flex items-center gap-3">
+                                        {ok ? (
+                                            <Clock className="h-6 w-6 text-accent" />
+                                        ) : (
+                                            <AlertCircle className="h-6 w-6 text-danger" />
+                                        )}
+                                        <div>
+                                            <div className={cx('text-sm font-medium', ok ? 'text-muted' : 'text-danger')}>
+                                                Total time {!ok && '(required)'}
+                                            </div>
+                                            <div className={cx('text-2xl font-bold', ok ? 'text-body' : 'text-danger')}>
+                                                {ok ? fmtDuration(mins) : (form.data.entry_mode === 'range' ? 'Enter a start and end time' : 'No time entered')}
+                                            </div>
+                                            {ok && (
+                                                <div className="text-xs text-subtle">
+                                                    {(mins / 60).toFixed(2)} decimal hours{overnight ? ' · spans midnight' : ''}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        {/* Description */}
+                        <Field label="Description" required htmlFor="description">
+                            <Textarea
+                                id="description"
+                                rows={4}
+                                value={form.data.description}
+                                onChange={(e) => form.setData('description', e.target.value)}
+                                placeholder="Describe the work you did..."
+                                required
+                            />
+                        </Field>
+
+                        <div className="flex items-center justify-between border-t border-line pt-6">
+                            <Button
+                                as={Link}
+                                href={preview ? '#' : route('work-hours.index')}
+                                variant="secondary"
+                                icon={<ArrowLeft className="h-4 w-4" />}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                type="submit"
+                                loading={form.processing}
+                                icon={!form.processing ? <Check className="h-4 w-4" /> : undefined}
+                            >
+                                {form.processing ? 'Creating...' : 'Create Entry'}
+                            </Button>
+                        </div>
+                    </form>
+                </Card>
+            </div>
         </AuthenticatedLayout>
     );
 }

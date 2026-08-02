@@ -19,7 +19,7 @@ class BlogSeedContent
             return;
         }
 
-        $team = config('brand.name', 'Tracksuite').' Team';
+        $team = config('brand.name', 'Staffvora').' Team';
 
         foreach (self::posts() as $p) {
             BlogPost::firstOrCreate(['slug' => $p['slug']], [
@@ -38,7 +38,7 @@ class BlogSeedContent
 
     private static function posts(): array
     {
-        $b = config('brand.name', 'Tracksuite');
+        $b = config('brand.name', 'Staffvora');
 
         return [
             [

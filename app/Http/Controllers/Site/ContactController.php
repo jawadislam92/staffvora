@@ -26,7 +26,7 @@ class ContactController extends Controller
         // Persist the lead first so it's never lost, even if email fails.
         \App\Models\ContactSubmission::create($data + ['ip' => $request->ip()]);
 
-        $to = config('brand.support_email') ?: 'hello@satimetracker.com';
+        $to = config('brand.support_email') ?: 'hello@staffvora.com';
 
         try {
             Mail::raw(
@@ -34,7 +34,7 @@ class ContactController extends Controller
                 "Name: {$data['name']}\nCompany: ".($data['company'] ?? '-')."\n".
                 "Email: {$data['email']}\nTeam size: ".($data['team_size'] ?? '-')."\n\n".
                 $data['message'],
-                fn ($m) => $m->to($to)->replyTo($data['email'], $data['name'])->subject('Contact form — '.config('brand.name', 'Tracksuite'))
+                fn ($m) => $m->to($to)->replyTo($data['email'], $data['name'])->subject('Contact form — '.config('brand.name', 'Staffvora'))
             );
         } catch (\Throwable $e) {
             // Non-fatal: still confirm to the visitor; the message is logged.
@@ -42,7 +42,7 @@ class ContactController extends Controller
 
         // Auto-acknowledge the lead (best-effort; log driver until SMTP is set up).
         try {
-            $brandName = config('brand.name', 'Tracksuite');
+            $brandName = config('brand.name', 'Staffvora');
             Mail::raw(
                 "Hi {$data['name']},\n\nThanks for reaching out to {$brandName} — we've received your message and will get back to you within one business day.\n\nFor your reference, here's what you sent:\n\"{$data['message']}\"\n\n— The {$brandName} team",
                 fn ($m) => $m->to($data['email'], $data['name'])->subject("We got your message — {$brandName}")

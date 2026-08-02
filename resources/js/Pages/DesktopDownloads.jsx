@@ -1,219 +1,40 @@
-import { useState } from 'react';
 import { Head } from '@inertiajs/react';
+import { Apple, CheckCircle2, Download, Laptop, MonitorDown, ShieldAlert } from 'lucide-react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Apple, CheckCircle2, Copy, Download, FolderOpen, Laptop, MonitorDown, Network, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Button, Card, Badge } from '@/Components/ui';
 
-const MAC_QUARANTINE_CMD = 'xattr -dr com.apple.quarantine "/Applications/Timetracker Desktop.app"';
+const cx = (...a) => a.filter(Boolean).join(' ');
 
-// Per-user install location (electron-builder NSIS, perMachine:false). The folder
-// is named after the app's productName — "SA Track" on current builds, but machines
-// first set up on an older build may still show "Timetracker Desktop".
-const WIN_INSTALL_PATH = '%LocalAppData%\\Programs\\SA Track';
-
-function CopyChip({ value }) {
-    const [copied, setCopied] = useState(false);
-
-    const copy = async () => {
-        try {
-            await navigator.clipboard.writeText(value);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch {
-            /* clipboard may be blocked; user can select manually */
-        }
-    };
-
-    return (
-        <div className="flex items-stretch gap-2">
-            <code className="min-w-0 flex-1 overflow-x-auto rounded bg-slate-900 px-3 py-2 font-mono text-xs text-emerald-200">
-                {value}
-            </code>
-            <button
-                type="button"
-                onClick={copy}
-                className="inline-flex shrink-0 items-center gap-1 rounded bg-slate-900 px-3 text-xs font-semibold text-body transition hover:bg-slate-800"
-            >
-                <Copy className="h-3.5 w-3.5" />
-                {copied ? 'Copied' : 'Copy'}
-            </button>
-        </div>
-    );
-}
-
-function AntivirusHelp() {
-    return (
-        <div className="mt-5 rounded-lg border border-line bg-surface p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-                <ShieldAlert className="h-5 w-5 text-amber-600" />
-                <h2 className="text-base font-semibold text-body">Antivirus blocking the install or sign-in? (Windows)</h2>
-            </div>
-            <p className="text-sm leading-6 text-muted">
-                SA Track is our own tracker, but because it’s an unsigned app that takes screenshots and samples
-                keyboard/mouse activity, antivirus can flag it as a false positive — the same exclusion every
-                monitoring tool (Hubstaff, Time Doctor) needs. Symptoms: the installer says
-                <span className="font-medium text-body"> “cannot be closed,”</span> the app gets quarantined, or sign-in
-                shows <span className="font-medium text-body"> “Could not reach the server.”</span> Add an exception once
-                per machine — the steps for the two most common are below.
-            </p>
-
-            <div className="mt-4 rounded-lg bg-surface-2 p-4">
-                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-subtle">
-                    <FolderOpen className="h-4 w-4" />
-                    First: find the install folder (you’ll need its path below)
-                </div>
-                <ol className="ml-4 list-decimal space-y-1 text-sm text-muted">
-                    <li>Right-click the <span className="font-medium">SA Track</span> desktop or Start-menu shortcut → <span className="font-medium">Open file location</span>.</li>
-                    <li>In the address bar, click once to reveal the full path and copy it. That’s the folder to exclude.</li>
-                </ol>
-                <p className="mt-2 text-xs text-subtle">It’s normally this (paste into the address bar to confirm — older installs may read “Timetracker Desktop”):</p>
-                <div className="mt-2">
-                    <CopyChip value={WIN_INSTALL_PATH} />
-                </div>
-            </div>
-
-            <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                {/* Bitdefender */}
-                <div className="rounded-lg border border-line bg-surface-2 p-4">
-                    <div className="mb-3 flex items-center gap-2">
-                        <ShieldCheck className="h-4 w-4 text-rose-600" />
-                        <div className="text-sm font-semibold text-body">Bitdefender Total Security</div>
-                    </div>
-
-                    <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-subtle">A · Exclude the folder</div>
-                    <ol className="ml-4 list-decimal space-y-1 text-sm text-muted">
-                        <li>Open <span className="font-medium">Bitdefender</span> → left sidebar <span className="font-medium">Protection</span>.</li>
-                        <li>In the <span className="font-medium">Antivirus</span> tile click <span className="font-medium">Open</span>.</li>
-                        <li><span className="font-medium">Settings</span> tab → <span className="font-medium">Manage Exceptions</span> → <span className="font-medium">+ Add an Exception</span>.</li>
-                        <li>Paste the install-folder path and turn <span className="font-medium">ON</span> every toggle — especially <span className="font-semibold text-rose-700">Advanced Threat Defense</span> (this one blocks SA&nbsp;Track.exe) and <span className="font-medium">Online Threat Prevention</span>. Click <span className="font-medium">Save</span>.</li>
-                    </ol>
-
-                    <div className="mb-1 mt-3 text-xs font-semibold uppercase tracking-wide text-subtle">B · Allow it through the Firewall</div>
-                    <p className="mb-1 text-xs text-subtle">Required, or sign-in fails with “Could not reach the server.”</p>
-                    <ol className="ml-4 list-decimal space-y-1 text-sm text-muted">
-                        <li><span className="font-medium">Protection</span> → <span className="font-medium">Firewall</span> → <span className="font-medium">Rules</span>.</li>
-                        <li>Search <span className="font-medium">SA Track</span>. Set the top <span className="font-medium">sa track.exe</span> rule’s <span className="font-medium">Access</span> to <span className="font-semibold text-emerald-700">ON</span> (Any network, Any protocol, Both). Use <span className="font-medium">Add rule</span> if none exists.</li>
-                    </ol>
-
-                    <div className="mb-1 mt-3 text-xs font-semibold uppercase tracking-wide text-subtle">C · If it was already blocked</div>
-                    <ol className="ml-4 list-decimal space-y-1 text-sm text-muted">
-                        <li>Open the <span className="font-medium">Notifications</span> bell → find the SA Track “Threat blocked” entry → <span className="font-medium">Allow / Restore</span>.</li>
-                        <li>Reinstall from this page, then sign in.</li>
-                    </ol>
-                </div>
-
-                {/* Windows Defender */}
-                <div className="rounded-lg border border-blue-100 bg-surface-2/40 p-4">
-                    <div className="mb-3 flex items-center gap-2">
-                        <Network className="h-4 w-4 text-accent" />
-                        <div className="text-sm font-semibold text-body">Windows Security (Defender)</div>
-                    </div>
-
-                    <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-subtle">A · Exclude the folder</div>
-                    <ol className="ml-4 list-decimal space-y-1 text-sm text-muted">
-                        <li>Press <span className="font-medium">Start</span>, type <span className="font-medium">Windows Security</span>, open it.</li>
-                        <li><span className="font-medium">Virus &amp; threat protection</span>.</li>
-                        <li>Under <span className="font-medium">Virus &amp; threat protection settings</span> click <span className="font-medium">Manage settings</span>.</li>
-                        <li>Scroll to <span className="font-medium">Exclusions</span> → <span className="font-medium">Add or remove exclusions</span> → <span className="font-medium">Add an exclusion</span> → <span className="font-medium">Folder</span>.</li>
-                        <li>Paste the install-folder path and confirm (approve the admin prompt).</li>
-                    </ol>
-
-                    <div className="mb-1 mt-3 text-xs font-semibold uppercase tracking-wide text-subtle">B · If it was already quarantined</div>
-                    <ol className="ml-4 list-decimal space-y-1 text-sm text-muted">
-                        <li><span className="font-medium">Virus &amp; threat protection</span> → <span className="font-medium">Protection history</span>.</li>
-                        <li>Find the SA Track item → <span className="font-medium">Actions</span> → <span className="font-medium">Restore</span> (or <span className="font-medium">Allow on device</span>), then reinstall.</li>
-                    </ol>
-
-                    <div className="mb-1 mt-3 text-xs font-semibold uppercase tracking-wide text-subtle">C · The blue “Windows protected your PC” box</div>
-                    <ol className="ml-4 list-decimal space-y-1 text-sm text-muted">
-                        <li>This is SmartScreen, not a virus warning. Click <span className="font-medium">More info</span>.</li>
-                        <li>Click <span className="font-medium">Run anyway</span> to launch the installer.</li>
-                    </ol>
-                    <p className="mt-3 text-xs text-subtle">Defender’s firewall allows the app’s outbound connection by default, so no firewall rule is usually needed here.</p>
-                </div>
-            </div>
-
-            <p className="mt-4 text-xs text-subtle">
-                Also seen on some machines: <span className="font-medium text-muted">NordVPN Threat Protection</span> can block the connection too —
-                pause it or add SA Track to its exceptions if sign-in still can’t reach the server.
-            </p>
-        </div>
-    );
-}
-
-function MacInstallHelp() {
-    const [copied, setCopied] = useState(false);
-
-    const copy = async () => {
-        try {
-            await navigator.clipboard.writeText(MAC_QUARANTINE_CMD);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch {
-            /* clipboard may be blocked; user can select manually */
-        }
-    };
-
-    return (
-        <div className="mt-5 rounded-lg border border-line bg-surface p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-                <Apple className="h-5 w-5 text-muted" />
-                <h2 className="text-base font-semibold text-body">Opening the app on macOS (first launch)</h2>
-            </div>
-            <p className="text-sm leading-6 text-muted">
-                The Mac build is not yet signed with an Apple Developer ID, so on first launch macOS shows
-                <span className="font-medium text-body"> “Apple could not verify… Not Opened.”</span> This is expected.
-                <span className="font-semibold text-rose-600"> Do not click “Move to Bin.”</span> Unblock it once per Mac:
-            </p>
-
-            <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                <div className="rounded-lg bg-surface-2 p-4">
-                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">Option A — Terminal (most reliable)</div>
-                    <ol className="ml-4 list-decimal space-y-1 text-sm text-muted">
-                        <li>Drag <span className="font-medium">Timetracker Desktop</span> into <span className="font-medium">Applications</span>.</li>
-                        <li>Open <span className="font-medium">Terminal</span> and run the command below.</li>
-                        <li>Double-click the app in Applications — it opens normally.</li>
-                    </ol>
-                    <div className="mt-3 flex items-stretch gap-2">
-                        <code className="min-w-0 flex-1 overflow-x-auto rounded bg-slate-900 px-3 py-2 font-mono text-xs text-emerald-200">
-                            {MAC_QUARANTINE_CMD}
-                        </code>
-                        <button
-                            type="button"
-                            onClick={copy}
-                            className="inline-flex shrink-0 items-center gap-1 rounded bg-slate-900 px-3 text-xs font-semibold text-body transition hover:bg-slate-800"
-                        >
-                            <Copy className="h-3.5 w-3.5" />
-                            {copied ? 'Copied' : 'Copy'}
-                        </button>
-                    </div>
-                </div>
-
-                <div className="rounded-lg bg-surface-2 p-4">
-                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">Option B — No Terminal</div>
-                    <ol className="ml-4 list-decimal space-y-1 text-sm text-muted">
-                        <li>Click <span className="font-medium">Done</span> on the warning (not “Move to Bin”).</li>
-                        <li>Open  → <span className="font-medium">System Settings</span> → <span className="font-medium">Privacy &amp; Security</span>.</li>
-                        <li>Scroll down — click <span className="font-medium">Open Anyway</span> next to “Timetracker Desktop”.</li>
-                        <li>Launch the app again and click <span className="font-medium">Open</span>.</li>
-                    </ol>
-                    <p className="mt-3 text-xs text-subtle">
-                        After opening once, approve the prompts for Screen Recording, Accessibility, and Automation (per browser, for URL capture).
-                    </p>
-                </div>
-            </div>
-        </div>
-    );
-}
+// --- Preview sample (offline dev render) ------------------------------------
+// Mirrors the shape the controller sends: downloads.windows / downloads.mac.
+const DEV_SAMPLE = {
+    user: { name: 'Jawad', is_super_admin: true, permissions: [] },
+    downloads: {
+        windows: {
+            available: true,
+            version: '0.3.4',
+            filename: 'Staffvora Desktop Setup 0.3.4.exe',
+            size: 96_468_992,
+            sha256: 'a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00',
+            url: '#',
+        },
+        mac: {
+            available: true,
+            version: '0.3.2',
+            filename: 'Staffvora Desktop-0.3.2-arm64.dmg',
+            size: 118_293_504,
+            sha256: '00ffeeddccbbaa998877665544332211ffee00cc11dd22aa33bb44cc55dd66ee',
+            url: '#',
+        },
+    },
+};
 
 function formatBytes(bytes) {
-    if (!bytes) {
-        return null;
-    }
+    if (!bytes) return null;
 
     const units = ['B', 'KB', 'MB', 'GB'];
     let size = bytes;
     let unit = 0;
-
     while (size >= 1024 && unit < units.length - 1) {
         size /= 1024;
         unit += 1;
@@ -222,131 +43,142 @@ function formatBytes(bytes) {
     return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
-function DownloadCard({ title, subtitle, icon: Icon, accent, download }) {
-    const available = download?.available;
-
+function MetaRow({ label, value, mono = false }) {
     return (
-        <section className="rounded-lg border border-line bg-surface p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-                <div className="flex min-w-0 items-start gap-4">
-                    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg ${accent}`}>
-                        <Icon className="h-6 w-6" />
-                    </div>
-                    <div className="min-w-0">
-                        <h2 className="text-lg font-semibold text-body">{title}</h2>
-                        <p className="mt-1 text-sm text-subtle">{subtitle}</p>
-                    </div>
-                </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${available ? 'bg-surface-2 text-emerald-700' : 'bg-surface-2 text-subtle'}`}>
-                    {available ? 'Available' : 'Pending'}
-                </span>
-            </div>
-
-            <div className="mt-5 grid gap-3 rounded-lg bg-surface-2 p-4 text-sm text-muted sm:grid-cols-2">
-                <div>
-                    <div className="text-xs font-semibold uppercase text-subtle">Version</div>
-                    <div className="mt-1 font-medium text-body">{download?.version || 'Not built'}</div>
-                </div>
-                <div>
-                    <div className="text-xs font-semibold uppercase text-subtle">Size</div>
-                    <div className="mt-1 font-medium text-body">{formatBytes(download?.size) || '-'}</div>
-                </div>
-                <div className="sm:col-span-2">
-                    <div className="text-xs font-semibold uppercase text-subtle">SHA256</div>
-                    <div className="mt-1 break-all font-mono text-xs text-muted">{download?.sha256 || '-'}</div>
-                </div>
-            </div>
-
-            <div className="mt-5">
-                {available ? (
-                    <a
-                        href={download.url}
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-body transition hover:bg-slate-800 sm:w-auto"
-                    >
-                        <Download className="h-4 w-4" />
-                        Download
-                    </a>
-                ) : (
-                    <button
-                        type="button"
-                        disabled
-                        className="inline-flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg bg-slate-200 px-4 py-3 text-sm font-semibold text-subtle sm:w-auto"
-                    >
-                        <Download className="h-4 w-4" />
-                        Download
-                    </button>
-                )}
-            </div>
-        </section>
+        <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-subtle">{label}</dt>
+            <dd className={cx('mt-1 break-all text-body', mono ? 'font-mono text-xs text-muted' : 'text-sm font-medium')}>
+                {value}
+            </dd>
+        </div>
     );
 }
 
-export default function DesktopDownloads({ auth, downloads }) {
-    return (
-        <AuthenticatedLayout user={auth.user} header="Desktop App">
-            <Head title="Desktop App" />
+function DownloadCard({ title, subtitle, icon: Icon, download, recommended = false }) {
+    const available = Boolean(download?.available);
 
-            <div className="min-h-screen bg-slate-950">
-            <div className="w-full px-4 py-6 sm:px-6 lg:px-8">
-                <div className="mb-6 rounded-lg border border-line bg-surface p-5 shadow-sm">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                        <div>
-                            <div className="flex items-center gap-2 text-sm font-semibold uppercase text-accent">
-                                <MonitorDown className="h-4 w-4" />
-                                Employee tracker
-                            </div>
-                            <h1 className="mt-2 text-2xl font-bold text-body">Download Tracksuite Desktop</h1>
-                            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
-                                Install the desktop tracker on company machines for screenshot capture, activity sampling,
-                                and automatic report entries.
-                            </p>
+    return (
+        <Card className="flex flex-col">
+            <div className="flex items-start justify-between gap-4">
+                <div className="flex min-w-0 items-start gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                        <Icon className="h-6 w-6" />
+                    </div>
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-lg font-semibold text-body">{title}</h2>
+                            {recommended && <Badge tone="accent">Recommended</Badge>}
                         </div>
-                        <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                            <ShieldAlert className="h-5 w-5 shrink-0" />
-                            Unsigned local build
-                        </div>
+                        <p className="mt-1 text-sm text-subtle">{subtitle}</p>
                     </div>
                 </div>
+                <Badge tone={available ? 'success' : 'neutral'} dot className="shrink-0">
+                    {available ? 'Preview available' : 'Pending'}
+                </Badge>
+            </div>
 
-                <div className="grid gap-5 xl:grid-cols-2">
+            <dl className="mt-5 grid gap-3 rounded-lg bg-surface-2 p-4 sm:grid-cols-2">
+                <MetaRow label="Version" value={download?.version || 'Not built'} />
+                <MetaRow label="Size" value={formatBytes(download?.size) || '-'} />
+                <div className="sm:col-span-2">
+                    <MetaRow label="File" value={download?.filename || '-'} mono />
+                </div>
+                <div className="sm:col-span-2">
+                    <MetaRow label="SHA-256" value={download?.sha256 || '-'} mono />
+                </div>
+            </dl>
+
+            <div className="mt-5">
+                {available ? (
+                    <Button href={download.url} icon={<Download className="h-4 w-4" />} className="w-full sm:w-auto">
+                        Download preview
+                    </Button>
+                ) : (
+                    <Button
+                        variant="secondary"
+                        disabled
+                        icon={<Download className="h-4 w-4" />}
+                        className="w-full sm:w-auto"
+                    >
+                        Not available
+                    </Button>
+                )}
+            </div>
+        </Card>
+    );
+}
+
+export default function DesktopDownloads({ auth, downloads, preview = false }) {
+    const user = preview ? DEV_SAMPLE.user : auth.user;
+    const data = preview ? DEV_SAMPLE.downloads : downloads;
+
+    return (
+        <AuthenticatedLayout user={user} header="Desktop App">
+            <Head title="Desktop App" />
+
+            <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+                <Card>
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-accent">
+                                <MonitorDown className="h-4 w-4" />
+                                Optional desktop tracker
+                            </div>
+                            <h1 className="mt-2 text-2xl font-bold text-body">Download Staffvora Desktop</h1>
+                            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
+                                Track time from Windows or macOS. Screenshot and activity features run only while
+                                tracking and only when enabled by the workspace.
+                            </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2 rounded-lg bg-warning-soft px-4 py-3 text-sm font-semibold text-warning">
+                            <ShieldAlert className="h-5 w-5 shrink-0" />
+                            Preview — signing required
+                        </div>
+                    </div>
+                </Card>
+
+                <div className="grid gap-6 xl:grid-cols-2">
                     <DownloadCard
                         title="Windows PC"
                         subtitle="Windows 10 or later, 64-bit"
                         icon={Laptop}
-                        accent="bg-surface-2 text-accent"
-                        download={downloads.windows}
+                        download={data.windows}
+                        recommended
                     />
                     <DownloadCard
                         title="macOS"
-                        subtitle="Apple Silicon (M1/M2/M3), macOS 12 or later"
+                        subtitle="Apple Silicon, macOS 12 or later"
                         icon={Apple}
-                        accent="bg-surface-2 text-muted"
-                        download={downloads.mac}
+                        download={data.mac}
                     />
                 </div>
 
-                {downloads.mac?.available && <MacInstallHelp />}
-
-                <AntivirusHelp />
-
-                <div className="mt-5 grid gap-4 lg:grid-cols-3">
-                    <div className="rounded-lg border border-emerald-100 bg-surface-2 p-4 text-sm text-emerald-900">
-                        <div className="mb-2 flex items-center gap-2 font-semibold">
-                            <CheckCircle2 className="h-4 w-4" />
-                            Sign in with web credentials
-                        </div>
-                        <p className="leading-6">Employees use the same Timetracker account after installation.</p>
-                    </div>
-                    <div className="rounded-lg border border-line bg-surface p-4 text-sm text-muted">
-                        <div className="mb-2 font-semibold text-body">Server URL</div>
-                        <p className="leading-6">Use the company Timetracker URL when the desktop app asks for the server.</p>
-                    </div>
-                    <div className="rounded-lg border border-line bg-surface p-4 text-sm text-muted">
-                        <div className="mb-2 font-semibold text-body">Company rollout</div>
-                        <p className="leading-6">For managed installs, distribute the Windows installer through your IT tool.</p>
-                    </div>
+                <div className="flex items-start gap-3 rounded-lg border border-warning/40 bg-warning-soft p-5 text-sm leading-6 text-warning">
+                    <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
+                    <p>
+                        These installers are for controlled evaluation. They must be code-signed, notarized on macOS,
+                        and tested through a clean release pipeline before broad customer rollout. Do not ask employees
+                        to disable or bypass security software to install Staffvora.
+                    </p>
                 </div>
-            </div>
+
+                <div className="grid gap-4 lg:grid-cols-3">
+                    <Card>
+                        <div className="mb-2 flex items-center gap-2 font-semibold text-body">
+                            <CheckCircle2 className="h-4 w-4 text-success" />
+                            One account
+                        </div>
+                        <p className="text-sm leading-6 text-muted">Use the same Staffvora credentials on the web and desktop.</p>
+                    </Card>
+                    <Card>
+                        <div className="mb-2 font-semibold text-body">Workspace server</div>
+                        <p className="text-sm leading-6 text-muted">Enter the workspace's Staffvora URL when the app asks for a server.</p>
+                    </Card>
+                    <Card>
+                        <div className="mb-2 font-semibold text-body">Managed rollout</div>
+                        <p className="text-sm leading-6 text-muted">After signing, distribute verified installers through your IT tooling.</p>
+                    </Card>
+                </div>
             </div>
         </AuthenticatedLayout>
     );

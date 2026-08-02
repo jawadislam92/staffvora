@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Operator/landlord staff — a SEPARATE account type from customer `users`, with
  * its own auth guard. These accounts live only on the platform portal
- * (platform.satimetracker.com), are invite-only, and have no tenant. This is
+ * (platform.staffvora.com), are invite-only, and have no tenant. This is
  * what keeps platform access off the public customer signup.
  */
 return new class extends Migration

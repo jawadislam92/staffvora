@@ -20,7 +20,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'Sparking Asia'),
+    'name' => env('APP_NAME', 'Staffvora'),
 
     /*
     |--------------------------------------------------------------------------
@@ -74,7 +74,12 @@ return [
     |
     */
 
-    'timezone' => 'Asia/Karachi',
+    // Storage timezone — the single zone every datetime is persisted in. Each
+    // workspace's BUSINESS timezone (day/shift/attendance day-bucketing and
+    // display) is resolved per-tenant via App\Support\BusinessTime::tz() from
+    // organizations.timezone. (Storing instants in UTC is a planned follow-up —
+    // see documents/TRACKSUITE_MASTER_TRACKER.md §3.G.)
+    'timezone' => env('APP_TIMEZONE', 'Asia/Karachi'),
 
     /*
     |--------------------------------------------------------------------------

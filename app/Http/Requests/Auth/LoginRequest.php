@@ -50,6 +50,18 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        // Deactivated accounts (people who left the company) can't sign in even
+        // with the right password. Log straight back out so no half-session is
+        // left behind, and count it against the rate limiter.
+        if (! Auth::user()->isActive()) {
+            Auth::logout();
+            RateLimiter::hit($this->throttleKey());
+
+            throw ValidationException::withMessages([
+                'email' => 'Your account has been deactivated. Please contact your administrator.',
+            ]);
+        }
+
         RateLimiter::clear($this->throttleKey());
     }
 

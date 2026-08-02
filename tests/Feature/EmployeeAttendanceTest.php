@@ -15,6 +15,22 @@ class EmployeeAttendanceTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Connect the bound workspace's OWN Slack. Attendance reports no longer use
+     * the platform-wide services.slack_reports.webhook_url — that single
+     * destination pooled every tenant's staffing table into one channel none of
+     * them owned (see SlackReportDestination).
+     */
+    private function connectWorkspaceSlack(): void
+    {
+        \App\Models\MonitoringSetting::current()->update([
+            'slack_bot_token' => 'xoxb-workspace-token',
+            'slack_attendance_channel' => '#attendance',
+        ]);
+
+        Http::fake(['slack.com/api/*' => Http::response(['ok' => true, 'ts' => '1.1'])]);
+    }
+
     public function test_attendance_summary_never_returns_negative_break_time_for_future_entries(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-06-08 10:00:00', 'Asia/Karachi'));
@@ -553,11 +569,14 @@ class EmployeeAttendanceTest extends TestCase
     public function test_days_before_tracking_start_are_not_tracked_not_absent(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-06-15 10:00:00', 'Asia/Karachi'));
-        \App\Models\MonitoringSetting::current()->update(['attendance_tracking_start_date' => '2026-06-10']);
-        \App\Models\MonitoringSetting::forgetSharedCache();
 
+        // Users first: settings are tenant-owned, so the workspace has to exist
+        // (and be bound) before MonitoringSetting::current() materialises its row.
         $admin = User::factory()->create(['role' => 'super_admin']);
         $employee = User::factory()->create(['name' => 'Fresh Workspace User']);
+
+        \App\Models\MonitoringSetting::current()->update(['attendance_tracking_start_date' => '2026-06-10']);
+        \App\Models\MonitoringSetting::forgetSharedCache();
 
         $row = collect(
             $this->actingAs($admin)
@@ -579,11 +598,13 @@ class EmployeeAttendanceTest extends TestCase
     public function test_week_off_days_are_configurable(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-06-15 10:00:00', 'Asia/Karachi'));
-        \App\Models\MonitoringSetting::current()->update(['attendance_week_off_days' => [Carbon::SATURDAY]]);
-        \App\Models\MonitoringSetting::forgetSharedCache();
 
+        // Users first: MonitoringSetting is tenant-owned (see above).
         $admin = User::factory()->create(['role' => 'super_admin']);
         $employee = User::factory()->create(['name' => 'Sat Off User']);
+
+        \App\Models\MonitoringSetting::current()->update(['attendance_week_off_days' => [Carbon::SATURDAY]]);
+        \App\Models\MonitoringSetting::forgetSharedCache();
 
         $row = collect(
             $this->actingAs($admin)
@@ -605,11 +626,13 @@ class EmployeeAttendanceTest extends TestCase
     public function test_auto_absent_off_yields_a_neutral_no_record(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-06-15 10:00:00', 'Asia/Karachi'));
-        \App\Models\MonitoringSetting::current()->update(['attendance_auto_absent' => false]);
-        \App\Models\MonitoringSetting::forgetSharedCache();
 
+        // Users first: MonitoringSetting is tenant-owned (see above).
         $admin = User::factory()->create(['role' => 'super_admin']);
         $employee = User::factory()->create(['name' => 'No Blame User']);
+
+        \App\Models\MonitoringSetting::current()->update(['attendance_auto_absent' => false]);
+        \App\Models\MonitoringSetting::forgetSharedCache();
 
         $row = collect(
             $this->actingAs($admin)
@@ -628,13 +651,9 @@ class EmployeeAttendanceTest extends TestCase
 
     public function test_super_admin_can_send_monthly_attendance_to_slack(): void
     {
-        config(['services.slack_reports.webhook_url' => 'https://hooks.slack.test/services/example']);
-        Http::fake([
-            'hooks.slack.test/*' => Http::response('ok'),
-        ]);
-
         $admin = User::factory()->create(['role' => 'super_admin']);
         $employee = User::factory()->create(['name' => 'Slack Attendance User']);
+        $this->connectWorkspaceSlack();
 
         TimeEntry::create([
             'user_id' => $employee->id,
@@ -661,23 +680,19 @@ class EmployeeAttendanceTest extends TestCase
             ->assertOk()
             ->assertJsonPath('message', 'Attendance report sent to Slack for June 2026.');
 
-        Http::assertSent(fn ($request) => $request->url() === 'https://hooks.slack.test/services/example'
+        Http::assertSent(fn ($request) => $request->url() === 'https://slack.com/api/chat.postMessage'
             && $request['text'] === 'Attendance Report | June 2026 | 1 users');
     }
 
     public function test_attendance_slack_report_counts_late_coming_from_shift_grace(): void
     {
-        config(['services.slack_reports.webhook_url' => 'https://hooks.slack.test/services/example']);
-        Http::fake([
-            'hooks.slack.test/*' => Http::response('ok'),
-        ]);
-
         $admin = User::factory()->create(['role' => 'super_admin']);
         $employee = User::factory()->create([
             'name' => 'Slack Late User',
             'shift_start_time' => '08:00:00',
             'shift_grace_minutes' => 10,
         ]);
+        $this->connectWorkspaceSlack();
 
         TimeEntry::create([
             'user_id' => $employee->id,
@@ -699,7 +714,7 @@ class EmployeeAttendanceTest extends TestCase
             $tableBlock = collect($request['blocks'])->firstWhere('type', 'table');
             $row = $tableBlock['rows'][1] ?? [];
 
-            return $request->url() === 'https://hooks.slack.test/services/example'
+            return $request->url() === 'https://slack.com/api/chat.postMessage'
                 && ($row[0]['text'] ?? null) === 'Slack Late User'
                 && ($row[1]['text'] ?? null) === '1'
                 && ($row[2]['text'] ?? null) === '1';
@@ -709,17 +724,13 @@ class EmployeeAttendanceTest extends TestCase
     public function test_attendance_slack_does_not_count_current_day_absent_before_shift_deadline(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-06-09 11:00:00', 'Asia/Karachi'));
-        config(['services.slack_reports.webhook_url' => 'https://hooks.slack.test/services/example']);
-        Http::fake([
-            'hooks.slack.test/*' => Http::response('ok'),
-        ]);
-
         $admin = User::factory()->create(['role' => 'super_admin']);
         $employee = User::factory()->create([
             'name' => 'Slack Afternoon Shift User',
             'shift_start_time' => '12:00:00',
             'shift_grace_minutes' => 15,
         ]);
+        $this->connectWorkspaceSlack();
 
         $this->actingAs($admin)
             ->postJson(route('employee-attendance.slack'), [

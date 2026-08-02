@@ -15,7 +15,7 @@ class SendWeeklySlackReport extends Command
 
     public function handle(SlackReportService $slack): int
     {
-        $timezone = config('services.slack_reports.timezone', 'Asia/Karachi');
+        $timezone = \App\Support\BusinessTime::tz();
         $end = $this->option('end')
             ? Carbon::parse($this->option('end'), $timezone)->endOfDay()
             : Carbon::now($timezone)->subDay()->endOfDay();

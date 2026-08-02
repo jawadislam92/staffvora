@@ -35,7 +35,7 @@ function HeaderItem({ item }) {
 
 export default function SiteHeader({ nav = [], brand, isAuthed, mode = 'light', onToggleTheme }) {
     const [open, setOpen] = useState(false);
-    const name = brand?.name || 'Tracksuite';
+    const name = brand?.name || 'Staffvora';
     const cta = isAuthed ? { url: '/dashboard', label: 'Go to dashboard' } : { url: '/register', label: 'Start free trial' };
 
     return (

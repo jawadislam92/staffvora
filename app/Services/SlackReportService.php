@@ -3,26 +3,34 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Models\WorkCategory;
 use App\Models\WorkHour;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Http;
 use RuntimeException;
-use Throwable;
 
 class SlackReportService
 {
     private const MAX_TABLE_DATA_ROWS = 98;
 
+    public function __construct(private SlackReportDestination $destination) {}
+
+    /**
+     * This is the service behind /report/slack AND the scheduled weekly report
+     * (tenant:run reports:send-weekly-slack), so it was the automated half of
+     * the shared-webhook leak: every tenant's work-hours table posted, unattended,
+     * to one platform-wide channel. It now resolves the workspace's own Slack —
+     * see SlackReportDestination.
+     */
     public function configured(): bool
     {
-        return filled(config('services.slack_reports.webhook_url'));
+        return $this->destination->configured();
     }
 
     public function sendRange(CarbonInterface $start, CarbonInterface $end, array $filters = []): array
     {
         if (! $this->configured()) {
-            throw new RuntimeException('Slack reporting is not configured.');
+            throw new RuntimeException($this->destination->unconfiguredMessage());
         }
 
         $startDate = $start->toDateString();
@@ -35,11 +43,14 @@ class SlackReportService
 
         $this->applyFilters($query, $filters);
 
+        // workCategory is eager-loaded (one extra query for the whole digest,
+        // not one per entry) because the work-type column is now rendered from
+        // the workspace's own category name — the single vocabulary source.
         $entries = $query
-            ->with(['client:id,name'])
+            ->with(['client:id,name', 'workCategory:id,name'])
             ->orderBy('user_id')
             ->orderBy('date')
-            ->get(['id', 'user_id', 'client_id', 'work_type', 'tracker', 'hours']);
+            ->get(['id', 'user_id', 'client_id', 'work_category_id', 'is_billable', 'work_type', 'tracker', 'hours']);
 
         $users = User::query()
             ->when(
@@ -54,7 +65,7 @@ class SlackReportService
 
         $includeFields = array_values(array_intersect(
             $filters['includeFields'] ?? ['hours'],
-            ['client', 'work_type', 'tracker', 'hours', 'user_total']
+            ['client', 'work_type', 'billable', 'tracker', 'hours', 'user_total']
         ));
 
         if ($includeFields === []) {
@@ -152,21 +163,10 @@ class SlackReportService
                 : ''
         );
 
-        try {
-            $response = Http::asJson()
-                ->timeout(10)
-                ->retry(2, 250)
-                ->post(config('services.slack_reports.webhook_url'), [
-                    'text' => $fallbackText,
-                    'blocks' => $blocks,
-                ]);
-        } catch (Throwable) {
-            throw new RuntimeException('The app could not connect to Slack.');
-        }
-
-        if ($response->failed()) {
-            throw new RuntimeException('Slack did not accept the report.');
-        }
+        $this->destination->send([
+            'text' => $fallbackText,
+            'blocks' => $blocks,
+        ]);
 
         return [
             'start_date' => $startDate,
@@ -267,7 +267,10 @@ class SlackReportService
     {
         return match ($field) {
             'client' => $entry->client?->name ?? 'No client',
-            'work_type' => $this->formatWorkType($entry->work_type),
+            // `work_type` is kept as the FIELD KEY (saved report presets and the
+            // Slack modal still send it) but its VALUE is now the work category.
+            'work_type' => $this->workCategoryLabel($entry),
+            'billable' => $entry->is_billable ? 'Billable' : 'Non-billable',
             'tracker' => filled($entry->tracker) ? $entry->tracker : 'Not specified',
             default => '',
         };
@@ -278,7 +281,8 @@ class SlackReportService
         return match ($field) {
             'user' => 'User',
             'client' => 'Client',
-            'work_type' => 'Work Type',
+            'work_type' => 'Work Category',
+            'billable' => 'Billable',
             'tracker' => 'Tracker',
             'hours' => 'Hours',
             'user_total' => 'User Total',
@@ -309,19 +313,30 @@ class SlackReportService
         ];
     }
 
-    private function formatWorkType(?string $workType): string
+    /**
+     * ONE vocabulary source. The digest used to carry its own label map — the
+     * one that renamed `upwork_bidding` to "Business development" while the
+     * timesheet pages called the same value something else. It now prints the
+     * workspace's own work_categories row name.
+     *
+     * No N+1: the relation is eager-loaded above, and the legacy fallback for a
+     * row the backfill never reached goes through WorkCategory's memoised
+     * per-workspace catalogue (at most one query per process).
+     */
+    private function workCategoryLabel(WorkHour $entry): string
     {
-        return match ($workType) {
-            'tracker' => 'Tracker',
-            'manual' => 'Manual Time',
-            'test_task' => 'Test Task',
-            'upwork_bidding' => 'Upwork Bidding',
-            'fixed' => 'Fixed Project',
-            'office_work' => 'Office Work',
-            'outside_of_upwork' => 'Outside of Upwork',
-            null, '' => 'Not specified',
-            default => ucwords(str_replace('_', ' ', $workType)),
-        };
+        if ($entry->relationLoaded('workCategory') && $entry->workCategory) {
+            return $entry->workCategory->name;
+        }
+
+        $legacy = $entry->work_type;
+
+        if ($legacy === null || $legacy === '') {
+            return 'Not specified';
+        }
+
+        return WorkCategory::resolveForLegacyWorkType($legacy)?->name
+            ?? ucwords(str_replace('_', ' ', $legacy));
     }
 
     private function formatHours(float $hours): string

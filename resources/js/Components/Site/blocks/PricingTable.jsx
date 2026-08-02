@@ -3,12 +3,19 @@ import { Link } from '@inertiajs/react';
 import { SiteIcon } from '../icons';
 
 // Curated marketing feature lists per plan key (the price + seats come live from
-// the app's Plans; this is the editable "what's included" copy).
+// the app's Plans; this is the "what's included" copy).
+//
+// ONLY list capabilities that actually ship today. This is a public price
+// promise — anything here is something a customer can demand on day one, so an
+// unbuilt feature is a refund and a trust problem. This list previously
+// advertised "SSO & advanced security" and "Integrations & API"; neither exists
+// anywhere in the product (no SAML, no OAuth, no customer-facing API), so both
+// were removed rather than left as a promise we couldn't keep.
 const FEATURES = {
     free: ['Up to 3 users', 'One-click time tracking', 'Attendance & shifts', 'Reports & CSV export'],
     starter: ['Everything in Free', 'Screenshots & activity', 'App & URL tracking', 'Slack digests'],
-    pro: ['Everything in Starter', 'AI day summaries', 'Integrations & API', 'White-label branding', 'Priority support'],
-    enterprise: ['Everything in Pro', 'Unlimited users', 'SSO & advanced security', 'Onboarding & dedicated support'],
+    pro: ['Everything in Starter', 'AI day summaries', 'Team performance insights', 'White-label branding', 'Priority support'],
+    enterprise: ['Everything in Pro', 'Unlimited users', 'Full audit history', 'Onboarding & dedicated support'],
 };
 const POPULAR = 'pro';
 

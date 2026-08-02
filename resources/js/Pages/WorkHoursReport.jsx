@@ -1,28 +1,69 @@
-import React, { useState, useEffect } from 'react';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
+import React, { useState, useEffect, useMemo } from 'react';
 import AuthenticatedLayout from '../Layouts/AuthenticatedLayout';
 import { TraditionalPagination } from '../Components/Pagination';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { timeFormat } from '../helpers';
 import { exportRowsToCsv } from '@/Utils/csvExport';
 import SearchableMultiSelect from '../Components/Filters/SearchableMultiSelect';
-import ActiveFilterChips from '../Components/Filters/ActiveFilterChips';
-import PageHeader from '../Components/Layout/PageHeader';
-import PageShell from '../Components/Layout/PageShell';
+import {
+    Badge,
+    Button,
+    Card,
+    CardHeader,
+    EmptyState,
+    Field,
+    Input,
+    Select,
+    StatCard,
+    Table,
+    THead,
+    TBody,
+    Tr,
+    Th,
+    Td,
+} from '@/Components/ui';
+import Modal from '@/Components/Modal';
+import { TrendChart } from '@/Components/charts';
 
-// Toast Notification Component
+const cx = (...a) => a.filter(Boolean).join(' ');
+
+// ---------------------------------------------------------------------------
+// useColorScheme — mirror the active theme onto native <input type="date">
+// controls so their OS picker/glyph render light-on-light or dark-on-dark
+// instead of the old hardcoded light DatePicker sitting on a dark surface.
+// ---------------------------------------------------------------------------
+function useColorScheme() {
+    const [scheme, setScheme] = useState(() => (
+        typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'light'
+            ? 'light'
+            : 'dark'
+    ));
+
+    useEffect(() => {
+        if (typeof document === 'undefined') return undefined;
+        const root = document.documentElement;
+        const read = () => setScheme(root.getAttribute('data-theme') === 'light' ? 'light' : 'dark');
+        read();
+        const observer = new MutationObserver(read);
+        observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+        return () => observer.disconnect();
+    }, []);
+
+    return scheme;
+}
+
+// Toast Notification Component (token-driven, theme-aware)
 function Toast({ message, type = 'success', onClose }) {
     if (!message) return null;
-    
-    const bgClass = type === 'error' 
-        ? 'bg-gradient-to-r from-red-500 to-red-600' 
-        : 'bg-gradient-to-r from-emerald-500 to-teal-500';
+
+    const toneClass = type === 'error'
+        ? 'bg-danger-soft text-danger'
+        : 'bg-success-soft text-success';
 
     return (
-        <div className={`fixed top-5 right-5 z-50 ${bgClass} text-body px-6 py-3 rounded-xl shadow-2xl flex items-center`}>
-            <span className="font-medium">{message}</span>
-            <button onClick={onClose} className="ml-4 text-body hover:text-gray-200 font-bold text-lg">&times;</button>
+        <div className={cx('fixed top-5 right-5 z-[60] flex items-center gap-4 rounded-xl border border-line px-5 py-3 shadow-lg', toneClass)}>
+            <span className="text-sm font-medium">{message}</span>
+            <button onClick={onClose} className="text-lg font-bold leading-none opacity-70 transition hover:opacity-100">&times;</button>
         </div>
     );
 }
@@ -35,10 +76,18 @@ const formatDateLocal = (date) => {
     return `${year}-${month}-${day}`;
 };
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const shortDate = (iso) => {
+    if (!iso) return '';
+    const parts = String(iso).slice(0, 10).split('-');
+    if (parts.length < 3) return String(iso);
+    return `${MONTHS[Number(parts[1]) - 1] || parts[1]} ${Number(parts[2])}`;
+};
+
 const getDateRange = (filter) => {
     const today = new Date();
     let start, end;
-    
+
     if (filter === 'today') {
         start = end = formatDateLocal(today);
     } else if (filter === 'week') {
@@ -56,7 +105,7 @@ const getDateRange = (filter) => {
         start = formatDateLocal(firstDay);
         end = formatDateLocal(lastDay);
     }
-    
+
     return { start, end };
 };
 
@@ -65,13 +114,21 @@ const formatWorkType = (workType) => {
         'tracker': 'Tracker',
         'manual': 'Manual Time',
         'test_task': 'Test Task',
-        'upwork_bidding': 'Upwork Bidding',
+        'upwork_bidding': 'Business development',
         'fixed': 'Fixed Project',
         'office_work': 'Office Work',
-        'outside_of_upwork': 'Outside of Upwork'
+        'outside_of_upwork': 'Other work'
     };
     return types[workType] || workType;
 };
+
+const DATE_PRESETS = [
+    { value: 'all', label: 'All dates' },
+    { value: 'today', label: 'Today' },
+    { value: 'week', label: 'This week' },
+    { value: 'month', label: 'This month' },
+    { value: 'custom', label: 'Custom range' },
+];
 
 const slackFieldOptions = [
     { value: 'client', label: 'Client', description: 'Group entries by client.' },
@@ -81,10 +138,57 @@ const slackFieldOptions = [
     { value: 'user_total', label: 'User total', description: 'Show each person\'s total hours for the selected period.' },
 ];
 
-export default function WorkHoursReport({ 
-    auth, 
-    workHours, 
-    users = [], 
+// ---------------------------------------------------------------------------
+// DEV_SAMPLE — rendered ONLY when `preview` is true. Lets the full Reports page
+// render offline (design review / screenshots) with a mock super-admin. None of
+// this is ever fetched or shown to a real authenticated user.
+// ---------------------------------------------------------------------------
+const SAMPLE_USER = {
+    id: 1,
+    name: 'Jawad',
+    is_super_admin: true,
+    permissions: ['reports.export', 'reports.send_slack'],
+};
+
+const SAMPLE_ROWS = [
+    { id: 1, date: '2026-07-15', user: { name: 'Aqsa Khan' }, client: { name: 'Northwind Co.' }, work_type: 'tracker', tracker: 'primary-01', source: 'tracker', hours: 6.75, entry_count: 3, description: 'Dashboard layout · API wiring · QA pass' },
+    { id: 2, date: '2026-07-15', user: { name: 'Bilal Ahmed' }, client: { name: 'Acme Studio' }, work_type: 'manual', tracker: null, source: 'manual', hours: 2.5, entry_count: 1, description: 'Client call and notes' },
+    { id: 3, date: '2026-07-16', user: { name: 'Aqsa Khan' }, client: { name: 'Acme Studio' }, work_type: 'tracker', tracker: 'primary-01', source: 'tracker', hours: 7.25, entry_count: 4, description: 'Checkout flow refinements' },
+    { id: 4, date: '2026-07-16', user: { name: 'Sana Malik' }, client: null, work_type: 'upwork_bidding', tracker: 'bd-team', source: 'manual', hours: 1.75, entry_count: 2, description: 'Proposals and outreach' },
+    { id: 5, date: '2026-07-17', user: { name: 'Bilal Ahmed' }, client: { name: 'Northwind Co.' }, work_type: 'tracker', tracker: 'primary-02', source: 'tracker', hours: 5.5, entry_count: 2, description: 'Bug triage' },
+    { id: 6, date: '2026-07-17', user: { name: 'Aqsa Khan' }, client: { name: 'Globex' }, work_type: 'fixed', tracker: null, source: 'manual', hours: 3.0, entry_count: 1, description: 'Fixed-scope landing page' },
+    { id: 7, date: '2026-07-18', user: { name: 'Sana Malik' }, client: { name: 'Acme Studio' }, work_type: 'tracker', tracker: 'primary-01', source: 'tracker', hours: 8.0, entry_count: 5, description: 'Reporting module build-out' },
+    { id: 8, date: '2026-07-18', user: { name: 'Bilal Ahmed' }, client: { name: 'Globex' }, work_type: 'office_work', tracker: null, source: 'manual', hours: 2.0, entry_count: 1, description: 'Standup and planning' },
+    { id: 9, date: '2026-07-19', user: { name: 'Aqsa Khan' }, client: { name: 'Northwind Co.' }, work_type: 'tracker', tracker: 'primary-02', source: 'tracker', hours: 6.0, entry_count: 3, description: 'Settings screens' },
+    { id: 10, date: '2026-07-20', user: { name: 'Sana Malik' }, client: { name: 'Northwind Co.' }, work_type: 'tracker', tracker: 'primary-01', source: 'tracker', hours: 7.5, entry_count: 4, description: 'Analytics polish and review' },
+];
+
+const DEV_SAMPLE = {
+    user: SAMPLE_USER,
+    workHours: {
+        data: SAMPLE_ROWS,
+        from: 1,
+        to: SAMPLE_ROWS.length,
+        total: SAMPLE_ROWS.length,
+        links: [],
+    },
+    filterOptions: {
+        workTypes: ['tracker', 'manual', 'test_task', 'upwork_bidding', 'fixed', 'office_work', 'outside_of_upwork'],
+        users: [
+            { id: 1, name: 'Aqsa Khan', include_in_slack_reports: true },
+            { id: 2, name: 'Bilal Ahmed', include_in_slack_reports: true },
+            { id: 3, name: 'Sana Malik', include_in_slack_reports: true },
+        ],
+        clients: ['Acme Studio', 'Globex', 'Northwind Co.'],
+        trackers: ['primary-01', 'primary-02', 'bd-team'],
+        designations: ['Developer', 'Designer', 'BD'],
+    },
+};
+
+export default function WorkHoursReport({
+    auth,
+    workHours,
+    users = [],
     flash,
     filter = 'all',
     startDate = null,
@@ -97,14 +201,25 @@ export default function WorkHoursReport({
     slackConfigured = false,
     slackWeeklyEnabled = false,
     search = '',
+    preview = false,
 }) {
-    const canExport = auth.user?.is_super_admin || auth.user?.permissions?.includes('reports.export');
-    const canSendSlack = auth.user?.is_super_admin || auth.user?.permissions?.includes('reports.send_slack');
+    // In preview mode synthesize everything so the page renders offline.
+    const user = preview ? DEV_SAMPLE.user : auth?.user;
+    const effectiveWorkHours = preview ? DEV_SAMPLE.workHours : workHours;
+    const effectiveFilterOptions = preview ? DEV_SAMPLE.filterOptions : filterOptions;
+    const effectiveSlackConfigured = preview ? true : slackConfigured;
+    const effectiveSlackWeekly = preview ? true : slackWeeklyEnabled;
+
+    const colorScheme = useColorScheme();
+
+    const canExport = preview || user?.is_super_admin || user?.permissions?.includes('reports.export');
+    const canSendSlack = preview || user?.is_super_admin || user?.permissions?.includes('reports.send_slack');
+
     const [toast, setToast] = useState(flash?.success || flash?.error || '');
     const [toastType, setToastType] = useState(flash?.success ? 'success' : 'error');
     const [dateFilter, setDateFilter] = useState(filter);
-    const [customStartDate, setCustomStartDate] = useState(startDate ? new Date(startDate) : null);
-    const [customEndDate, setCustomEndDate] = useState(endDate ? new Date(endDate) : null);
+    const [customStartDate, setCustomStartDate] = useState(startDate || '');
+    const [customEndDate, setCustomEndDate] = useState(endDate || '');
     const [selectedUsers, setSelectedUsers] = useState(selectedFilters.userIds || (userId !== 'all' ? [String(userId)] : []));
     const [selectedWorkTypes, setSelectedWorkTypes] = useState(selectedFilters.workTypes || (workType !== 'all' ? [workType] : []));
     const [selectedClients, setSelectedClients] = useState(selectedFilters.clients || (client !== 'all' ? [client] : []));
@@ -131,28 +246,28 @@ export default function WorkHoursReport({
         }
     }, [flash]);
 
-    const userOptions = (filterOptions.users || users || []).map((user) => ({
-        value: String(user.id),
-        label: user.name,
-        includedByDefault: user.include_in_slack_reports ?? true,
+    const userOptions = (effectiveFilterOptions.users || users || []).map((u) => ({
+        value: String(u.id),
+        label: u.name,
+        includedByDefault: u.include_in_slack_reports ?? true,
     }));
 
-    const workTypeOptions = (filterOptions.workTypes || []).map((type) => ({
+    const workTypeOptions = (effectiveFilterOptions.workTypes || []).map((type) => ({
         value: type,
         label: formatWorkType(type),
     }));
 
-    const clientOptions = (filterOptions.clients || []).map((clientName) => ({
+    const clientOptions = (effectiveFilterOptions.clients || []).map((clientName) => ({
         value: clientName,
         label: clientName,
     }));
 
-    const trackerOptions = (filterOptions.trackers || []).map((tracker) => ({
+    const trackerOptions = (effectiveFilterOptions.trackers || []).map((tracker) => ({
         value: tracker,
         label: tracker,
     }));
 
-    const designationOptions = (filterOptions.designations || []).map((designation) => ({
+    const designationOptions = (effectiveFilterOptions.designations || []).map((designation) => ({
         value: designation,
         label: designation,
     }));
@@ -181,8 +296,8 @@ export default function WorkHoursReport({
         if (currentDesignations.length) params.designations = currentDesignations;
 
         if (currentDateFilter === 'custom' && currentStartDate && currentEndDate) {
-            params.startDate = formatDateLocal(currentStartDate);
-            params.endDate = formatDateLocal(currentEndDate);
+            params.startDate = currentStartDate;
+            params.endDate = currentEndDate;
         } else if (currentDateFilter !== 'all' && currentDateFilter !== 'custom') {
             const range = getDateRange(currentDateFilter);
             params.startDate = range.start;
@@ -194,6 +309,7 @@ export default function WorkHoursReport({
 
     // Apply filters with optional parameter overrides
     const applyFilters = (overrides = {}) => {
+        if (preview) return;
         router.get(route('work-hours.report'), buildFilterParams(overrides), {
             preserveState: true,
             preserveScroll: true,
@@ -202,15 +318,16 @@ export default function WorkHoursReport({
 
     const clearFilters = () => {
         setDateFilter('all');
-        setCustomStartDate(null);
-        setCustomEndDate(null);
+        setCustomStartDate('');
+        setCustomEndDate('');
         setSelectedUsers([]);
         setSelectedWorkTypes([]);
         setSelectedClients([]);
         setSelectedTrackers([]);
         setSelectedDesignations([]);
         setSearchTerm('');
-        
+
+        if (preview) return;
         router.get(route('work-hours.report'));
     };
 
@@ -237,9 +354,9 @@ export default function WorkHoursReport({
             applyFilters({ selectedDesignations: next });
         } else if (type === 'date') {
             setDateFilter('all');
-            setCustomStartDate(null);
-            setCustomEndDate(null);
-            applyFilters({ dateFilter: 'all', customStartDate: null, customEndDate: null });
+            setCustomStartDate('');
+            setCustomEndDate('');
+            applyFilters({ dateFilter: 'all', customStartDate: '', customEndDate: '' });
         }
     };
 
@@ -250,7 +367,7 @@ export default function WorkHoursReport({
             ? [{
                 key: 'date',
                 label: dateFilter === 'custom' && customStartDate && customEndDate
-                    ? `Date: ${formatDateLocal(customStartDate)} to ${formatDateLocal(customEndDate)}`
+                    ? `Date: ${customStartDate} to ${customEndDate}`
                     : `Date: ${dateFilter === 'week' ? 'This Week' : dateFilter === 'month' ? 'This Month' : 'Today'}`,
                 onRemove: () => removeFilterValue('date'),
             }]
@@ -286,7 +403,25 @@ export default function WorkHoursReport({
         setIsExporting(true);
         setToast('Preparing export data...');
         setToastType('success');
-        
+
+        if (preview) {
+            const exportData = SAMPLE_ROWS.map((entry) => ({
+                'Date': entry.date,
+                'User': entry.user?.name || 'N/A',
+                'Client': entry.client?.name || 'No Client',
+                'Work Type': formatWorkType(entry.work_type),
+                'Tracker': entry.tracker,
+                'Source': entry.source === 'tracker' ? 'Auto' : 'Logged',
+                'Hours': timeFormat(entry.hours),
+                'Description': entry.description || '',
+            }));
+            exportRowsToCsv(exportData, `work-hours-report-${new Date().toISOString().split('T')[0]}.csv`);
+            setToast(`Successfully exported ${exportData.length} entries to CSV`);
+            setToastType('success');
+            setIsExporting(false);
+            return;
+        }
+
         try {
             const params = buildFilterParams();
             const query = new URLSearchParams();
@@ -300,7 +435,7 @@ export default function WorkHoursReport({
             });
 
             const queryString = query.toString();
-            const url = queryString 
+            const url = queryString
                 ? `${route('work-hours.export')}?${queryString}`
                 : route('work-hours.export');
 
@@ -343,7 +478,7 @@ export default function WorkHoursReport({
                 }));
 
             exportRowsToCsv(exportData, `work-hours-report-${new Date().toISOString().split('T')[0]}.csv`);
-            
+
             setToast(`Successfully exported ${exportData.length} entries to CSV`);
             setToastType('success');
         } catch (error) {
@@ -357,8 +492,8 @@ export default function WorkHoursReport({
 
     const openSlackDialog = () => {
         if (dateFilter === 'custom' && customStartDate && customEndDate) {
-            setSlackStartDate(formatDateLocal(customStartDate));
-            setSlackEndDate(formatDateLocal(customEndDate));
+            setSlackStartDate(customStartDate);
+            setSlackEndDate(customEndDate);
         } else if (dateFilter !== 'all' && dateFilter !== 'custom') {
             const range = getDateRange(dateFilter);
             setSlackStartDate(range.start);
@@ -382,6 +517,13 @@ export default function WorkHoursReport({
     };
 
     const sendToSlack = () => {
+        if (preview) {
+            setShowSlackDialog(false);
+            setToast('Report sent to Slack.');
+            setToastType('success');
+            return;
+        }
+
         setIsSendingSlack(true);
 
         router.post(route('work-hours.slack'), {
@@ -411,7 +553,7 @@ export default function WorkHoursReport({
     };
 
     // Filter data based on search
-    const filteredData = workHours?.data?.filter(entry => {
+    const filteredData = effectiveWorkHours?.data?.filter(entry => {
         if (!searchTerm) return true;
         const search = searchTerm.toLowerCase();
         return (
@@ -428,76 +570,114 @@ export default function WorkHoursReport({
     const uniqueUsers = new Set(filteredData.map(entry => entry.user?.name).filter(Boolean)).size;
     const uniqueClientsCount = new Set(filteredData.map(entry => entry.client?.name).filter(Boolean)).size;
 
-    return (
-        <AuthenticatedLayout user={auth.user}>
-            <Head title="Work Hours Report" />
-            
-            {toast && <Toast message={toast} type={toastType} onClose={() => setToast('')} />}
-            
-            <PageShell>
-                    <PageHeader
-                        title="Work Hours Report"
-                        description="Review and export team work hours."
-                        actions={(
-                            <>
-                                {canSendSlack && (
-                                    <button
-                                        type="button"
-                                        onClick={openSlackDialog}
-                                        className="inline-flex items-center rounded-lg border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-slate-200 shadow-sm hover:bg-slate-800"
-                                    >
-                                        <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                            <path d="M6.5 14.5a2 2 0 11-2-2h2v2zm1 0a2 2 0 114 0v5a2 2 0 11-4 0v-5zm2-8a2 2 0 112-2v2h-2zm0 1a2 2 0 110 4h-5a2 2 0 110-4h5zm8 2a2 2 0 112 2h-2v-2zm-1 0a2 2 0 11-4 0v-5a2 2 0 114 0v5zm-2 8a2 2 0 11-2 2v-2h2zm0-1a2 2 0 110-4h5a2 2 0 110 4h-5z" />
-                                        </svg>
-                                        Send to Slack
-                                    </button>
-                                )}
-                                {canExport && (
-                                    <button
-                                        onClick={exportToCSV}
-                                        disabled={isExporting}
-                                        className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-slate-400"
-                                    >
-                                        <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                        {isExporting ? 'Exporting...' : 'Export CSV'}
-                                    </button>
-                                )}
-                            </>
-                        )}
-                    />
+    // Trend series — total hours per day across the rows currently shown. Derived
+    // straight from the report data; when nothing is derivable, TrendChart falls
+    // back to its own empty state (we never synthesize points).
+    const trendSeries = useMemo(() => {
+        const byDate = new Map();
+        filteredData.forEach((entry) => {
+            const day = String(entry.date || '').slice(0, 10);
+            if (!day) return;
+            byDate.set(day, (byDate.get(day) || 0) + Number(entry.hours || 0));
+        });
+        return Array.from(byDate.entries())
+            .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+            .map(([day, hours]) => ({ label: shortDate(day), value: Number(hours.toFixed(2)) }));
+    }, [filteredData]);
 
-                    {/* Filters & Actions Card */}
-                    <div className="rounded-lg border border-slate-800 bg-slate-900 p-3 shadow-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex flex-wrap gap-2">
-                                <button
-                                    onClick={() => setShowFilters(!showFilters)}
-                                    className={`inline-flex items-center rounded-lg px-3 py-2 text-sm font-semibold transition ${showFilters ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white' : 'bg-white/10 text-slate-300 hover:bg-white/20'}`}
-                                >
-                                    <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+    const trendAvg = trendSeries.length > 1
+        ? Number((trendSeries.reduce((s, p) => s + p.value, 0) / trendSeries.length).toFixed(1))
+        : undefined;
+
+    return (
+        <AuthenticatedLayout user={user} header="Work Hours Report">
+            <Head title="Work Hours Report" />
+
+            {toast && <Toast message={toast} type={toastType} onClose={() => setToast('')} />}
+
+            <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+                {/* Toolbar — one primary action (Export), the rest secondary. */}
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <p className="text-sm text-muted">Review, chart, and export team work hours.</p>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        {canSendSlack && (
+                            <Button
+                                variant="secondary"
+                                onClick={openSlackDialog}
+                                icon={(
+                                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                        <path d="M6.5 14.5a2 2 0 11-2-2h2v2zm1 0a2 2 0 114 0v5a2 2 0 11-4 0v-5zm2-8a2 2 0 112-2v2h-2zm0 1a2 2 0 110 4h-5a2 2 0 110-4h5zm8 2a2 2 0 112 2h-2v-2zm-1 0a2 2 0 11-4 0v-5a2 2 0 114 0v5zm-2 8a2 2 0 11-2 2v-2h2zm0-1a2 2 0 110-4h5a2 2 0 110 4h-5z" />
                                     </svg>
-                                    {showFilters ? 'Hide Filters' : 'Show Filters'}
-                                </button>
+                                )}
+                            >
+                                Send to Slack
+                            </Button>
+                        )}
+                        {canExport && (
+                            <Button
+                                onClick={exportToCSV}
+                                loading={isExporting}
+                                icon={(
+                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                )}
+                            >
+                                {isExporting ? 'Exporting...' : 'Export CSV'}
+                            </Button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Stats */}
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                    <StatCard label="Total hours" value={timeFormat(totalHours.toFixed(2))} hint="Across the rows shown" />
+                    <StatCard label="Entries" value={totalEntries} hint="Grouped rows on this page" />
+                    <StatCard label="People" value={uniqueUsers} hint="Distinct team members" />
+                    <StatCard label="Clients" value={uniqueClientsCount} hint="Distinct clients" />
+                </div>
+
+                {/* Trend chart */}
+                <Card
+                    header={(
+                        <CardHeader
+                            title="Hours trend"
+                            description="Total hours per day across the entries shown below."
+                        />
+                    )}
+                >
+                    <TrendChart data={trendSeries} avg={trendAvg} unit="h" height={240} />
+                </Card>
+
+                {/* Filters & Actions Card */}
+                <Card padded={false}>
+                    <div className="p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                    variant={showFilters ? 'primary' : 'secondary'}
+                                    size="sm"
+                                    onClick={() => setShowFilters(!showFilters)}
+                                    icon={(
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                        </svg>
+                                    )}
+                                >
+                                    {showFilters ? 'Hide filters' : 'Show filters'}
+                                </Button>
 
                                 {activeFilterChips.length > 0 && (
-                                    <button
-                                        onClick={clearFilters}
-                                        className="inline-flex items-center px-4 py-2 bg-slate-500 hover:bg-slate-600 text-body rounded-xl font-medium transition-all"
-                                    >
-                                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                        Clear Filters
-                                    </button>
+                                    <Button variant="ghost" size="sm" onClick={clearFilters}>
+                                        Clear filters
+                                    </Button>
                                 )}
                             </div>
 
                             {/* Search */}
                             <div className="relative w-full sm:w-72 lg:w-80">
-                                <input
+                                <Input
                                     type="text"
                                     placeholder="Search report..."
                                     value={searchTerm}
@@ -511,9 +691,9 @@ export default function WorkHoursReport({
                                             applyFilters({ searchTerm: value });
                                         }, 400);
                                     }}
-                                    className="w-full pl-10 pr-4 py-2 border border-slate-700 bg-slate-900 rounded-lg text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                    className="pl-10"
                                 />
-                                <svg className="w-5 h-5 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                 </svg>
                             </div>
@@ -521,66 +701,57 @@ export default function WorkHoursReport({
 
                         {/* Filters Panel */}
                         {showFilters && (
-                            <div className="mt-3 space-y-3 border-t border-slate-800 pt-3">
+                            <div className="mt-4 space-y-4 border-t border-line pt-4">
                                 {/* Date Range */}
-                                <div>
-                                    <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-600">Date Range</label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {['all', 'today', 'week', 'month', 'custom'].map(filter => (
-                                            <button
-                                                key={filter}
-                                                type="button"
-                                                onClick={() => {
-                                                    setDateFilter(filter);
-                                                    if (filter !== 'custom') {
-                                                        // Apply filters immediately with the new filter value
-                                                        applyFilters({ dateFilter: filter });
-                                                    }
-                                                }}
-                                                className={`rounded-lg px-3 py-2 text-sm font-medium capitalize transition ${
-                                                    dateFilter === filter
-                                                        ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white'
-                                                        : 'bg-white/10 text-slate-300 hover:bg-white/20'
-                                                }`}
-                                            >
-                                                {filter === 'all' ? 'All Dates' : filter === 'week' ? 'This Week' : filter === 'month' ? 'This Month' : filter}
-                                            </button>
-                                        ))}
-                                    </div>
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                    <Field label="Date range">
+                                        <Select
+                                            value={dateFilter}
+                                            onChange={(e) => {
+                                                const value = e.target.value;
+                                                setDateFilter(value);
+                                                if (value !== 'custom') {
+                                                    applyFilters({ dateFilter: value });
+                                                }
+                                            }}
+                                        >
+                                            {DATE_PRESETS.map((preset) => (
+                                                <option key={preset.value} value={preset.value}>{preset.label}</option>
+                                            ))}
+                                        </Select>
+                                    </Field>
 
                                     {dateFilter === 'custom' && (
-                                        <div className="flex flex-wrap gap-4 mt-4">
-                                            <div>
-                                                <label className="block text-sm text-slate-400 mb-1">Start Date</label>
-                                                <DatePicker
-                                                    selected={customStartDate}
-                                                    onChange={(date) => setCustomStartDate(date)}
-                                                    maxDate={customEndDate || new Date()}
-                                                    className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                                                    dateFormat="yyyy-MM-dd"
+                                        <>
+                                            <Field label="Start date">
+                                                <Input
+                                                    type="date"
+                                                    value={customStartDate}
+                                                    max={customEndDate || undefined}
+                                                    onChange={(e) => setCustomStartDate(e.target.value)}
+                                                    style={{ colorScheme }}
                                                 />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm text-slate-400 mb-1">End Date</label>
-                                                <DatePicker
-                                                    selected={customEndDate}
-                                                    onChange={(date) => setCustomEndDate(date)}
-                                                    minDate={customStartDate}
-                                                    maxDate={new Date()}
-                                                    className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                                                    dateFormat="yyyy-MM-dd"
+                                            </Field>
+                                            <Field label="End date">
+                                                <Input
+                                                    type="date"
+                                                    value={customEndDate}
+                                                    min={customStartDate || undefined}
+                                                    onChange={(e) => setCustomEndDate(e.target.value)}
+                                                    style={{ colorScheme }}
                                                 />
-                                            </div>
+                                            </Field>
                                             <div className="flex items-end">
-                                                <button
-                                                    type="button"
-                                                    onClick={applyFilters}
-                                                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-body rounded-lg font-medium transition-all"
+                                                <Button
+                                                    variant="secondary"
+                                                    onClick={() => applyFilters()}
+                                                    disabled={!customStartDate || !customEndDate}
+                                                    block
                                                 >
-                                                    Apply
-                                                </button>
+                                                    Apply range
+                                                </Button>
                                             </div>
-                                        </div>
+                                        </>
                                     )}
                                 </div>
 
@@ -646,248 +817,247 @@ export default function WorkHoursReport({
                             </div>
                         )}
 
-                        <ActiveFilterChips chips={activeFilterChips} onClearAll={activeFilterChips.length ? clearFilters : null} />
-                    </div>
-
-                    {/* Data Table */}
-                    <div className="rounded-lg border border-slate-800 bg-slate-900 shadow-sm overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-slate-800">
-                                <thead className="bg-slate-950">
-                                    <tr>
-                                        <th className="sticky left-0 z-10 whitespace-nowrap bg-slate-950 px-4 py-3 text-left text-xs font-bold uppercase text-body">Date</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase">User</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase">Client</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase">Work Type</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase">Tracker</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase">Source</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase">Hours</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-body uppercase">Description</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-800">
-                                    {filteredData.length === 0 ? (
-                                        <tr>
-                                            <td colSpan="8" className="px-0 py-12 text-center">
-                                                <div className="sticky left-0 flex w-[calc(100vw-4rem)] flex-col items-center px-4 sm:w-auto">
-                                                    <svg className="w-12 h-12 text-slate-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                                    </svg>
-                                                    <h3 className="text-lg font-medium text-body mb-2">No data found</h3>
-                                                    <p className="text-slate-400">Try adjusting your filters</p>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        filteredData.map((entry, index) => (
-                                            <tr key={entry.id} className={`${index % 2 === 0 ? 'bg-slate-900' : 'bg-slate-950/50'} hover:bg-white/5 transition-colors`}>
-                                                <td className="sticky left-0 z-[1] whitespace-nowrap bg-inherit px-4 py-3 text-sm font-medium text-slate-100">{entry.date}</td>
-                                                <td className="px-4 py-3 text-sm text-slate-100">{entry.user?.name || 'N/A'}</td>
-                                                <td className="px-4 py-3 text-sm text-slate-300">{entry.client?.name || 'No Client'}</td>
-                                                <td className="px-4 py-3 text-sm">
-                                                    <span className="inline-flex px-2 py-1 text-xs font-medium bg-purple-500/15 text-purple-300 rounded-full">
-                                                        {formatWorkType(entry.work_type)}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3 text-sm">
-                                                    {entry.tracker ? (
-                                                        <span className="inline-flex px-2 py-1 text-xs font-medium bg-teal-500/15 text-teal-300 rounded-full capitalize">
-                                                            {entry.tracker}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-slate-500">—</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3 text-sm">
-                                                    {entry.source === 'tracker' ? (
-                                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-300" title="Auto-captured from the desktop tracker">
-                                                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                                            Auto
-                                                        </span>
-                                                    ) : (
-                                                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-200" title="Logged by hand in the web app (Add Manual Time)">
-                                                            Logged
-                                                        </span>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3 text-sm font-bold text-emerald-400">
-                                                    {timeFormat(entry.hours)}
-                                                    {entry.entry_count > 1 && (
-                                                        <span className="ml-1.5 rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-semibold text-slate-200" title={`${entry.entry_count} entries merged into this row`}>
-                                                            ×{entry.entry_count}
-                                                        </span>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3 text-sm text-slate-300">
-                                                    <div className="max-w-xs truncate" title={entry.description}>
-                                                        {entry.description || '-'}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                                {filteredData.length > 0 && (
-                                    <tfoot className="bg-slate-950">
-                                        <tr>
-                                            <td colSpan="6" className="px-4 py-3 text-right font-bold text-slate-100">Total:</td>
-                                            <td className="px-4 py-3 font-bold text-emerald-400 text-lg">{timeFormat(totalHours.toFixed(2))}</td>
-                                            <td></td>
-                                        </tr>
-                                    </tfoot>
-                                )}
-                            </table>
-                        </div>
-
-                        {/* Pagination */}
-                        {workHours?.data && workHours.data.length > 0 && (
-                            <div className="p-6 border-t border-slate-800">
-                                <div className="flex justify-between items-center mb-4">
-                                    <div className="text-slate-300 text-sm font-medium">
-                                        Showing {workHours.from || 0} to {workHours.to || 0} of {workHours.total || 0} entries
-                                    </div>
-                                </div>
-                                <TraditionalPagination
-                                    pagination={workHours}
-                                    preserveState={true}
-                                    preserveScroll={false}
-                                    dark
-                                />
+                        {/* Active filter chips — token-driven, theme-aware */}
+                        {activeFilterChips.length > 0 && (
+                            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
+                                {activeFilterChips.map((chip) => (
+                                    <button
+                                        key={chip.key}
+                                        type="button"
+                                        onClick={chip.onRemove}
+                                        title={`Remove ${chip.label}`}
+                                        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-2 px-2.5 py-1 text-xs font-medium text-body transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-app"
+                                    >
+                                        <span>{chip.label}</span>
+                                        <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                                        </svg>
+                                    </button>
+                                ))}
+                                <button
+                                    type="button"
+                                    onClick={clearFilters}
+                                    className="rounded-md px-2.5 py-1 text-xs font-semibold text-accent transition hover:bg-accent/10"
+                                >
+                                    Clear all
+                                </button>
                             </div>
                         )}
                     </div>
-            </PageShell>
+                </Card>
 
-            {showSlackDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-                    <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-lg border border-slate-200 bg-white shadow-xl">
-                        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
-                            <div>
-                                <h2 className="text-lg font-bold text-slate-950">Send report to Slack</h2>
-                                <p className="mt-1 text-sm text-slate-600">Choose the people and details included in this report.</p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowSlackDialog(false)}
-                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                                title="Close"
-                            >
-                                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                {/* Data Table */}
+                <Card padded={false} className="overflow-hidden">
+                    {filteredData.length === 0 ? (
+                        <EmptyState
+                            title="No data found"
+                            description="Try adjusting your filters or widening the date range."
+                            icon={(
+                                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.75}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                 </svg>
-                            </button>
-                        </div>
+                            )}
+                        />
+                    ) : (
+                        <Table>
+                            <THead>
+                                <Tr>
+                                    <Th>Date</Th>
+                                    <Th>User</Th>
+                                    <Th>Client</Th>
+                                    <Th>Work Type</Th>
+                                    <Th>Tracker</Th>
+                                    <Th>Source</Th>
+                                    <Th className="text-right">Hours</Th>
+                                    <Th>Description</Th>
+                                </Tr>
+                            </THead>
+                            <TBody>
+                                {filteredData.map((entry) => (
+                                    <Tr key={entry.id}>
+                                        <Td className="whitespace-nowrap font-medium text-body">{entry.date}</Td>
+                                        <Td className="whitespace-nowrap">{entry.user?.name || 'N/A'}</Td>
+                                        <Td className="text-muted">{entry.client?.name || 'No Client'}</Td>
+                                        <Td>
+                                            <Badge tone="info">{formatWorkType(entry.work_type)}</Badge>
+                                        </Td>
+                                        <Td>
+                                            {entry.tracker ? (
+                                                <Badge tone="accent" className="capitalize">{entry.tracker}</Badge>
+                                            ) : (
+                                                <span className="text-subtle">—</span>
+                                            )}
+                                        </Td>
+                                        <Td>
+                                            {entry.source === 'tracker' ? (
+                                                <Badge tone="success" dot title="Auto-captured from the desktop tracker">Auto</Badge>
+                                            ) : (
+                                                <Badge tone="warning" title="Logged by hand in the web app (Add Manual Time)">Logged</Badge>
+                                            )}
+                                        </Td>
+                                        <Td className="text-right">
+                                            <span className="font-semibold tabular-nums text-success">{timeFormat(entry.hours)}</span>
+                                            {entry.entry_count > 1 && (
+                                                <Badge tone="neutral" className="ml-1.5" title={`${entry.entry_count} entries merged into this row`}>
+                                                    ×{entry.entry_count}
+                                                </Badge>
+                                            )}
+                                        </Td>
+                                        <Td className="text-muted">
+                                            <div className="max-w-xs truncate" title={entry.description}>
+                                                {entry.description || '-'}
+                                            </div>
+                                        </Td>
+                                    </Tr>
+                                ))}
+                            </TBody>
+                            <tfoot className="border-t border-line bg-surface-2/40">
+                                <tr>
+                                    <td colSpan="6" className="px-4 py-3 text-right font-semibold text-body">Total</td>
+                                    <td className="px-4 py-3 text-right text-base font-bold tabular-nums text-success">{timeFormat(totalHours.toFixed(2))}</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </Table>
+                    )}
 
-                        <div className="space-y-5 overflow-y-auto px-5 py-4">
-                            <div className={`rounded-lg border px-3 py-2 text-sm ${
-                                slackConfigured
-                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                                    : 'border-amber-200 bg-amber-50 text-amber-800'
-                            }`}>
-                                {slackConfigured ? 'Slack webhook connected.' : 'Slack webhook is not configured.'}
-                                {slackWeeklyEnabled && ' Automatic reports run Sundays at 10:00 AM Pakistan time.'}
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <div>
-                                    <label htmlFor="slack-start-date" className="mb-1.5 block text-sm font-semibold text-slate-700">Start date</label>
-                                    <input
-                                        id="slack-start-date"
-                                        type="date"
-                                        value={slackStartDate}
-                                        max={slackEndDate}
-                                        onChange={(event) => setSlackStartDate(event.target.value)}
-                                        className="w-full rounded-lg border-slate-300 text-slate-900 focus:border-blue-500 focus:ring-blue-500"
-                                    />
-                                </div>
-                                <div>
-                                    <label htmlFor="slack-end-date" className="mb-1.5 block text-sm font-semibold text-slate-700">End date</label>
-                                    <input
-                                        id="slack-end-date"
-                                        type="date"
-                                        value={slackEndDate}
-                                        min={slackStartDate}
-                                        onChange={(event) => setSlackEndDate(event.target.value)}
-                                        className="w-full rounded-lg border-slate-300 text-slate-900 focus:border-blue-500 focus:ring-blue-500"
-                                    />
-                                </div>
-                            </div>
-
-                            <SearchableMultiSelect
-                                label="Users to include"
-                                options={userOptions}
-                                selectedValues={slackUserIds}
-                                onChange={setSlackUserIds}
-                                placeholder="Select users"
-                                searchPlaceholder="Search users..."
+                    {/* Pagination */}
+                    {effectiveWorkHours?.data && effectiveWorkHours.data.length > 0 && (
+                        <div className="border-t border-line p-4">
+                            <TraditionalPagination
+                                pagination={effectiveWorkHours}
+                                preserveState={true}
+                                preserveScroll={false}
+                                dark
                             />
+                        </div>
+                    )}
+                </Card>
+            </div>
 
-                            <fieldset>
-                                <legend className="text-sm font-semibold text-slate-800">Data to include</legend>
-                                <p className="mt-1 text-sm text-slate-600">
-                                    User names are always shown. Select at least one additional field.
-                                </p>
-                                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                    {slackFieldOptions.map((field) => {
-                                        const checked = slackFields.includes(field.value);
+            {/* Slack modal — rebuilt on the kit Modal, token-driven, theme-aware */}
+            <Modal show={showSlackDialog} onClose={() => setShowSlackDialog(false)} maxWidth="2xl">
+                <div className="flex max-h-[85vh] flex-col">
+                    <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
+                        <div>
+                            <h2 className="text-lg font-semibold text-body">Send report to Slack</h2>
+                            <p className="mt-1 text-sm text-muted">Choose the people and details included in this report.</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowSlackDialog(false)}
+                            className="rounded-lg p-2 text-muted transition hover:bg-surface-2 hover:text-body"
+                            title="Close"
+                        >
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
 
-                                        return (
-                                            <label
-                                                key={field.value}
-                                                className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition ${
-                                                    checked
-                                                        ? 'border-blue-300 bg-blue-50'
-                                                        : 'border-slate-200 bg-white hover:border-slate-300'
-                                                }`}
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={checked}
-                                                    onChange={() => toggleSlackField(field.value)}
-                                                    className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                                />
-                                                <span>
-                                                    <span className="block text-sm font-semibold text-slate-900">{field.label}</span>
-                                                    <span className="mt-0.5 block text-xs leading-5 text-slate-600">{field.description}</span>
-                                                </span>
-                                            </label>
-                                        );
-                                    })}
-                                </div>
-                            </fieldset>
+                    <div className="space-y-5 overflow-y-auto px-5 py-4">
+                        <div className={cx(
+                            'rounded-lg px-3 py-2 text-sm',
+                            effectiveSlackConfigured ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning'
+                        )}>
+                            {effectiveSlackConfigured ? 'Slack webhook connected.' : 'Slack webhook is not configured.'}
+                            {effectiveSlackWeekly && ' Automatic reports run Sundays at 10:00 AM Pakistan time.'}
+                        </div>
 
-                            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
-                                Slack will send these choices as table columns. They are independent from the filters on the report page.
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <Field label="Start date" htmlFor="slack-start-date">
+                                <Input
+                                    id="slack-start-date"
+                                    type="date"
+                                    value={slackStartDate}
+                                    max={slackEndDate}
+                                    onChange={(event) => setSlackStartDate(event.target.value)}
+                                    style={{ colorScheme }}
+                                />
+                            </Field>
+                            <Field label="End date" htmlFor="slack-end-date">
+                                <Input
+                                    id="slack-end-date"
+                                    type="date"
+                                    value={slackEndDate}
+                                    min={slackStartDate}
+                                    onChange={(event) => setSlackEndDate(event.target.value)}
+                                    style={{ colorScheme }}
+                                />
+                            </Field>
+                        </div>
+
+                        <SearchableMultiSelect
+                            label="Users to include"
+                            options={userOptions}
+                            selectedValues={slackUserIds}
+                            onChange={setSlackUserIds}
+                            placeholder="Select users"
+                            searchPlaceholder="Search users..."
+                            inline
+                        />
+
+                        <fieldset>
+                            <legend className="text-sm font-medium text-body">Data to include</legend>
+                            <p className="mt-1 text-sm text-muted">
+                                User names are always shown. Select at least one additional field.
                             </p>
-                        </div>
+                            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                {slackFieldOptions.map((field) => {
+                                    const checked = slackFields.includes(field.value);
 
-                        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
-                            <button
-                                type="button"
-                                onClick={() => setShowSlackDialog(false)}
-                                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={sendToSlack}
-                                disabled={
-                                    !slackConfigured
-                                    || isSendingSlack
-                                    || !slackStartDate
-                                    || !slackEndDate
-                                    || slackUserIds.length === 0
-                                    || slackFields.length === 0
-                                }
-                                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                            >
-                                {isSendingSlack ? 'Sending...' : 'Send report'}
-                            </button>
-                        </div>
+                                    return (
+                                        <label
+                                            key={field.value}
+                                            className={cx(
+                                                'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition',
+                                                checked
+                                                    ? 'border-accent bg-accent/10'
+                                                    : 'border-line bg-surface-2 hover:border-accent/50'
+                                            )}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={() => toggleSlackField(field.value)}
+                                                className="mt-0.5 h-4 w-4 rounded border-line bg-surface-2 text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-app"
+                                            />
+                                            <span>
+                                                <span className="block text-sm font-medium text-body">{field.label}</span>
+                                                <span className="mt-0.5 block text-xs leading-5 text-muted">{field.description}</span>
+                                            </span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </fieldset>
+
+                        <p className="rounded-lg bg-surface-2 px-3 py-2 text-xs leading-5 text-muted">
+                            Slack will send these choices as table columns. They are independent from the filters on the report page.
+                        </p>
+                    </div>
+
+                    <div className="flex justify-end gap-2 border-t border-line px-5 py-4">
+                        <Button variant="secondary" onClick={() => setShowSlackDialog(false)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={sendToSlack}
+                            loading={isSendingSlack}
+                            disabled={
+                                !effectiveSlackConfigured
+                                || isSendingSlack
+                                || !slackStartDate
+                                || !slackEndDate
+                                || slackUserIds.length === 0
+                                || slackFields.length === 0
+                            }
+                        >
+                            {isSendingSlack ? 'Sending...' : 'Send report'}
+                        </Button>
                     </div>
                 </div>
-            )}
+            </Modal>
         </AuthenticatedLayout>
     );
 }

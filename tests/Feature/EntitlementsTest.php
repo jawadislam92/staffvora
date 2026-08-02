@@ -5,15 +5,34 @@ namespace Tests\Feature;
 use App\Models\Organization;
 use App\Models\Plan;
 use App\Models\Subscription;
+use App\Models\TrackingScreenshot;
+use App\Models\TrackingSession;
 use App\Models\User;
 use App\Services\TenantProvisioner;
 use App\Tenancy\CurrentOrganization;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Storage;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class EntitlementsTest extends TestCase
 {
     use RefreshDatabase;
+
+    /**
+     * The entitlement refusal now renders the Upgrade/Locked Inertia page, a NEW
+     * page component that is not in the committed Vite manifest until the next
+     * asset build. These tests assert the SERVER decision, not the bundle, so
+     * stub Vite out rather than making the suite depend on a build step.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->withoutVite();
+    }
 
     /** Put an org on a named plan (active subscription). */
     private function onPlan(Organization $org, string $planKey): void
@@ -31,23 +50,36 @@ class EntitlementsTest extends TestCase
         Plan::ensureSeeded();
         $org = Organization::create(['name' => 'Cap Co', 'slug' => 'cap-co']);
 
+        // Free is time tracking only — no monitoring at all.
         $this->onPlan($org, 'free');
-        $this->assertSame(6, $org->entitlement('max_screenshots_per_hour'));
+        $this->assertSame(0, $org->entitlement('max_screenshots_per_hour'));
         $this->assertSame(10, $org->entitlement('min_auto_pause_minutes'));
-        $this->assertTrue($org->can('monitoring'));   // free now gets capped monitoring
+        $this->assertFalse($org->can('monitoring'));
         $this->assertFalse($org->can('activity_tracking'));
         $this->assertFalse($org->can('ai'));
-        $this->assertSame(3, $org->seatLimit());
+        $this->assertSame(2, $org->seatLimit());
 
+        // Screenshots + activity start at Starter, but app/URL tracking does not.
+        $this->onPlan($org, 'starter');
+        $this->assertSame(12, $org->entitlement('max_screenshots_per_hour'));
+        $this->assertTrue($org->can('monitoring'));
+        $this->assertTrue($org->can('activity_tracking'));
+        $this->assertFalse($org->can('app_url_tracking'));
+        $this->assertFalse($org->can('white_label'));
+        $this->assertSame(10, $org->seatLimit());
+
+        // Growth (key `pro` — nothing may branch on the key).
         $this->onPlan($org, 'pro');
         $this->assertSame(30, $org->entitlement('max_screenshots_per_hour'));
         $this->assertSame(1, $org->entitlement('min_auto_pause_minutes'));
+        $this->assertTrue($org->can('app_url_tracking'));
         $this->assertTrue($org->can('ai'));
         $this->assertTrue($org->can('white_label'));
         $this->assertSame(50, $org->seatLimit());
 
         $this->onPlan($org, 'enterprise');
         $this->assertNull($org->seatLimit()); // unlimited (explicit null, not deny-default)
+        $this->assertNull($org->entitlement('max_retention_days'));
     }
 
     public function test_no_plan_is_default_deny(): void
@@ -78,7 +110,7 @@ class EntitlementsTest extends TestCase
         $this->assertSame(50, $org->entitlement('max_screenshots_per_hour'));
         $this->assertTrue($org->can('ai'));
         // Untouched keys still follow the plan.
-        $this->assertSame(3, $org->seatLimit());
+        $this->assertSame(2, $org->seatLimit());
         $this->assertFalse($org->can('white_label'));
     }
 
@@ -100,7 +132,7 @@ class EntitlementsTest extends TestCase
         $org = Organization::create(['name' => 'Deal Co', 'slug' => 'deal-co']);
         $this->onPlan($org, 'pro');
 
-        $this->assertSame(800, $org->priceCents());
+        $this->assertSame(900, $org->priceCents());
 
         $org->update(['custom_price_cents' => 500]);
         $org->refresh();
@@ -141,18 +173,37 @@ class EntitlementsTest extends TestCase
         return $owner;
     }
 
-    public function test_free_org_can_save_within_plan(): void
+    /** Starter is the cheapest plan that includes monitoring at all (capped at 12/hr). */
+    private function starterOwner(): User
     {
-        $owner = $this->freeOwner();
+        $owner = app(TenantProvisioner::class)->provision('Acme', 'Owner', 'owner@acme.test', 'super-secret-pw')['owner'];
+        $this->onPlan($owner->organization, 'starter');
+
+        return $owner;
+    }
+
+    public function test_starter_org_can_save_within_plan(): void
+    {
+        $owner = $this->starterOwner();
 
         $this->actingAs($owner)
             ->put(route('settings.team.update'), $this->basePayload())
             ->assertSessionHasNoErrors();
     }
 
-    public function test_free_org_rejected_over_screenshot_cap(): void
+    public function test_free_org_cannot_turn_on_monitoring_at_all(): void
     {
         $owner = $this->freeOwner();
+
+        // Free is time tracking only — asking for ANY capture is rejected.
+        $this->actingAs($owner)
+            ->put(route('settings.team.update'), $this->basePayload())
+            ->assertSessionHasErrors('screenshots_per_hour');
+    }
+
+    public function test_starter_org_rejected_over_screenshot_cap(): void
+    {
+        $owner = $this->starterOwner();
 
         $this->actingAs($owner)
             ->put(route('settings.team.update'), $this->basePayload(['screenshots_per_hour' => 20]))
@@ -188,5 +239,96 @@ class EntitlementsTest extends TestCase
         $this->actingAs($owner)
             ->put(route('settings.team.update'), $this->basePayload(['screenshots_per_hour' => 45]))
             ->assertSessionHasErrors('screenshots_per_hour');
+    }
+
+    public function test_free_org_cannot_call_paid_ai_or_activity_endpoints(): void
+    {
+        $owner = $this->freeOwner();
+
+        $this->actingAs($owner)
+            ->get(route('ai.assistant'))
+            ->assertForbidden();
+
+        Sanctum::actingAs($owner, ['desktop-tracker']);
+        $this->postJson(route('desktop.activity.batch'), [])
+            ->assertForbidden()
+            ->assertJsonPath('code', 'feature_not_in_plan')
+            ->assertJsonPath('feature', 'activity_tracking');
+    }
+
+    public function test_desktop_settings_are_clamped_to_the_effective_plan(): void
+    {
+        $owner = $this->freeOwner();
+        Sanctum::actingAs($owner, ['desktop-tracker']);
+
+        $this->getJson(route('desktop.settings'))
+            ->assertOk()
+            // Free grants no monitoring, so the desktop app is clamped to zero.
+            ->assertJsonPath('settings.screenshots_per_hour', 0)
+            ->assertJsonPath('settings.activity_tracking_enabled', false)
+            ->assertJsonPath('settings.app_url_tracking_enabled', false)
+            ->assertJsonPath('settings.slack_connected', false);
+    }
+
+    public function test_screenshot_upload_strips_unentitled_metadata_and_enforces_hourly_cap(): void
+    {
+        Bus::fake();
+        Storage::fake('screenshots');
+        // Starter includes monitoring; the operator has then revoked activity
+        // tracking for this one company and lowered its rate to 6/hour, so this
+        // also proves a per-company override can restrict below the plan.
+        $owner = $this->starterOwner();
+        $owner->organization->update(['entitlement_overrides' => [
+            'activity_tracking' => false,
+            'max_screenshots_per_hour' => 6,
+        ]]);
+        app(CurrentOrganization::class)->set($owner->organization_id);
+        Sanctum::actingAs($owner, ['desktop-tracker']);
+
+        $session = TrackingSession::create([
+            'user_id' => $owner->id,
+            'started_at' => now(),
+            'status' => TrackingSession::STATUS_ACTIVE,
+            'client_uuid' => 'entitlement-cap-session',
+        ]);
+        $capturedAt = now()->startOfHour()->addMinutes(5);
+
+        $this->postJson(route('desktop.screenshots.store'), [
+            'tracking_session_id' => $session->id,
+            'captured_at' => $capturedAt->toIso8601String(),
+            'image' => UploadedFile::fake()->image('first.jpg'),
+            'activity_percent' => 99,
+            'keyboard_count' => 100,
+            'mouse_count' => 200,
+            'active_app' => 'Private App',
+            'active_window_title' => 'Sensitive title',
+            'url_domain' => 'secret.example',
+        ])->assertCreated();
+
+        $stored = TrackingScreenshot::firstOrFail();
+        $this->assertSame(0, $stored->activity_percent);
+        $this->assertSame(0, $stored->keyboard_count);
+        $this->assertSame(0, $stored->mouse_count);
+        $this->assertNull($stored->active_app);
+        $this->assertNull($stored->active_window_title);
+        $this->assertNull($stored->url_domain);
+
+        foreach (range(2, 6) as $minute) {
+            TrackingScreenshot::create([
+                'tracking_session_id' => $session->id,
+                'user_id' => $owner->id,
+                'captured_at' => $capturedAt->copy()->addMinutes($minute),
+                'image_path' => "screenshots/test-{$minute}.jpg",
+            ]);
+        }
+
+        $this->postJson(route('desktop.screenshots.store'), [
+            'tracking_session_id' => $session->id,
+            'captured_at' => $capturedAt->copy()->addMinutes(20)->toIso8601String(),
+            'image' => UploadedFile::fake()->image('seventh.jpg'),
+        ])
+            ->assertStatus(429)
+            ->assertJsonPath('code', 'screenshot_limit_reached')
+            ->assertJsonPath('limit', 6);
     }
 }

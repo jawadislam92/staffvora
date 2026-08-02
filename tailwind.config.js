@@ -42,6 +42,17 @@ export default {
                 subtle: 'var(--text-subtle)',
                 accent: 'var(--accent)',
 
+                // Semantic status tokens (see app.css) — bg-success-soft,
+                // text-danger, border-warning, bg-info, etc.
+                success: 'var(--success)',
+                'success-soft': 'var(--success-soft)',
+                warning: 'var(--warning)',
+                'warning-soft': 'var(--warning-soft)',
+                danger: 'var(--danger)',
+                'danger-soft': 'var(--danger-soft)',
+                info: 'var(--info)',
+                'info-soft': 'var(--info-soft)',
+
                 // Remap the slate/gray scales to per-theme CSS vars (see app.css)
                 // so the ~40 pages built against the original dark palette
                 // re-theme automatically. <alpha-value> keeps `/opacity` working.

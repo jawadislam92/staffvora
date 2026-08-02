@@ -47,6 +47,24 @@ class SlackBotService
     }
 
     /**
+     * Post to a channel, optionally as a reply inside an existing thread.
+     * Returns the new message's `ts` — the anchor later replies thread onto —
+     * or null on failure. Lets a person's whole day (clock-in, breaks, clock-out)
+     * collapse into ONE thread instead of spamming the channel.
+     */
+    public function postToThread(string $channel, string $text, ?string $threadTs = null): ?string
+    {
+        $params = ['channel' => $channel, 'text' => $text];
+        if ($threadTs) {
+            $params['thread_ts'] = $threadTs;
+        }
+
+        $response = $this->api('chat.postMessage', $params);
+
+        return ($response['ok'] ?? false) ? ($response['ts'] ?? null) : null;
+    }
+
+    /**
      * DM a workspace member found by their email. Returns true when the
      * message was delivered; false when the user isn't on Slack with that
      * email or the API call failed.
@@ -104,7 +122,12 @@ class SlackBotService
      */
     private function api(string $method, array $params, bool $get = false): array
     {
-        $token = config('services.slack_bot.token');
+        // MUST go through token(), which prefers the workspace's OWN connected
+        // Slack and only falls back to the platform token. Reading the config
+        // directly here meant a tenant that connected their own Slack looked
+        // connected (configured() consults token()) while every call silently
+        // failed with not_configured.
+        $token = $this->token();
 
         if (! $token) {
             return ['ok' => false, 'error' => 'not_configured'];

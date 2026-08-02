@@ -57,7 +57,7 @@ function ClientPicker({ clients, value, onChange, disabled }) {
         onClick={() => !disabled && setOpen((o) => !o)}
         disabled={disabled}
       >
-        <span className="cp-trigger-label">{selected ? selected.name : 'Select client'}</span>
+        <span className="cp-trigger-label">{selected ? selected.name : 'Select project or client'}</span>
         <span className="cp-caret">▾</span>
       </button>
       {open && (
@@ -66,12 +66,12 @@ function ClientPicker({ clients, value, onChange, disabled }) {
             ref={inputRef}
             className="cp-search"
             value={query}
-            placeholder="Search clients…"
+            placeholder="Search projects or clients…"
             onChange={(e) => { setQuery(e.target.value); setActiveIndex(0); }}
             onKeyDown={onKeyDown}
           />
           <div className="cp-list">
-            {filtered.length === 0 && <div className="cp-empty">No clients match “{query}”.</div>}
+            {filtered.length === 0 && <div className="cp-empty">No work items match “{query}”.</div>}
             {filtered.slice(0, 200).map((client, index) => (
               <button
                 type="button"
@@ -86,7 +86,7 @@ function ClientPicker({ clients, value, onChange, disabled }) {
               >
                 <span className="cp-item-name">{client.name}</span>
                 {client.internal
-                  ? <span className="cp-item-meta">Internal — no client</span>
+                  ? <span className="cp-item-meta">Internal work</span>
                   : client.upwork_profile_name && <span className="cp-item-meta">{client.upwork_profile_name}</span>}
               </button>
             ))}
@@ -119,7 +119,7 @@ function sessionTitle(session, clients) {
   return client?.name || 'Client work';
 }
 
-// The per-entry work type (an Upwork billing category reviewed weekly). For a
+// The per-entry work type. For a
 // "tracker_manual" client the user chooses Tracker or Manual; fixed/outside
 // clients have a single fixed category.
 function workTypeOptions(client) {
@@ -133,13 +133,13 @@ function workTypeOptions(client) {
     case 'fixed':
       return [{ value: 'fixed', label: 'Fixed' }];
     case 'outside_of_upwork':
-      return [{ value: 'outside_of_upwork', label: 'Outside Upwork' }];
+      return [{ value: 'outside_of_upwork', label: 'Other work' }];
     case 'office_work':
       return [{ value: 'office_work', label: 'Office Work' }];
     case 'test_task':
       return [{ value: 'test_task', label: 'Test Task' }];
     case 'upwork_bidding':
-      return [{ value: 'upwork_bidding', label: 'Upwork Bidding' }];
+      return [{ value: 'upwork_bidding', label: 'Business development' }];
     default:
       return [
         { value: 'tracker', label: 'Tracker' },
@@ -154,7 +154,7 @@ function workTypeOptions(client) {
 const INTERNAL_CLIENTS = [
   { id: -1, name: 'Office Work', work_type: 'office_work', internal: true },
   { id: -2, name: 'Test Task', work_type: 'test_task', internal: true },
-  { id: -3, name: 'Upwork Bidding', work_type: 'upwork_bidding', internal: true },
+  { id: -3, name: 'Business Development', work_type: 'upwork_bidding', internal: true },
 ];
 
 // Selectable appearance themes (CSS lives in styles.css under [data-theme]).
@@ -369,10 +369,10 @@ export default function Tracker({ user, apiBaseUrl, onLogout }) {
     tracker: 'Tracker',
     manual: 'Manual',
     fixed: 'Fixed',
-    outside_of_upwork: 'Outside Upwork',
+    outside_of_upwork: 'Other work',
     office_work: 'Office',
     test_task: 'Test task',
-    upwork_bidding: 'Bidding',
+    upwork_bidding: 'Business development',
   };
   const workTypeLabel = (value) => WORK_TYPE_LABELS[value] || value || '—';
 
@@ -582,7 +582,7 @@ export default function Tracker({ user, apiBaseUrl, onLogout }) {
     })();
   }, [prefs.autoStartTracking, clients, status.running]);
 
-  // Web -> desktop deep link (timetracker://start?client_id=X&note=...).
+  // Web -> desktop deep link (tracksuite://start?client_id=X&note=...).
   // Pre-fills the start form; never auto-starts tracking.
   useEffect(() => {
     if (typeof window.tt?.deeplink?.onOpen !== 'function') return undefined;
@@ -683,7 +683,7 @@ export default function Tracker({ user, apiBaseUrl, onLogout }) {
           <div className="who-avatar">{(user?.name || '?').trim().charAt(0).toUpperCase()}</div>
           <div className="who-text">
             <div className="who-eyebrow">Signed in as</div>
-            <h1>{user?.name || 'Timetracker'}</h1>
+            <h1>{user?.name || 'Tracksuite'}</h1>
           </div>
         </div>
         <button className="menu-button" onClick={() => setMenuOpen((open) => !open)} aria-label="Menu">
@@ -698,7 +698,7 @@ export default function Tracker({ user, apiBaseUrl, onLogout }) {
         <div className="drawer-head">
           <span className="drawer-brand">
             <span className="drawer-logo">▶</span>
-            Timetracker
+            Tracksuite
           </span>
           <button className="icon-button" onClick={() => setMenuOpen(false)} aria-label="Close">✕</button>
         </div>
@@ -900,7 +900,7 @@ export default function Tracker({ user, apiBaseUrl, onLogout }) {
                   disabled={busy}
                 />
                 {workTypeChoices.length > 1 && (
-                  <div className="wt-pills" title="Upwork work type for this entry">
+                  <div className="wt-pills" title="Work type for this entry">
                     {workTypeChoices.map((option) => (
                       <button
                         type="button"

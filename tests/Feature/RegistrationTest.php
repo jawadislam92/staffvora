@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Organization;
 use App\Models\Team;
 use App\Models\User;
-use App\Providers\RouteServiceProvider;
 use App\Services\TenantProvisioner;
 use App\Tenancy\CurrentOrganization;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -31,7 +30,8 @@ class RegistrationTest extends TestCase
         ]);
 
         $this->assertAuthenticated();
-        $response->assertRedirect(RouteServiceProvider::HOME);
+        // New owners land in the first-run setup wizard, not a cold dashboard.
+        $response->assertRedirect(route('onboarding.show'));
 
         $org = Organization::where('slug', 'acme-inc')->first();
         $this->assertNotNull($org);

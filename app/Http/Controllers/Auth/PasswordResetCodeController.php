@@ -115,6 +115,6 @@ class PasswordResetCodeController extends Controller
 
     private function appName(): string
     {
-        return config('app.name', 'TimeTracker');
+        return config('app.name', 'Staffvora');
     }
 }

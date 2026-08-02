@@ -34,6 +34,18 @@ const api = {
   appInfo: {
     version: () => ipcRenderer.invoke('app:version'),
   },
+  // Client-side crash reporting. The renderer can only raise an error event
+  // through this one narrow channel; the main process whitelists the event
+  // name, caps the payload and decides whether/when it is uploaded.
+  diagnostics: {
+    report: (payload) => ipcRenderer.invoke('diag:report', {
+      event: payload?.event,
+      message: payload?.message,
+      source: payload?.source,
+      line: payload?.line,
+      stack: payload?.stack,
+    }),
+  },
   timeclock: {
     status: () => ipcRenderer.invoke('timeclock:status'),
     act: (actionType) => ipcRenderer.invoke('timeclock:act', actionType),

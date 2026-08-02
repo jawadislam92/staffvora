@@ -35,7 +35,7 @@ class BlogController extends Controller
                 'next' => $paginator->nextPageUrl(),
             ],
             'meta' => [
-                'title' => 'Blog — '.config('brand.name', 'Tracksuite'),
+                'title' => 'Blog — '.config('brand.name', 'Staffvora'),
                 'description' => 'Guides on time tracking, remote teams and building a humane, productive workplace.',
                 'canonical' => url('/blog'),
                 'robots' => 'index,follow',
@@ -43,7 +43,7 @@ class BlogController extends Controller
             'jsonLd' => [[
                 '@context' => 'https://schema.org',
                 '@type' => 'Blog',
-                'name' => config('brand.name', 'Tracksuite').' Blog',
+                'name' => config('brand.name', 'Staffvora').' Blog',
                 'url' => url('/blog'),
             ]],
         ]);
@@ -76,8 +76,8 @@ class BlogController extends Controller
                 'image' => $post->cover_path ?: null,
                 'datePublished' => optional($post->published_at)->toAtomString(),
                 'dateModified' => $post->updated_at->toAtomString(),
-                'author' => ['@type' => 'Person', 'name' => $post->author_name ?: config('brand.name', 'Tracksuite')],
-                'publisher' => ['@type' => 'Organization', 'name' => config('brand.name', 'Tracksuite')],
+                'author' => ['@type' => 'Person', 'name' => $post->author_name ?: config('brand.name', 'Staffvora')],
+                'publisher' => ['@type' => 'Organization', 'name' => config('brand.name', 'Staffvora')],
                 'mainEntityOfPage' => $post->url(),
             ]],
         ]);

@@ -67,9 +67,9 @@ class StaffController extends Controller
         // real SMTP is configured this delivers a proper invitation email.
         try {
             Mail::raw(
-                "You've been invited to the Tracksuite operator portal as {$invite->role}.\n\n".
+                "You've been invited to the Staffvora operator portal as {$invite->role}.\n\n".
                 "Accept and set your password:\n{$invite->acceptUrl()}\n\nThis link expires in 7 days.",
-                fn ($m) => $m->to($invite->email)->subject('Your Tracksuite operator invitation')
+                fn ($m) => $m->to($invite->email)->subject('Your Staffvora operator invitation')
             );
         } catch (\Throwable $e) {
             // Non-fatal — the Owner can still copy the link from the Staff page.

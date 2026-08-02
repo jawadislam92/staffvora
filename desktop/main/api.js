@@ -193,6 +193,45 @@ async function sendActivityBatch(payload) {
   return res.data;
 }
 
+// Upload a batch of client-side diagnostic events (crashes, capture failures,
+// pause/break transitions, upload failures) so problems on this machine are
+// visible server-side. Deliberately given a SHORT timeout and never retried
+// here: diagnostics are best-effort and must never sit on a socket long enough
+// to matter to the tracker. Retry/backoff lives in report.js.
+//
+// The tenant and user are resolved server-side from the Sanctum token — the
+// agent sends no organization_id/user_id and the server must not accept one.
+async function sendDiagnostics(events, deviceName) {
+  const res = await client().post('/diagnostics', {
+    events,
+    device_name: deviceName ? String(deviceName).slice(0, 120) : null,
+  }, { timeout: 15000 });
+  return res.data;
+}
+
+// Machine-compliance endpoint inventory (browser extensions, installed programs,
+// running processes, network adapters) → POST /api/desktop/machine-report.
+//
+// `body` is an ALREADY-SERIALISED JSON string. The collector enforces a hard
+// byte budget below the server's 1 MB ceiling and has to measure exactly what
+// goes on the wire, not an estimate of it — so it does the stringify and this
+// layer sends the bytes untouched.
+//
+// No retry here on purpose: retry, backoff, entitlement suppression and the
+// item/byte caps all live in collector.js, and the tracker's own uploads must
+// never end up queued behind a fat compliance body. The tenant and the user are
+// resolved server-side from the Sanctum token — the agent sends no
+// organization_id/user_id and the server must not accept one.
+async function sendMachineReport(body) {
+  const res = await client().post('/machine-report', body, {
+    timeout: 30000,
+    headers: { 'Content-Type': 'application/json' },
+    maxBodyLength: 2 * 1024 * 1024,
+    maxContentLength: 2 * 1024 * 1024,
+  });
+  return res.data;
+}
+
 function isOnline(error) {
   // axios network error has no response; treat anything without response as offline
   return !!(error && error.response);
@@ -218,5 +257,7 @@ module.exports = {
   timeClockAct,
   uploadScreenshot,
   sendActivityBatch,
+  sendDiagnostics,
+  sendMachineReport,
   isOnline,
 };

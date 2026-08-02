@@ -1,11 +1,21 @@
 import React from 'react';
 import AuthenticatedLayout from '../Layouts/AuthenticatedLayout';
 import TagInput from '../Components/TagInput';
-import { Head, useForm, Link } from '@inertiajs/react';
+import { Head, useForm, Link, usePage } from '@inertiajs/react';
 import PageHeader from '../Components/Layout/PageHeader';
 import PageShell from '../Components/Layout/PageShell';
 
 export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
+    // The Upwork "profiles" dimension is an ENTITLEMENT, not an edition: it
+    // comes from the shared `entitlements` map, the same resolution the server
+    // gates on. `workspace` supplies terminology only.
+    const workspace = usePage().props?.workspace || {};
+    const entitlements = usePage().props?.entitlements || {};
+    const usesProfiles = entitlements.upwork_profiles === true;
+    const clientTerm = workspace.client_term || 'Project';
+    const clientTermPlural = clientTerm.endsWith('s') ? clientTerm : clientTerm + 's';
+    const profileTerm = workspace.profile_term || 'Profile';
+    const profileTermPlural = profileTerm.endsWith('s') ? profileTerm : profileTerm + 's';
     const form = useForm({
         name: '',
         tags: [],
@@ -30,8 +40,9 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
         form.post(route('clients.store'));
     };
 
-    // Check if profile is required for the selected work type
-    const isProfileRequired = form.data.work_type && ['tracker_manual', 'fixed'].includes(form.data.work_type);
+    // Check if a profile applies for the selected work type — only when this
+    // workspace uses profiles at all (agencies); hidden for in-house teams.
+    const isProfileRequired = usesProfiles && form.data.work_type && ['tracker_manual', 'fixed'].includes(form.data.work_type);
     
     // Reset profiles when work type changes and profile is not required
     React.useEffect(() => {
@@ -104,13 +115,13 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
 
     return (
         <AuthenticatedLayout user={auth.user}>
-            <Head title="Add Client" />
+            <Head title={'Add ' + clientTerm} />
             
             <PageShell width="max-w-5xl">
                 <PageHeader
-                    eyebrow="Clients"
-                    title="Add Client"
-                    description="Create a client and connect the relevant work type and profiles."
+                    eyebrow={clientTermPlural}
+                    title={'Add ' + clientTerm}
+                    description={'Create a ' + clientTerm.toLowerCase() + ' and connect the relevant work type' + (usesProfiles ? ' and profiles.' : '.')}
                 />
 
                     {/* Form Card */}
@@ -121,7 +132,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                 {/* Client Name */}
                                 <div>
                                     <label className="block text-sm font-semibold text-muted mb-3">
-                                        Client Name
+                                        {clientTerm} Name
                                         <span className="text-red-500 ml-1">*</span>
                                     </label>
                                     <div className="relative">
@@ -132,7 +143,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                         </div>
                                         <input 
                                             type="text" 
-                                            placeholder="Enter client name..." 
+                                            placeholder={'Enter ' + clientTerm.toLowerCase() + ' name...'}
                                             value={form.data.name} 
                                             onChange={e => form.setData('name', e.target.value)} 
                                             className="w-full pl-10 pr-4 py-3 border-2 border-line rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-body placeholder-slate-400"
@@ -203,11 +214,11 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                     )}
                                 </div>
 
-                                {/* Upwork Profiles - conditionally shown with search and multiple selection */}
+                                {/* Profiles - optional attribution dimension, conditionally shown */}
                                 {(isProfileRequired) && (
                                     <div>
                                         <label className="block text-sm font-semibold text-muted mb-3">
-                                            Profiles
+                                            {profileTermPlural}
                                             {isProfileRequired && <span className="text-red-500 ml-1">*</span>}
                                             {!isProfileRequired && <span className="text-subtle font-normal ml-2">(optional)</span>}
                                         </label>
@@ -252,7 +263,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                                 </div>
                                                 <input
                                                     type="text"
-                                                    placeholder={isProfileRequired ? 'Search and select upwork profiles...' : 'Search and select upwork profiles (optional)...'}
+                                                    placeholder={'Search and select ' + profileTermPlural.toLowerCase() + '...'}
                                                     value={profileSearch}
                                                     onChange={(e) => {
                                                         setProfileSearch(e.target.value);
@@ -288,7 +299,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                                         <svg className="w-12 h-12 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                         </svg>
-                                                        No available profiles found
+                                                        No available {profileTermPlural.toLowerCase()} found
                                                     </div>
                                                 </div>
                                             )}
@@ -308,8 +319,8 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                             </svg>
                                             <span>
                                                 {isProfileRequired 
-                                                    ? 'Select one or more Upwork profiles associated with this client'
-                                                    : 'Optionally select Upwork profiles for this client'
+                                                    ? 'Select one or more ' + profileTermPlural.toLowerCase() + ' associated with this ' + clientTerm.toLowerCase()
+                                                    : 'Optionally select ' + profileTermPlural.toLowerCase() + ' for this ' + clientTerm.toLowerCase()
                                                 }
                                             </span>
                                         </p>
@@ -325,7 +336,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                     <TagInput
                                         tags={form.data.tags}
                                         onChange={(newTags) => form.setData('tags', newTags)}
-                                        placeholder="Add tags to categorize this client..."
+                                        placeholder={'Add tags to categorize this ' + clientTerm.toLowerCase() + '...'}
                                     />
                                     {form.errors.tags && (
                                         <div className="flex items-center mt-2 text-red-600 text-sm">
@@ -339,7 +350,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                         <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                                         </svg>
-                                        <span>Add tags to help organize and search for clients (e.g., "Enterprise", "Startup", "Local")</span>
+                                        <span>Add tags to help organize and search {clientTermPlural.toLowerCase()} (e.g., "Enterprise", "Startup", "Local")</span>
                                     </p>
                                 </div>
 
@@ -372,7 +383,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                             
                                             {selectedProfiles.length > 0 && (
                                                 <div>
-                                                    <p className="text-sm text-muted font-medium mb-2">Profiles ({selectedProfiles.length})</p>
+                                                    <p className="text-sm text-muted font-medium mb-2">{profileTermPlural} ({selectedProfiles.length})</p>
                                                     <div className="flex flex-wrap gap-2">
                                                         {selectedProfiles.map((profile) => (
                                                             <span
@@ -431,7 +442,7 @@ export default function ClientCreate({ auth, upworkProfiles, workTypes }) {
                                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                                 </svg>
-                                                Create Client
+                                                Create {clientTerm}
                                             </>
                                         )}
                                     </button>

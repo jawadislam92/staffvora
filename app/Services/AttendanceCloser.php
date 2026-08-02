@@ -25,7 +25,13 @@ class AttendanceCloser
             ->orderByDesc('action_timestamp')->orderByDesc('id')
             ->first();
 
-        if (! $last || ! in_array($last->action_type, ['clock_in', 'break_start'], true)) {
+        // "Still open" includes break_end: someone who came back from a break is
+        // working again and has NOT clocked out. Omitting it meant the auto
+        // clock-out, the still-working nudge and the Slack "clock me out" button
+        // all silently skipped them, so a forgotten session ran on and inflated
+        // their hours. (Matches TimeClockRules: from break_end the only valid
+        // next actions are clock_out / break_start.)
+        if (! $last || ! in_array($last->action_type, ['clock_in', 'break_start', 'break_end'], true)) {
             return null; // already closed / nothing open
         }
 
@@ -38,7 +44,7 @@ class AttendanceCloser
             return null;
         }
 
-        $clockInTs = Carbon::parse($clockIn->action_timestamp)->setTimezone('Asia/Karachi');
+        $clockInTs = Carbon::parse($clockIn->action_timestamp)->setTimezone(\App\Support\BusinessTime::tz());
         if ($closeAt->lessThanOrEqualTo($clockInTs)) {
             $closeAt = $clockInTs->copy()->addMinute();
         }
@@ -77,7 +83,13 @@ class AttendanceCloser
             ->orderByDesc('action_timestamp')->orderByDesc('id')
             ->first();
 
-        if (! $last || ! in_array($last->action_type, ['clock_in', 'break_start'], true)) {
+        // "Still open" includes break_end: someone who came back from a break is
+        // working again and has NOT clocked out. Omitting it meant the auto
+        // clock-out, the still-working nudge and the Slack "clock me out" button
+        // all silently skipped them, so a forgotten session ran on and inflated
+        // their hours. (Matches TimeClockRules: from break_end the only valid
+        // next actions are clock_out / break_start.)
+        if (! $last || ! in_array($last->action_type, ['clock_in', 'break_start', 'break_end'], true)) {
             return null;
         }
 

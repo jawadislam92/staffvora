@@ -1,8 +1,8 @@
 {
-    "name": "laravel/laravel",
+    "name": "tracksuite/tracksuite",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "description": "Privacy-conscious time tracking and workforce insights for teams.",
+    "keywords": ["time-tracking", "workforce", "laravel", "electron"],
     "license": "MIT",
     "require": {
         "php": "^8.2",

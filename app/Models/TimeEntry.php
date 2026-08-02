@@ -20,6 +20,8 @@ class TimeEntry extends Model
         'action_date',
         'action_time',
         'notes',
+        // Slack thread anchor for the day's attendance thread (see AttendanceClockNotifier).
+        'slack_thread_ts',
     ];
 
     protected $casts = [
@@ -41,38 +43,13 @@ class TimeEntry extends Model
     protected static function booted(): void
     {
         static::created(function (self $entry) {
-            if (! in_array($entry->action_type, ['clock_in', 'clock_out'], true)) {
-                return;
-            }
-
-            $settings = \App\Models\MonitoringSetting::current();
-            $enabled = $entry->action_type === 'clock_in'
-                ? $settings->slack_clockin_enabled
-                : $settings->slack_clockout_enabled;
-            if (! $enabled) {
-                return;
-            }
-
-            $channel = $settings->attendanceChannel();
-            if (! $channel) {
-                return;
-            }
-
-            // Don't echo the system's own auto clock-outs.
-            if ($entry->action_type === 'clock_out'
-                && str_starts_with((string) $entry->notes, 'Auto clock-out')) {
-                return;
-            }
-
-            $at = $entry->action_timestamp->copy()->setTimezone('Asia/Karachi');
-            $name = $entry->user->name ?? 'Someone';
-            $message = $entry->action_type === 'clock_in'
-                ? sprintf(':office: *%s* clocked in at %s.', $name, $at->format('g:i A'))
-                : sprintf(':waving_black_flag: *%s* clocked out at %s.%s', $name, $at->format('g:i A'), self::workedSuffix($entry));
-
-            app()->terminating(function () use ($channel, $message) {
+            // One Slack THREAD per person per day: the day's first clock-in is
+            // the parent, breaks and the clock-out reply underneath it, instead
+            // of four separate posts cluttering the channel. All the decisions
+            // (enabled? channel? system-generated punch?) live in the notifier.
+            app()->terminating(function () use ($entry) {
                 try {
-                    app(\App\Services\SlackBotService::class)->postToChannel($channel, $message);
+                    app(\App\Services\AttendanceClockNotifier::class)->notify($entry);
                 } catch (\Throwable $e) {
                     \Illuminate\Support\Facades\Log::warning('Attendance Slack post failed', ['message' => $e->getMessage()]);
                 }
@@ -80,31 +57,6 @@ class TimeEntry extends Model
         });
     }
 
-    /**
-     * " (worked 8h 12m)" for a clock-out, computed from the matching clock-in
-     * on the same attendance day, or '' when it can't be determined cheaply.
-     */
-    private static function workedSuffix(self $clockOut): string
-    {
-        $clockIn = static::where('user_id', $clockOut->user_id)
-            ->where('action_type', 'clock_in')
-            ->where('action_timestamp', '<=', $clockOut->action_timestamp)
-            ->orderByDesc('action_timestamp')->orderByDesc('id')
-            ->first();
-
-        if (! $clockIn) {
-            return '';
-        }
-
-        $mins = $clockIn->action_timestamp->diffInMinutes($clockOut->action_timestamp);
-        if ($mins <= 0) {
-            return '';
-        }
-
-        return $mins >= 60
-            ? sprintf(' (worked %dh %dm)', intdiv($mins, 60), $mins % 60)
-            : sprintf(' (worked %dm)', $mins);
-    }
 
     public function user()
     {
@@ -114,6 +66,24 @@ class TimeEntry extends Model
     public function scopeForUser($query, $userId)
     {
         return $query->where('user_id', $userId);
+    }
+
+    /**
+     * The user's CURRENT clock state: the action_type of their globally most
+     * recent entry, regardless of attendance day. The clock sequence must be
+     * enforced against this (not against today's entries only) so a clock-in
+     * left open last night still blocks a new clock-in after midnight — you
+     * can't clock in while already clocked in. Returns null if they've never
+     * clocked anything (then a clock-in is the only allowed action).
+     *
+     * Org-scoped automatically via the BelongsToOrganization global scope, so
+     * this only ever sees the active tenant's rows for this user.
+     */
+    public static function currentClockState(int $userId): ?string
+    {
+        return static::where('user_id', $userId)
+            ->orderByDesc('action_timestamp')->orderByDesc('id')
+            ->value('action_type');
     }
 
     public function scopeForDate($query, $date)
@@ -128,16 +98,16 @@ class TimeEntry extends Model
 
     public function getFormattedActionTimeAttribute()
     {
-        return $this->action_timestamp->setTimezone('Asia/Karachi')->format('g:i A');
+        return $this->action_timestamp->setTimezone(\App\Support\BusinessTime::tz())->format('g:i A');
     }
 
     public function getFormattedActionDateAttribute()
     {
-        return $this->action_timestamp->setTimezone('Asia/Karachi')->format('M j, Y');
+        return $this->action_timestamp->setTimezone(\App\Support\BusinessTime::tz())->format('M j, Y');
     }
 
     public function getFormattedActionTimestampAttribute()
     {
-        return $this->action_timestamp->setTimezone('Asia/Karachi')->format('M j, Y g:i A');
+        return $this->action_timestamp->setTimezone(\App\Support\BusinessTime::tz())->format('M j, Y g:i A');
     }
 }

@@ -1,91 +1,267 @@
+import { useEffect, useRef, useState } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
-import PlatformLayout from '@/Layouts/PlatformLayout';
+import PlatformLayout, { PlatformPageHeader } from '@/Layouts/PlatformLayout';
+import { Button, Card, Badge, StatCard, Table, THead, TBody, Tr, Th, Td, Field, Input, Select, EmptyState } from '@/Components/ui';
+import Modal from '@/Components/Modal';
+import { History, Layers, Tags } from 'lucide-react';
+import { rt } from './entitlementUi';
 
-const STATUS_TONE = {
-    trial: 'bg-amber-500/15 text-amber-300',
-    active: 'bg-emerald-500/15 text-emerald-300',
-    past_due: 'bg-rose-500/15 text-rose-300',
-    suspended: 'bg-slate-700 text-slate-300',
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANT DIRECTORY.
+//
+// Filtering and paging happen on the SERVER. That is deliberate: each row's seat
+// limit is resolved through the real entitlement engine (override → add-on →
+// plan → default), so the number of rows a single request touches has to stay
+// bounded — client-side filtering of "every organization" would not survive 500
+// tenants.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const STATUS_TONE = { trial: 'warning', active: 'success', past_due: 'danger', suspended: 'neutral' };
+const STATUS_LABEL = { trial: 'Trialing', active: 'Active', past_due: 'Past due', suspended: 'Suspended' };
+
+// ── Offline preview fixtures ────────────────────────────────────────────────
+const DEV_SAMPLE = {
+    organizations: [
+        { id: 1, name: 'Northwind Labs', slug: 'northwind-labs', status: 'active', plan: 'Growth', users: 24, seat_limit: 30, trial_ends_at: null, created_at: '2025-02-14' },
+        { id: 2, name: 'Acme Digital', slug: 'acme-digital', status: 'active', plan: 'Starter', users: 8, seat_limit: 10, trial_ends_at: null, created_at: '2025-04-02' },
+        { id: 3, name: 'Blue Harbor Studio', slug: 'blue-harbor', status: 'trial', plan: 'Growth', users: 5, seat_limit: 80, trial_ends_at: '2026-08-05', created_at: '2026-07-08' },
+        { id: 4, name: 'Rivera & Co', slug: 'rivera-co', status: 'past_due', plan: 'Starter', users: 12, seat_limit: 10, trial_ends_at: null, created_at: '2024-11-19' },
+        { id: 5, name: 'Summit Freelance', slug: 'summit-freelance', status: 'active', plan: 'Free', users: 1, seat_limit: 2, trial_ends_at: null, created_at: '2025-09-30' },
+        { id: 6, name: 'Orbit Media Group', slug: 'orbit-media', status: 'suspended', plan: 'Enterprise', users: 61, seat_limit: null, trial_ends_at: null, created_at: '2024-06-01' },
+    ],
+    pagination: { current_page: 1, last_page: 2, total: 34, per_page: 25 },
+    filters: {},
+    planOptions: [
+        { key: 'free', name: 'Free' }, { key: 'starter', name: 'Starter' },
+        { key: 'pro', name: 'Growth' }, { key: 'enterprise', name: 'Enterprise' },
+    ],
+    stats: { tenants: 34, active: 21, trialing: 8, suspended: 2 },
 };
 
-function Stat({ label, value }) {
+function ConfirmModal({ open, title, description, confirmLabel, tone = 'primary', onConfirm, onClose }) {
     return (
-        <div className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3">
-            <p className="text-2xl font-bold text-body">{value}</p>
-            <p className="text-xs uppercase tracking-wide text-slate-400">{label}</p>
-        </div>
+        <Modal show={open} onClose={onClose} maxWidth="md">
+            <div className="p-6">
+                <h3 className="text-lg font-semibold text-body">{title}</h3>
+                {description && <p className="mt-2 text-sm text-muted">{description}</p>}
+                <div className="mt-6 flex justify-end gap-2">
+                    <Button variant="secondary" onClick={onClose}>Cancel</Button>
+                    <Button variant={tone} onClick={onConfirm}>{confirmLabel}</Button>
+                </div>
+            </div>
+        </Modal>
     );
 }
 
-export default function PlatformIndex({ organizations, stats }) {
-    const setStatus = (org, action) => {
-        router.post(route(`platform.${action}`, org.id), {}, { preserveScroll: true });
+export default function PlatformIndex({ organizations, pagination, filters, planOptions, stats, preview = false }) {
+    const data = preview ? DEV_SAMPLE : { organizations, pagination, filters, planOptions, stats };
+    const orgs = data.organizations || [];
+    const page = data.pagination || { current_page: 1, last_page: 1, total: orgs.length };
+
+    const [search, setSearch] = useState(data.filters?.q || '');
+    const [statusFilter, setStatusFilter] = useState(data.filters?.status || '');
+    const [planFilter, setPlanFilter] = useState(data.filters?.plan || '');
+    const [confirm, setConfirm] = useState(null);
+
+    // Debounced server-side search so typing doesn't fire a request per keystroke.
+    const first = useRef(true);
+    useEffect(() => {
+        if (preview) return undefined;
+        if (first.current) { first.current = false; return undefined; }
+        const t = setTimeout(() => visit({ q: search, status: statusFilter, plan: planFilter }), 300);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search, statusFilter, planFilter]);
+
+    const visit = (params) => {
+        const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v != null));
+        router.get(rt('platform.index'), clean, { preserveState: true, preserveScroll: true, replace: true });
     };
-    const impersonate = (org) => {
-        if (confirm(`Sign in as ${org.name}'s owner? You can return to the platform afterwards.`)) {
-            router.post(route('platform.impersonate', org.id));
-        }
+
+    const goPage = (n) => {
+        if (preview) return;
+        visit({ q: search, status: statusFilter, plan: planFilter, page: n });
     };
+
+    const runStatus = (org, action) => {
+        if (!preview) router.post(rt(`platform.${action}`, org.id), {}, { preserveScroll: true });
+        setConfirm(null);
+    };
+    const runImpersonate = (org) => {
+        if (!preview) router.post(rt('platform.impersonate', org.id));
+        setConfirm(null);
+    };
+
+    const askSuspend = (org) => setConfirm({ org, action: org.status === 'suspended' ? 'resume' : 'suspend' });
+    const askImpersonate = (org) => setConfirm({ org, action: 'impersonate' });
 
     return (
-        <PlatformLayout title="Tenants" header={<h2 className="text-xl font-semibold text-white">Tenants</h2>}>
+        <PlatformLayout
+            title="Tenants"
+            header={
+                <PlatformPageHeader
+                    title="Tenants"
+                    description="Every workspace, its plan and seats. Open one to grant a per-customer exception, attach an add-on, or read who changed what."
+                    actions={
+                        <>
+                            <Button as={Link} href={rt('platform.addons')} variant="ghost" size="sm" icon={<Layers className="h-4 w-4" />}>
+                                Add-ons
+                            </Button>
+                            <Button as={Link} href={rt('platform.audit')} variant="ghost" size="sm" icon={<History className="h-4 w-4" />}>
+                                Activity
+                            </Button>
+                            <Button as={Link} href={rt('platform.plans')} variant="secondary" size="sm" icon={<Tags className="h-4 w-4" />}>
+                                Plans &amp; pricing
+                            </Button>
+                        </>
+                    }
+                />
+            }
+        >
             <Head title="Tenants" />
-            <div className="mx-auto max-w-6xl space-y-6">
-                <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm text-muted">Every tenant, their plan, seats and subscription. Open a tenant to grant per-customer exceptions.</p>
-                        <Link href={route('platform.plans')} className="shrink-0 rounded-md border border-line px-3 py-1.5 text-sm font-semibold text-body hover:bg-surface-2">
-                            Edit plans &amp; pricing
-                        </Link>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        <Stat label="Tenants" value={stats.tenants} />
-                        <Stat label="Active" value={stats.active} />
-                        <Stat label="Trialing" value={stats.trialing} />
-                        <Stat label="Suspended" value={stats.suspended} />
+
+            <div className="w-full space-y-6">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <StatCard label="Tenants" value={data.stats?.tenants ?? 0} />
+                    <StatCard label="Active" value={data.stats?.active ?? 0} />
+                    <StatCard label="Trialing" value={data.stats?.trialing ?? 0} />
+                    <StatCard label="Suspended" value={data.stats?.suspended ?? 0} />
+                </div>
+
+                <Card padded={false}>
+                    <div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-end">
+                        <Field label="Search" className="sm:max-w-xs" htmlFor="tenant-search">
+                            <Input
+                                id="tenant-search"
+                                type="search"
+                                placeholder="Name or slug…"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                            />
+                        </Field>
+                        <Field label="Status" className="sm:w-44" htmlFor="tenant-status">
+                            <Select id="tenant-status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                                <option value="">All statuses</option>
+                                <option value="active">Active</option>
+                                <option value="trial">Trialing</option>
+                                <option value="past_due">Past due</option>
+                                <option value="suspended">Suspended</option>
+                            </Select>
+                        </Field>
+                        <Field label="Plan" className="sm:w-44" htmlFor="tenant-plan">
+                            <Select id="tenant-plan" value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
+                                <option value="">All plans</option>
+                                {(data.planOptions || []).map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
+                            </Select>
+                        </Field>
+                        <div className="text-sm text-subtle sm:ml-auto sm:pb-2.5">
+                            {page.total} matching
+                        </div>
                     </div>
 
-                    <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900">
-                        <table className="min-w-full text-sm">
-                            <thead>
-                                <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wide text-slate-400">
-                                    <th className="px-4 py-3">Organization</th>
-                                    <th className="px-4 py-3">Status</th>
-                                    <th className="px-4 py-3">Plan</th>
-                                    <th className="px-4 py-3">Users</th>
-                                    <th className="px-4 py-3">Trial ends</th>
-                                    <th className="px-4 py-3 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800">
-                                {organizations.map((org) => (
-                                    <tr key={org.id} className="text-slate-200">
-                                        <td className="px-4 py-3">
-                                            <Link href={route('platform.show', org.id)} className="font-medium text-slate-100 hover:text-orange-300">{org.name}</Link>
-                                            <div className="text-xs text-slate-500">{org.slug}</div>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${STATUS_TONE[org.status] || 'bg-slate-700 text-slate-300'}`}>{org.status}</span>
-                                        </td>
-                                        <td className="px-4 py-3">{org.plan || '—'}</td>
-                                        <td className="px-4 py-3">{org.users}{org.seat_limit ? ` / ${org.seat_limit}` : ''}</td>
-                                        <td className="px-4 py-3 text-slate-400">{org.trial_ends_at || '—'}</td>
-                                        <td className="px-4 py-3">
+                    {orgs.length === 0 ? (
+                        <EmptyState
+                            title={data.filters?.q || data.filters?.status || data.filters?.plan ? 'No matches' : 'No tenants yet'}
+                            description={data.filters?.q || data.filters?.status || data.filters?.plan
+                                ? 'Try a different search or clear the filters.'
+                                : 'Tenants appear here once organizations sign up.'}
+                        />
+                    ) : (
+                        <Table>
+                            <THead>
+                                <Tr>
+                                    <Th>Organization</Th>
+                                    <Th>Status</Th>
+                                    <Th>Plan</Th>
+                                    <Th>Users</Th>
+                                    <Th>Trial ends</Th>
+                                    <Th className="text-right">Actions</Th>
+                                </Tr>
+                            </THead>
+                            <TBody>
+                                {orgs.map((org) => (
+                                    <Tr key={org.id}>
+                                        <Td>
+                                            <Link
+                                                href={rt('platform.show', org.id)}
+                                                className="font-medium text-body transition hover:text-accent focus-visible:outline-none focus-visible:text-accent"
+                                            >
+                                                {org.name}
+                                            </Link>
+                                            <div className="text-xs text-subtle">{org.slug}</div>
+                                        </Td>
+                                        <Td>
+                                            <Badge tone={STATUS_TONE[org.status] || 'neutral'} dot>
+                                                {STATUS_LABEL[org.status] || org.status}
+                                            </Badge>
+                                        </Td>
+                                        <Td>
+                                            {org.plan
+                                                ? <Badge tone="accent">{org.plan}</Badge>
+                                                : <span className="text-subtle">—</span>}
+                                        </Td>
+                                        <Td className="tabular-nums">
+                                            {org.users}
+                                            <span className="text-subtle"> / {org.seat_limit ?? '∞'}</span>
+                                        </Td>
+                                        <Td className="text-muted tabular-nums">{org.trial_ends_at || '—'}</Td>
+                                        <Td>
                                             <div className="flex items-center justify-end gap-2">
-                                                <button onClick={() => impersonate(org)} className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800">View as</button>
+                                                <Button size="sm" variant="ghost" onClick={() => askImpersonate(org)}>View as</Button>
                                                 {org.status === 'suspended'
-                                                    ? <button onClick={() => setStatus(org, 'resume')} className="rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700">Resume</button>
-                                                    : <button onClick={() => setStatus(org, 'suspend')} className="rounded-md border border-rose-500/40 px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/10">Suspend</button>}
+                                                    ? <Button size="sm" variant="primary" onClick={() => askSuspend(org)}>Resume</Button>
+                                                    : <Button size="sm" variant="secondary" onClick={() => askSuspend(org)}>Suspend</Button>}
                                             </div>
-                                        </td>
-                                    </tr>
+                                        </Td>
+                                    </Tr>
                                 ))}
-                                {organizations.length === 0 && (
-                                    <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">No tenants yet.</td></tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                            </TBody>
+                        </Table>
+                    )}
+
+                    {page.last_page > 1 && (
+                        <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3 text-sm text-muted">
+                            <span>Page {page.current_page} of {page.last_page}</span>
+                            <div className="flex gap-2">
+                                <Button size="sm" variant="secondary" disabled={page.current_page <= 1} onClick={() => goPage(page.current_page - 1)}>
+                                    Previous
+                                </Button>
+                                <Button size="sm" variant="secondary" disabled={page.current_page >= page.last_page} onClick={() => goPage(page.current_page + 1)}>
+                                    Next
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </Card>
+            </div>
+
+            <ConfirmModal
+                open={confirm?.action === 'impersonate'}
+                title="Sign in as this tenant?"
+                description={confirm ? `You'll sign in as ${confirm.org.name}'s owner. This is recorded in the activity log with your name and IP.` : ''}
+                confirmLabel="Sign in as owner"
+                tone="primary"
+                onConfirm={() => runImpersonate(confirm.org)}
+                onClose={() => setConfirm(null)}
+            />
+            <ConfirmModal
+                open={confirm?.action === 'suspend'}
+                title="Suspend this tenant?"
+                description={confirm ? `${confirm.org.name} will lose access until you resume them. No data is deleted.` : ''}
+                confirmLabel="Suspend"
+                tone="danger"
+                onConfirm={() => runStatus(confirm.org, 'suspend')}
+                onClose={() => setConfirm(null)}
+            />
+            <ConfirmModal
+                open={confirm?.action === 'resume'}
+                title="Resume this tenant?"
+                description={confirm ? `${confirm.org.name} will regain access immediately.` : ''}
+                confirmLabel="Resume"
+                tone="primary"
+                onConfirm={() => runStatus(confirm.org, 'resume')}
+                onClose={() => setConfirm(null)}
+            />
         </PlatformLayout>
     );
 }

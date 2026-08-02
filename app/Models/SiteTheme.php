@@ -38,7 +38,7 @@ class SiteTheme extends Model
     public function publicPayload(): array
     {
         return [
-            'site_name' => $this->site_name ?: 'Tracksuite',
+            'site_name' => $this->site_name ?: 'Staffvora',
             'tagline' => $this->tagline,
             'logo_url' => $this->logo_path ? route('site.media.logo').'?v='.substr(md5($this->logo_path), 0, 8) : null,
             // Raw (nullable) so the public site can tell an owner override from "unset".

@@ -3,19 +3,33 @@
 namespace App\Http\Controllers;
 
 use App\Models\MonitoringSetting;
+use App\Models\Organization;
+use App\Models\PayPeriod;
 use App\Models\User;
 use App\Models\UserMonitoringSetting;
+use App\Models\WorkCategory;
+use App\Models\WorkHour;
+use App\Tenancy\CurrentOrganization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Unique;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class SettingsController extends Controller
 {
+    /**
+     * Hard ceiling on how many work categories one workspace may hold (active +
+     * archived). A category list is a short vocabulary, not a data table — the
+     * cap keeps every read on this screen bounded and stops a scripted client
+     * from growing an unbounded per-tenant table.
+     */
+    private const MAX_WORK_CATEGORIES = 200;
+
     private const CATEGORIES = [
         'screenshots',
         'activity',
@@ -56,7 +70,79 @@ class SettingsController extends Controller
         return Inertia::render('Settings/Index', [
             'team' => $team->teamPayload(),
             'users' => $perUser,
+            'payPeriod' => $this->payPeriodPayload(),
         ]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PAY PERIODS — the cadence the workspace runs payroll on, and therefore
+    // the window a timesheet covers. {@see App\Models\PayPeriod}
+    //
+    // Periods are DERIVED from (cadence, anchor), never stored, so changing
+    // this setting reshapes future periods immediately and costs nothing. It
+    // does NOT reshape history: an approved timesheet snapshots its own
+    // cadence + start + end, so a workspace moving from weekly to monthly keeps
+    // every already-approved period exactly as it was signed off.
+    //
+    // It sits on its own endpoint (not in updateTeam) because it is a payroll
+    // policy, not a tracker toggle — and because MonitoringSetting's $fillable
+    // is owned elsewhere, the two columns are assigned directly rather than
+    // mass-assigned.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** @return array<string, mixed> */
+    private function payPeriodPayload(): array
+    {
+        $current = PayPeriod::current();
+
+        return [
+            'cadence' => PayPeriod::cadence(),
+            'anchor_date' => PayPeriod::anchor()?->toDateString(),
+            'options' => array_map(
+                fn (string $key) => ['key' => $key, 'label' => PayPeriod::CADENCE_LABELS[$key]],
+                PayPeriod::CADENCES
+            ),
+            // A live preview of what the choice actually produces, so an admin
+            // sees the real dates before saving rather than guessing.
+            'preview' => array_map(
+                fn (PayPeriod $period) => $period->toArray(),
+                array_reverse(PayPeriod::recent(3))
+            ),
+            'current' => $current->toArray(),
+        ];
+    }
+
+    /**
+     * Save the workspace's pay-period cadence + anchor.
+     *
+     * The anchor only means anything for the rolling cadences: semi-monthly and
+     * monthly are pinned to the calendar, so an anchor is cleared rather than
+     * silently stored where it would never be read.
+     */
+    public function updatePayPeriod(Request $request): RedirectResponse|JsonResponse
+    {
+        $data = $request->validate([
+            'pay_period_cadence' => ['required', Rule::in(PayPeriod::CADENCES)],
+            'pay_period_anchor_date' => ['nullable', 'date_format:Y-m-d'],
+        ]);
+
+        $rolling = in_array($data['pay_period_cadence'], [PayPeriod::WEEKLY, PayPeriod::BIWEEKLY], true);
+
+        $team = MonitoringSetting::current();
+        // Direct assignment, not update(): these columns are deliberately not in
+        // MonitoringSetting::$fillable (that model belongs to the settings
+        // surface), and mass assignment would silently drop them.
+        $team->pay_period_cadence = $data['pay_period_cadence'];
+        $team->pay_period_anchor_date = $rolling ? ($data['pay_period_anchor_date'] ?: null) : null;
+        $team->save();
+
+        MonitoringSetting::forgetSharedCache();
+
+        if ($request->wantsJson()) {
+            return response()->json(['ok' => true, 'payPeriod' => $this->payPeriodPayload()]);
+        }
+
+        return back()->with('success', 'Pay period cadence updated.');
     }
 
     public function updateTeam(Request $request): RedirectResponse|JsonResponse
@@ -105,7 +191,7 @@ class SettingsController extends Controller
         }
 
         $team->update($data);
-        \App\Models\MonitoringSetting::forgetSharedCache();
+        MonitoringSetting::forgetSharedCache();
 
         // Toggles save in the background (axios) — a tiny JSON ack keeps the
         // page from re-rendering all settings props on every flip.
@@ -241,13 +327,322 @@ class SettingsController extends Controller
         return back()->with('success', 'Individual setting updated.');
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // WORK CATEGORIES — the workspace's own editable "what the work was" list.
+    //
+    // Concept B of the split vocabulary (documents/STAFFVORA_WORK_VOCABULARY.md):
+    //   A. CAPTURE METHOD — tracked vs manual. System-set, never edited here.
+    //   B. WORK CATEGORY  — these rows.
+    //   C. BILLABLE       — a flag on the entry, seeded from a category default.
+    //
+    // ONE MECHANISM, ONE CODE PATH (owner decision Q5). There is deliberately no
+    // `if (agency)` branch anywhere below: an Agency workspace and a General one
+    // run this exact code, and differ only in which starter ROWS were seeded at
+    // signup by WorkCategory::defaultsFor(). Sparking Asia's "Bidding" and
+    // "Outside Upwork" are ordinary editable rows like any other customer's.
+    //
+    // PERMISSION: every route lives inside the existing `permission:monitoring.settings`
+    // settings group — the same gate that guards the rest of this controller. No
+    // new permission key is introduced.
+    //
+    // TENANCY: WorkCategory carries BelongsToOrganization, so the OrganizationScope
+    // already restricts route-model binding and every query to the active tenant
+    // (a foreign id 404s). assertOwned() re-checks the resolved row anyway, and
+    // reorder verifies EVERY submitted id before writing a single row.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The management screen. Lists active + archived categories in the
+     * workspace's own order, each with a SQL COUNT of the time entries filed
+     * against it (so an admin sees the blast radius before archiving).
+     */
+    public function workCategories(): Response
+    {
+        // First visit to a workspace that has never had a category materialises
+        // its starter set — the same one shared list, no branch.
+        WorkCategory::ensureSeeded();
+
+        $categories = WorkCategory::query()
+            ->ordered()
+            ->limit(self::MAX_WORK_CATEGORIES)
+            ->get(['id', 'organization_id', 'name', 'slug', 'is_billable_default', 'sort_order', 'is_active']);
+
+        $usage = $this->workCategoryUsageCounts();
+
+        return Inertia::render('Settings/WorkCategories', [
+            'categories' => $categories
+                ->map(fn (WorkCategory $category) => $this->serializeWorkCategory(
+                    $category,
+                    (int) ($usage[(int) $category->id] ?? 0)
+                ))
+                ->values()
+                ->all(),
+            'maxCategories' => self::MAX_WORK_CATEGORIES,
+        ]);
+    }
+
+    /** Add a category to the end of the workspace's list. */
+    public function storeWorkCategory(Request $request): RedirectResponse|JsonResponse
+    {
+        $organizationId = app(CurrentOrganization::class)->id();
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:60', $this->workCategoryNameRule($organizationId)],
+            'is_billable_default' => ['sometimes', 'boolean'],
+        ]);
+
+        // COUNT, never a fetch — and the ceiling is what keeps every read on
+        // this screen (and the picker on the time-entry form) bounded.
+        if (WorkCategory::query()->count() >= self::MAX_WORK_CATEGORIES) {
+            throw ValidationException::withMessages([
+                'name' => 'You have reached the maximum of '.self::MAX_WORK_CATEGORIES.' work categories. Archive one you no longer use first.',
+            ]);
+        }
+
+        $category = WorkCategory::create([
+            'name' => trim($data['name']),
+            // Slugs are the stable key the legacy backfill/seed maps use. A
+            // workspace-created category is not part of that map, so it stays
+            // null rather than risking a collision with a reserved slug.
+            'slug' => null,
+            'is_billable_default' => $request->boolean('is_billable_default'),
+            'sort_order' => ((int) WorkCategory::query()->max('sort_order')) + 1,
+            'is_active' => true,
+        ]);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'ok' => true,
+                'category' => $this->serializeWorkCategory($category, 0),
+            ], 201);
+        }
+
+        return back()->with('success', 'Work category added.');
+    }
+
+    /**
+     * Rename, change the default-billable flag, or archive/restore. The slug is
+     * deliberately never touched: a renamed row keeps its history and keeps
+     * resolving for the legacy `work_type` readers.
+     */
+    public function updateWorkCategory(Request $request, WorkCategory $workCategory): RedirectResponse|JsonResponse
+    {
+        $this->assertOwnsWorkCategory($workCategory);
+
+        $organizationId = app(CurrentOrganization::class)->id();
+
+        $data = $request->validate([
+            'name' => ['sometimes', 'required', 'string', 'max:60', $this->workCategoryNameRule($organizationId, $workCategory->id)],
+            'is_billable_default' => ['sometimes', 'boolean'],
+            'is_active' => ['sometimes', 'boolean'],
+        ]);
+
+        if (array_key_exists('is_active', $data) && ! $request->boolean('is_active')) {
+            $this->assertNotLastActiveWorkCategory($workCategory);
+        }
+
+        if (array_key_exists('name', $data)) {
+            $workCategory->name = trim($data['name']);
+        }
+        if (array_key_exists('is_billable_default', $data)) {
+            $workCategory->is_billable_default = $request->boolean('is_billable_default');
+        }
+        if (array_key_exists('is_active', $data)) {
+            $workCategory->is_active = $request->boolean('is_active');
+        }
+
+        $workCategory->save();
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'ok' => true,
+                'category' => $this->serializeWorkCategory($workCategory, $this->workCategoryUsage($workCategory)),
+            ]);
+        }
+
+        return back()->with('success', 'Work category updated.');
+    }
+
+    /**
+     * ARCHIVE (the default) — a category that time is filed against is NEVER
+     * hard-deleted, because every historical timesheet, report and Slack digest
+     * still has to render its name. Archiving hides it from the pickers used to
+     * log NEW time and leaves history untouched.
+     *
+     * A permanent delete is only honoured for a category with ZERO entries, and
+     * the zero is proven by a SQL COUNT on the (organization_id, work_category_id)
+     * index — never by loading rows.
+     */
+    public function destroyWorkCategory(Request $request, WorkCategory $workCategory): RedirectResponse|JsonResponse
+    {
+        $this->assertOwnsWorkCategory($workCategory);
+
+        $entries = $this->workCategoryUsage($workCategory);
+        $permanent = $request->boolean('permanent');
+
+        if ($permanent && $entries > 0) {
+            throw ValidationException::withMessages([
+                'permanent' => 'This category is used by '.$entries.' time '.($entries === 1 ? 'entry' : 'entries').', so it can only be archived — deleting it would break historical reports.',
+            ]);
+        }
+
+        // Applies to BOTH paths: removing the only active category (even an
+        // unused one) would leave the workspace with nowhere to file new time.
+        $this->assertNotLastActiveWorkCategory($workCategory);
+
+        if ($permanent) {
+            $workCategory->delete();
+        } else {
+            $workCategory->update(['is_active' => false]);
+        }
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'ok' => true,
+                'deleted' => $permanent,
+                'archived' => ! $permanent,
+                'entries_count' => $entries,
+            ]);
+        }
+
+        return back()->with('success', $permanent ? 'Work category deleted.' : 'Work category archived.');
+    }
+
+    /**
+     * Persist a new display order (drag or the up/down arrows). The full ordered
+     * id list is submitted; EVERY id is proved to belong to the current
+     * workspace before a single row is written, so a foreign id can neither be
+     * re-sorted nor used to probe another tenant.
+     */
+    public function reorderWorkCategories(Request $request): RedirectResponse|JsonResponse
+    {
+        $data = $request->validate([
+            'order' => ['required', 'array', 'min:1', 'max:'.self::MAX_WORK_CATEGORIES],
+            'order.*' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $ids = array_values(array_unique(array_map('intval', $data['order'])));
+
+        // One bounded query (org-scoped) confirms ownership of the whole batch.
+        $owned = WorkCategory::query()
+            ->whereIn('id', $ids)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        abort_if(count($owned) !== count($ids), 404);
+
+        DB::transaction(function () use ($ids) {
+            foreach ($ids as $position => $id) {
+                // Still org-scoped by the global scope — belt and braces.
+                WorkCategory::query()->whereKey($id)->update(['sort_order' => $position]);
+            }
+        });
+
+        // Mass updates skip model events, so the memoised catalogue (which
+        // carries sort_order) has to be dropped by hand.
+        WorkCategory::flushResolverCache();
+
+        if ($request->wantsJson()) {
+            return response()->json(['ok' => true]);
+        }
+
+        return back()->with('success', 'Work category order saved.');
+    }
+
+    /**
+     * How many time entries each category holds, for the whole workspace, in ONE
+     * grouped SQL COUNT. Rides work_hours_org_category_idx (organization_id,
+     * work_category_id); returns at most one row per category, so the result is
+     * bounded no matter how many time rows the workspace has. Rows are never
+     * loaded.
+     *
+     * @return array<int, int> category id => entry count
+     */
+    private function workCategoryUsageCounts(): array
+    {
+        $rows = WorkHour::query()
+            ->whereNotNull('work_category_id')
+            ->groupBy('work_category_id')
+            ->selectRaw('work_category_id, COUNT(*) as entries_count')
+            ->get();
+
+        $counts = [];
+
+        foreach ($rows as $row) {
+            $counts[(int) $row->work_category_id] = (int) $row->entries_count;
+        }
+
+        return $counts;
+    }
+
+    /** The same COUNT for one category (index-backed, no rows loaded). */
+    private function workCategoryUsage(WorkCategory $category): int
+    {
+        return (int) WorkHour::query()->where('work_category_id', $category->id)->count();
+    }
+
+    /**
+     * Re-verify the tenant of a route-bound category. The OrganizationScope
+     * already 404s a foreign id during binding; this makes the boundary explicit
+     * and survives any future call site that resolves the model differently.
+     */
+    private function assertOwnsWorkCategory(WorkCategory $category): void
+    {
+        $organizationId = app(CurrentOrganization::class)->id();
+
+        abort_if($organizationId !== null && (int) $category->organization_id !== $organizationId, 404);
+    }
+
+    /**
+     * A workspace must always keep at least one active category, otherwise there
+     * is nothing to file new time against.
+     */
+    private function assertNotLastActiveWorkCategory(WorkCategory $category): void
+    {
+        if (! $category->is_active) {
+            return;
+        }
+
+        $remaining = WorkCategory::query()->active()->whereKeyNot($category->id)->count();
+
+        if ($remaining === 0) {
+            throw ValidationException::withMessages([
+                'is_active' => 'Keep at least one active work category — your team needs somewhere to file new time.',
+            ]);
+        }
+    }
+
+    /** Category names are unique within a workspace (never globally). */
+    private function workCategoryNameRule(?int $organizationId, ?int $ignoreId = null): Unique
+    {
+        $rule = Rule::unique('work_categories', 'name')
+            ->where(fn ($query) => $query->where('organization_id', $organizationId));
+
+        return $ignoreId === null ? $rule : $rule->ignore($ignoreId);
+    }
+
+    /** @return array<string, mixed> */
+    private function serializeWorkCategory(WorkCategory $category, int $entriesCount): array
+    {
+        return [
+            'id' => (int) $category->id,
+            'name' => $category->name,
+            'slug' => $category->slug,
+            'is_billable_default' => (bool) $category->is_billable_default,
+            'sort_order' => (int) $category->sort_order,
+            'is_active' => (bool) $category->is_active,
+            'entries_count' => $entriesCount,
+        ];
+    }
+
     /**
      * Reject any team setting that exceeds the org's effective entitlements
      * (plan defaults merged with platform per-tenant overrides). Throws a
      * ValidationException keyed by field so the form shows an inline
      * "upgrade to unlock" reason.
      */
-    private function enforceEntitlements(\App\Models\Organization $org, array $data): void
+    private function enforceEntitlements(Organization $org, array $data): void
     {
         $errors = [];
 

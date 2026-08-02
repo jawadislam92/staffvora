@@ -11,9 +11,28 @@ return [
     | API, giving you convenient access to each back-end using the same
     | syntax for every one. Here you may define a default connection.
     |
+    | ── WHY THE FALLBACK IS `database` AND NOT `sync` ────────────────────────
+    | `sync` executes a "queued" job inside the request that dispatched it. Here
+    | that meant GenerateScreenshotThumbnail's GD decode/resize ran inside the
+    | desktop agent's screenshot upload request: measured on PHP 8.3 + GD at
+    | 39 ms / 28 MB for 1080p, 63 ms / 54 MB for 1440p, 144 ms / 104 MB for 4K
+    | and 320 ms / 208 MB for a dual-4K capture — once per capture per person.
+    | At 100 people per tenant across hundreds of tenants that is FPM workers
+    | and RAM taken from every other tenant's page loads, for work nobody is
+    | waiting on.
+    |
+    | The `database` driver needs no new infrastructure (the `jobs` table ships
+    | with this release) and App\Console\Kernel schedules a
+    | `queue:work --stop-when-empty` drain every minute, so jobs are still
+    | processed on a box with no supervised worker. A box that DOES run a
+    | supervised worker simply finds the queue already empty.
+    |
+    | Set QUEUE_CONNECTION=sync explicitly to go back. phpunit.xml does exactly
+    | that, so the test suite still runs jobs inline and deterministically.
+    |
     */
 
-    'default' => env('QUEUE_CONNECTION', 'sync'),
+    'default' => env('QUEUE_CONNECTION', 'database'),
 
     /*
     |--------------------------------------------------------------------------
@@ -38,8 +57,15 @@ return [
             'driver' => 'database',
             'table' => 'jobs',
             'queue' => 'default',
+            // Above the slowest measured job (320 ms for a dual-4K thumbnail)
+            // by three orders of magnitude, so a job is never handed to a second
+            // worker while the first is still legitimately working on it.
             'retry_after' => 90,
-            'after_commit' => false,
+            // Jobs dispatched inside a transaction are only pushed once it
+            // commits. Without this a worker can pick up a job referring to a
+            // row the dispatching transaction has not written yet (or rolls
+            // back), which reads as an intermittent "record not found".
+            'after_commit' => true,
         ],
 
         'beanstalkd' => [

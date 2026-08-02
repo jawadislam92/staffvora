@@ -1,6 +1,6 @@
 # Tracksuite — Product-readiness audit (2026-06-21)
 
-Audited live on https://satimetracker.com via a fresh self-serve tenant ("Audit Test"),
+Audited live on https://staffvora.com via a fresh self-serve tenant ("Audit Test"),
 which lands on a **Pro trial** (ends 2026-07-05) — so it shows full Pro features.
 Mode: surface everything first, fix after (owner decides what to fix).
 

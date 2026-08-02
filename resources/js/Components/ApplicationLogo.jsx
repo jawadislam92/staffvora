@@ -11,7 +11,7 @@ export default function ApplicationLogo({ size = "40" }) {
             <img
                 src={branding?.logo_url || BUNDLED_LOGO}
                 className="h-full w-full object-contain drop-shadow-lg"
-                alt={`${branding?.name || 'Tracksuite'} logo`}
+                alt={`${branding?.name || 'Staffvora'} logo`}
                 onError={(e) => {
                     // Uploaded logo unreachable — fall back to the bundled one.
                     if (e.target.src !== window.location.origin + BUNDLED_LOGO) {

@@ -92,7 +92,7 @@ class AnthropicService
             $row['top_app'] ?: 'none',
         ))->implode("\n");
 
-        $system = 'You write a 3-4 sentence summary of a small agency team\'s tracked work day for a Slack digest. '
+        $system = 'You write a 3-4 sentence summary of a team\'s tracked work day for a Slack digest. '
             .'Plain text only (no markdown headers or bullet lists). Mention standout contributors and the dominant '
             .'client work, and flag anything unusual (very low activity, very short days) in a neutral, factual tone. '
             .'Do not invent information.';

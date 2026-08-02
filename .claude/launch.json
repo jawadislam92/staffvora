@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "mockup",
+      "runtimeExecutable": "C:\\laragon\\bin\\php\\php-8.3.30-Win32-vs16-x64\\php.exe",
+      "runtimeArgs": [
+        "-S",
+        "127.0.0.1:8913",
+        "-t",
+        "C:\\Users\\jawad\\AppData\\Local\\Temp\\claude\\C--Users-jawad-Claude\\3f055c87-1ecc-4c30-a145-a5156c62b629\\scratchpad"
+      ],
+      "port": 8913,
+      "url": "http://localhost:8913"
+    }
+  ]
+}

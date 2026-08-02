@@ -1,6 +1,6 @@
 # Operator portal — feature idea bank
 
-Ideas for `platform.satimetracker.com` (the landlord back-office) to make running
+Ideas for `platform.staffvora.com` (the landlord back-office) to make running
 Tracksuite easier as it scales. Grouped by area. Not a commitment — a menu.
 
 > **Context today:** billing is manual (record-a-payment); operator can view /

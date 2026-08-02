@@ -10,6 +10,7 @@ try { Notification = require('electron').Notification; } catch { /* tests / non-
 const api = require('./api');
 const queue = require('./queue');
 const store = require('./store');
+const report = require('./report');
 const screenshotService = require('./screenshotService');
 const activityService = require('./activityService');
 const { DEFAULTS } = require('./config');
@@ -85,10 +86,14 @@ class Tracker extends EventEmitter {
     this.session.frozen_seconds += Math.max(0, Math.floor((now - this.session.last_change_at_ms) / 1000));
     this.session.paused_at_ms = now;
     this.session.last_change_at_ms = now;
+    // Screenshots stop while paused; heartbeats and the sync drain KEEP running
+    // on purpose, so the server still sees a live session (and can tell a paused
+    // tracker from a capture-blocked one by the frozen total_seconds).
     if (this.timers.screenshot) {
       clearTimeout(this.timers.screenshot);
       this.timers.screenshot = null;
     }
+    report.info('pause', 'timer frozen', { total_seconds: this._currentSeconds() });
     if (reason) this.emit('warning', reason);
     this.emit('changed', this.status());
   }
@@ -99,6 +104,7 @@ class Tracker extends EventEmitter {
     this.session.paused_at_ms = null;
     this.session.last_change_at_ms = now;
     this._scheduleNextScreenshot();
+    report.info('resume', 'timer running again', { total_seconds: this._currentSeconds() });
     if (reason) this.emit('warning', reason);
     this.emit('changed', this.status());
   }
@@ -154,6 +160,11 @@ class Tracker extends EventEmitter {
 
     activityService.start();
     this._startTimers();
+    report.info('session_start', 'session ' + this.session.id + ' started', {
+      session_id: this.session.id,
+      capture_enabled: this.settings.capture_enabled !== false,
+      activity_tracking: this.settings.activity_tracking_enabled !== false,
+    });
     this.emit('changed', this.status());
   }
 
@@ -180,6 +191,15 @@ class Tracker extends EventEmitter {
     }
 
     const stopped = { ...this.session, stopped_at: stopPayload.stopped_at };
+    report.info('session_stop', 'session ' + stopped.id + ' stopped', {
+      session_id: stopped.id,
+      total_seconds: stopPayload.total_seconds,
+      pending_screenshots: (queue.counts() || {}).screenshots ?? null,
+    });
+    // Best-effort: get this session's telemetry up before the app loses focus
+    // (or the machine is shut down). Forced past the rate floor because there
+    // may be no later opportunity; the failure backoff still applies.
+    report.flush({ force: true }).catch(() => {});
     this.session = null;
     this.emit('stopped', stopped);
     this.emit('changed', this.status());
@@ -261,7 +281,7 @@ class Tracker extends EventEmitter {
       const idlePref = (store.get('prefs') || {}).idleNotifications;
       if (Notification && idlePref !== false) {
         try {
-          new Notification({ title: 'Timetracker', body: message }).show();
+          new Notification({ title: 'Tracksuite', body: message }).show();
         } catch { /* best effort */ }
       }
     }
@@ -292,7 +312,16 @@ class Tracker extends EventEmitter {
     const delayMs = (minS + jitter) * 1000;
 
     this.timers.screenshot = setTimeout(async () => {
-      try { await this._captureScreenshot(); } catch (err) { console.warn('screenshot failed:', err.message); }
+      try {
+        await this._captureScreenshot();
+      } catch (err) {
+        // The single most important telemetry event we have: a live tracker
+        // that cannot capture is almost always antivirus/permission blocking
+        // the screen read, and without this the day just silently ends up empty.
+        const msg = err && err.message ? err.message : String(err);
+        console.warn('screenshot failed:', msg);
+        report.warn('screenshot_capture_failed', msg, { where: 'scheduled' });
+      }
       this._scheduleNextScreenshot();
     }, delayMs);
   }
@@ -306,7 +335,7 @@ class Tracker extends EventEmitter {
     if (!shouldNotify || !Notification) return;
     try {
       new Notification({
-        title: 'Timetracker',
+        title: 'Tracksuite',
         body: 'Screenshot taken',
         silent: true,
       }).show();
@@ -424,6 +453,17 @@ class Tracker extends EventEmitter {
   }
 
   async _drainQueue() {
+    try {
+      await this._drainQueueInner();
+    } finally {
+      // Piggy-back the telemetry upload on the sync loop the tracker already
+      // runs. Never awaited: a diagnostics failure must not slow or fail a
+      // drain pass carrying real time data.
+      report.flush().catch(() => {});
+    }
+  }
+
+  async _drainQueueInner() {
     // Heartbeats first (cheap & most useful).
     for (const h of queue.nextHeartbeats()) {
       try {
@@ -435,6 +475,7 @@ class Tracker extends EventEmitter {
         queue.deleteHeartbeat(h.id);
       } catch (err) {
         queue.markHeartbeatError(h.id, err.message);
+        this._reportUploadFailure('heartbeat', err, h.attempts);
         return; // bail until next tick
       }
     }
@@ -465,6 +506,7 @@ class Tracker extends EventEmitter {
           queue.deleteActivitySamples(rows.map((r) => r.id));
         } catch (err) {
           queue.markActivityError(rows.map((r) => r.id), err.message);
+          this._reportUploadFailure('activity', err, Math.max(...rows.map((r) => r.attempts || 0)));
           return;
         }
       }
@@ -487,11 +529,28 @@ class Tracker extends EventEmitter {
         try { fs.unlinkSync(s.image_path); } catch { /* ignore */ }
       } catch (err) {
         queue.markScreenshotError(s.id, err.message);
+        this._reportUploadFailure('screenshot', err, s.attempts);
         return;
       }
     }
 
     this.emit('changed', this.status());
+  }
+
+  /**
+   * Telemetry for a failed upload. Deliberately coarse — kind, HTTP status and
+   * attempt count, never the payload — and repeated failures coalesce inside
+   * the reporter, so an offline machine costs one buffered row, not one per
+   * retry. Never sends the error body: it can echo server-side detail.
+   */
+  _reportUploadFailure(kind, err, attempts) {
+    const status = err && err.response ? err.response.status : null;
+    report.warn('upload_failed', kind + ' upload failed' + (status ? ' (HTTP ' + status + ')' : ' (offline)'), {
+      kind,
+      status,
+      attempts: Number.isFinite(attempts) ? attempts : null,
+      offline: !status,
+    });
   }
 }
 

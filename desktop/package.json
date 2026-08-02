@@ -1,12 +1,13 @@
 {
-  "name": "timetracker-desktop",
-  "productName": "SA Track",
-  "version": "0.3.4",
-  "description": "Desktop screenshot tracker for the Timetracker web app",
+  "name": "tracksuite-desktop",
+  "productName": "Tracksuite Desktop",
+  "version": "0.4.6",
+  "description": "Optional desktop time tracker for Tracksuite workspaces",
   "main": "main/main.js",
   "author": {
-    "name": "Spark"
+    "name": "Tracksuite"
   },
+  "_comment_version": "0.4.6 — MACHINE COMPLIANCE (endpoint inventory). The agent now inventories what is installed and running on the PC — browser extensions (per Chrome/Edge/Brave profile), installed programs, running processes, network adapters — and posts it to POST /api/desktop/machine-report so automation tools, scrapers and anti-detect browsers that get an Upwork profile banned are visible per machine and per employee without visiting the PC. 0.4.6 IS THE SERVER'S MINIMUM AGENT VERSION (Machine::MIN_AGENT_VERSION): anything older cannot report extensions at all, and the dashboard must show those machines as UNKNOWN rather than clean, so do not lower this number. Built so it cannot hurt the tracker: Windows-only, started 45s after launch and never awaited, all filesystem reads async with a yield between browser profiles (the source stalled the Electron main thread with readFileSync on multi-megabyte Secure Preferences files), PowerShell probes run one at a time with a 25s timeout, one run in flight at a time, a 5-minute floor between uploads, an hourly routine sweep with ±10 min jitter, and a browser-profile mtime watcher that uploads within ~60s of an extension being installed. Server limits are mirrored client-side: per-kind item caps (800/500/400/60) and a 900 KB body budget that sheds the least actionable inventory first. Failures back off 5 min → 6 h with jitter; a 403 (no `machine_compliance` entitlement) puts the collector to sleep for 6 hours rather than retrying, so no inventory is collected for a workspace that has not bought the feature. Two source bugs are carried over as fixes, not re-introduced: no field named `profile` is ever sent (a WAF HPP rule 403'd whole uploads), and extension enablement defaults to ENABLED on an unknown Chromium shape (checking `state === 1` once dropped 100% of extensions fleet-wide). Extension `permissions` and `from_webstore` are NOT collected. Previous: 0.4.0 — AGENT DIAGNOSTICS & TELEMETRY. A tracker that dies quietly (crashed renderer, antivirus blocking screen capture, expired token, stuck upload queue) used to be invisible until payroll was already wrong. The agent now buffers structured events — crashes, capture failures, pause/resume, upload failures, updater errors, an hourly agent_state health snapshot — and batches them to POST /api/desktop/diagnostics, where the server-side capture watchdog can act on them. Built to be unable to hurt the thing it protects: reporting is fire-and-forget (the clock and screenshot paths never await it), the buffer is capped at 300 events with drop-oldest and the loss is itself reported, identical repeats coalesce into one row with a repeat count, each request is capped at 50 events / 64 KB, and consecutive failures back off exponentially (60s → 15 min, ±20% jitter) so a flapping network or an outage cannot turn a fleet into a request storm. Context is sanitized — credential-looking keys are dropped and values capped — and no tenant/user id is ever sent (the server derives both from the Sanctum token). Renderer crashes reach the same pipe through one narrow, whitelisted IPC channel. Local capture.log is per-employee and rotates at 1 MB (≤2 MB on disk). Previous: 0.3.4.",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
@@ -19,7 +20,8 @@
     "start": "npm run build:renderer && electron .",
     "dist": "npm run build:renderer && electron-builder --win --x64",
     "dist:mac": "npm run build:renderer && electron-builder --mac",
-    "rebuild": "electron-rebuild -f -w better-sqlite3,uiohook-napi"
+    "rebuild": "electron-rebuild -f -w better-sqlite3,uiohook-napi",
+    "test": "node scripts/report-selftest.js && node scripts/collector-selftest.js"
   },
   "dependencies": {
     "active-win": "^8.2.0",
@@ -27,11 +29,11 @@
     "better-sqlite3": "^11.3.0",
     "electron-store": "^8.2.0",
     "electron-updater": "^6.8.9",
-    "form-data": "^4.0.0",
-    "jimp": "^0.22.12",
+    "form-data": "^4.0.6",
+    "jimp": "^1.6.1",
     "screenshot-desktop": "^1.15.0",
     "uiohook-napi": "^1.5.4",
-    "uuid": "^10.0.0"
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.6.0",
@@ -45,12 +47,12 @@
     "wait-on": "^8.0.1"
   },
   "build": {
-    "appId": "com.spark.timetracker.desktop",
-    "productName": "SA Track",
+    "appId": "com.tracksuite.desktop",
+    "productName": "Tracksuite Desktop",
     "publish": [
       {
         "provider": "generic",
-        "url": "https://timetracker.sparkingasia.com/desktop-updates"
+        "url": "https://staffvora.com/desktop-updates"
       }
     ],
     "directories": {
@@ -69,9 +71,9 @@
     ],
     "protocols": [
       {
-        "name": "Timetracker",
+        "name": "Tracksuite",
         "schemes": [
-          "timetracker"
+          "tracksuite"
         ]
       }
     ],
@@ -106,11 +108,11 @@
       "identity": null,
       "hardenedRuntime": false,
       "extendInfo": {
-        "NSAppleEventsUsageDescription": "Timetracker reads the active application name to record work activity."
+        "NSAppleEventsUsageDescription": "Tracksuite reads the active application name while you are tracking time, when your workspace enables this feature."
       }
     },
     "dmg": {
-      "title": "SA Track"
+      "title": "Tracksuite Desktop"
     },
     "nsis": {
       "oneClick": true,
@@ -118,7 +120,7 @@
       "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "SA Track",
+      "shortcutName": "Tracksuite Desktop",
       "include": "build/installer.nsh"
     }
   }

@@ -24,8 +24,8 @@ class DatabaseSeeder extends Seeder
         // Internal-only seeders stay runnable on purpose, but only when asked for
         // explicitly — never on a fresh product install:
         //   php artisan db:seed --class=AdminUserSeeder      (env-gated admin)
-        //   php artisan db:seed --class=ClientSeeder         (Sparking Asia clients)
-        //   php artisan db:seed --class=UpworkProfileSeeder  (Sparking Asia profiles)
+        //   php artisan db:seed --class=ClientSeeder         (legacy agency demo clients)
+        //   php artisan db:seed --class=UpworkProfileSeeder  (legacy agency demo profiles)
         //   php artisan db:seed --class=MonitoringSeeder     (global settings row)
         //   php artisan db:seed --class=DemoDataSeeder       (demo tenant data)
     }

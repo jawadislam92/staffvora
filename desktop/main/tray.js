@@ -43,9 +43,9 @@ function show() {
 function create() {
   if (tray) return;
   tray = new Tray(buildIcon());
-  tray.setToolTip('Timetracker Desktop');
+  tray.setToolTip('Tracksuite Desktop');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Open Timetracker', click: show },
+    { label: 'Open Tracksuite', click: show },
     { type: 'separator' },
     { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } },
   ]));

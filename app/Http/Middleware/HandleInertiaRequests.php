@@ -6,7 +6,9 @@ use App\Models\MonitoringSetting;
 use App\Models\Organization;
 use App\Models\TimeEntry;
 use App\Models\UserMonitoringSetting;
+use App\Support\BusinessTime;
 use App\Tenancy\CurrentOrganization;
+use App\Tenancy\Entitlements;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -60,7 +62,7 @@ class HandleInertiaRequests extends Middleware
 
             try {
                 // Shift-anchored "today" (overnight shifts span midnight).
-                $today = $user->attendanceDateFor(Carbon::now('Asia/Karachi'));
+                $today = $user->attendanceDateFor(Carbon::now(BusinessTime::tz()));
                 $entry = TimeEntry::query()
                     ->where('user_id', $user->id)
                     ->whereDate('action_date', $today)
@@ -129,7 +131,7 @@ class HandleInertiaRequests extends Middleware
         // The ?v= cache-buster changes with the stored path so a freshly
         // uploaded logo replaces the browser-cached one immediately.
         $orgId = app(CurrentOrganization::class)->id();
-        $branding = ['logo_url' => null, 'name' => null, 'accent_color' => null, 'default_theme' => 'dark'];
+        $branding = ['logo_url' => null, 'name' => null, 'accent_color' => null, 'default_theme' => 'light'];
         try {
             $branding = Cache::remember('branding.shared.'.($orgId ?? 0), 300, function () use ($orgId) {
                 $path = MonitoringSetting::current()->branding_logo_path;
@@ -139,26 +141,72 @@ class HandleInertiaRequests extends Middleware
                     'logo_url' => $path ? route('branding.logo').'?v='.substr(md5($path), 0, 8) : null,
                     'name' => $org?->brandName(),
                     'accent_color' => $org?->accent_color,
-                    'default_theme' => $org?->default_theme ?: 'dark',
+                    'default_theme' => $org?->default_theme ?: 'light',
                 ];
             });
         } catch (\Throwable $e) {
             // Keep rendering with the bundled logo if the table is missing.
         }
 
-        // Resolved theme: per-user override → workspace default → dark.
-        $theme = $user?->theme ?: ($branding['default_theme'] ?? 'dark');
-        $theme = in_array($theme, ['light', 'dark', 'black'], true) ? $theme : 'dark';
+        // Resolved theme: per-user override → workspace default → light (D-3).
+        $theme = $user?->theme ?: ($branding['default_theme'] ?? 'light');
+        $theme = in_array($theme, ['light', 'dark', 'black'], true) ? $theme : 'light';
 
-        // Effective entitlements (plan merged with platform per-tenant overrides),
-        // so the UI can lock controls/nav beyond the plan. The server enforces
-        // these independently — this is only for showing the locks.
+        // Effective entitlements — the SAME resolution the server gates on:
+        // per-company override → active add-ons → plan → catalogue default.
+        // This is only so the UI can show locks; every route and write is
+        // enforced independently through Organization::can()/entitlement().
+        //
+        // Cache invalidation has two halves, so an operator change is never
+        // stale: the per-company key is dropped whenever that organization is
+        // saved (Organization::booted) or its add-ons change, and the payload
+        // carries the catalogue STAMP, so one plan/feature/add-on edit
+        // invalidates every company at once without enumerating them.
         $entitlements = null;
         if ($user && $orgId) {
             try {
-                $entitlements = Cache::remember('entitlements.shared.'.$orgId, 60, fn () => Organization::find($orgId)?->entitlements());
+                $key = Entitlements::sharedCacheKey($orgId);
+                $stamp = Entitlements::stamp();
+                $cached = Cache::get($key);
+
+                if (is_array($cached) && ($cached['stamp'] ?? null) === $stamp) {
+                    $entitlements = $cached['map'];
+                } else {
+                    $entitlements = Organization::find($orgId)?->entitlements();
+                    Cache::put($key, ['stamp' => $stamp, 'map' => $entitlements], 60);
+                }
             } catch (\Throwable $e) {
                 $entitlements = null;
+            }
+        }
+
+        // Per-workspace TERMINOLOGY only — what the client/profile entities are
+        // called and which business timezone to render in.
+        //
+        // It deliberately carries NO capability flag. `uses_profiles` used to
+        // live here and was a SECOND client-side source of truth for access,
+        // resolved from `workspace_type` rather than from the plan. The nav and
+        // the client/timesheet pages now read `entitlements.upwork_profiles`
+        // from the shared map above — the same resolution the server gates on —
+        // so there is exactly one answer to "may this workspace see Profiles?".
+        //
+        // Safe to cache for 5 minutes precisely because nothing here is an
+        // access decision; the entitlement map has its own stamp-based
+        // invalidation so an operator grant is never served stale.
+        $workspace = ['client_term' => 'Project', 'profile_term' => 'Profile', 'timezone' => 'UTC'];
+        if ($orgId) {
+            try {
+                $workspace = Cache::remember('workspace.shared.'.$orgId, 300, function () use ($orgId) {
+                    $org = Organization::find($orgId);
+
+                    return [
+                        'client_term' => $org?->clientTerm() ?? 'Project',
+                        'profile_term' => $org?->profileTerm() ?? 'Profile',
+                        'timezone' => $org?->businessTimezone() ?? 'UTC',
+                    ];
+                });
+            } catch (\Throwable $e) {
+                // Keep the in-house defaults if the column/table isn't there yet.
             }
         }
 
@@ -170,6 +218,7 @@ class HandleInertiaRequests extends Middleware
             ],
             'teamSettings' => $teamSettings,
             'display' => $display,
+            'workspace' => $workspace,
             'branding' => $branding,
             'theme' => $theme,
             'entitlements' => $entitlements,
@@ -177,6 +226,8 @@ class HandleInertiaRequests extends Middleware
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
                 'info' => $request->session()->get('info'),
+                // One-time teammate credentials surfaced by the onboarding wizard.
+                'invited' => $request->session()->get('invited'),
             ],
             'impersonating' => $request->session()->has('platform_impersonator') || $request->session()->has('impersonator_id'),
         ];

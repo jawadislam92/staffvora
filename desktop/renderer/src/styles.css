@@ -1,8 +1,8 @@
 /* =========================================================================
-   SA Track desktop — theme system
+   Tracksuite Desktop — theme system
    Three themes via [data-theme]; every component reads CSS variables so a
    theme swap recolors the whole app. Default (:root) is the warm "cinematic"
-   ember look that matches the SA Track brand.
+   ember look that matches the Tracksuite brand.
    ========================================================================= */
 :root,
 [data-theme="cinematic"] {

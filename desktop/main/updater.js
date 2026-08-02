@@ -1,10 +1,11 @@
 'use strict';
 
 const { app, BrowserWindow } = require('electron');
+const report = require('./report');
 
 // Auto-update via electron-updater against the generic feed on the web app
-// (https://timetracker.sparkingasia.com/desktop-updates — configured in
-// package.json build.publish, baked into app-update.yml at package time).
+// (the endpoint configured in package.json build.publish and baked into
+// app-update.yml at package time).
 // Windows installs updates in place; unsigned macOS builds cannot auto-update
 // (Squirrel.Mac requires code signing), so this no-ops there.
 //
@@ -61,10 +62,14 @@ function init() {
   autoUpdater.on('update-downloaded', (info) => {
     downloadedVersion = info?.version || pendingVersion;
     broadcast({ type: 'downloaded', version: downloadedVersion });
+    try { report.info('update_downloaded', 'version ' + (downloadedVersion || '?') + ' ready to install', { version: downloadedVersion || null }); } catch { /* ignore */ }
   });
 
-  autoUpdater.on('error', () => {
+  autoUpdater.on('error', (err) => {
     broadcast({ type: 'error' });
+    // A machine stuck on an old build is a fleet-wide problem (it keeps any
+    // agent-side fix from ever landing), so update failures are telemetry too.
+    try { report.warn('updater_error', err && err.message ? err.message : String(err)); } catch { /* ignore */ }
   });
 
   const check = () => {

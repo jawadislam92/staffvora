@@ -92,7 +92,7 @@ the tracker, *complements* it, or is a **Plan B you test cheaply first** (landin
 - Coupons, inventory, shipping, tax, order management
 
 ### E. Domains, hosting & publishing
-- Free branded subdomain (yourname.satimetracker.site) on the free tier
+- Free branded subdomain (yourname.staffvora.site) on the free tier
 - **Custom domain connect + auto-SSL**; optional domain registration (reseller revenue)
 - One-click publish, staging vs live
 - Fast CDN, image optimization, caching, backups, uptime

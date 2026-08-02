@@ -110,10 +110,10 @@ class DesktopSetActiveVersion extends Command
         return preg_match('/^version:\s*(\S+)/m', File::get($path), $m) ? trim($m[1]) : null;
     }
 
-    /** The installer artifact for a version (current "SA Track" name, or older "Timetracker Desktop"). */
+    /** Find the productized installer, with temporary fallbacks for preview builds. */
     private function installerExists(string $dir, string $version): bool
     {
-        foreach (["SA Track Setup {$version}.exe", "Timetracker Desktop Setup {$version}.exe"] as $name) {
+        foreach (["Staffvora Desktop Setup {$version}.exe", "SA Track Setup {$version}.exe", "Timetracker Desktop Setup {$version}.exe"] as $name) {
             if (File::isFile($dir.'/'.$name)) {
                 return true;
             }
