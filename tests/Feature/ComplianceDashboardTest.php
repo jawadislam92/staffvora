@@ -584,6 +584,115 @@ class ComplianceDashboardTest extends TestCase
         $this->assertCount(2, $pcA['ids'], 'Both flags must be behind one Acknowledge click.');
     }
 
+    /**
+     * THE SILENT-TRUNCATION REGRESSION.
+     *
+     * `findingRows()` paginates GROUPS worst-first
+     * (`alerting DESC, severity_weight DESC, people DESC, MIN(label) ASC`), while
+     * `occurrencesFor()` used to fetch the occurrence rows with a flat
+     * `whereIn('rule', …)` capped at MAX_OCCURRENCE_ROWS ordered
+     * `rule, label, id` — i.e. ALPHABETICALLY — and only then discarded the rows
+     * whose label was not on the page, in PHP.
+     *
+     * So a rule carrying more than the cap's worth of alphabetically-early,
+     * low-severity labels consumed the whole cap before the page's own
+     * highest-severity label was ever read. `rows` fell back to `collect()`,
+     * `occurrences_hidden` computed `max(0, 0 - 12) = 0`, and the critical
+     * finding rendered as a CLEAN one: no machines listed, no "+N more".
+     *
+     * The fixture below is exactly that shape: 610 low-severity "AAA-…" labels
+     * plus ONE critical "Zeta …" label, all under the same rule. The critical
+     * finding is row 1 of the page and row 611 alphabetically.
+     */
+    public function test_a_high_severity_finding_never_renders_with_an_empty_occurrence_list(): void
+    {
+        $owner = $this->tenant('Truncation Co', 'truncation@compliance.test');
+        $machine = $this->machineFor($owner, ['device_name' => 'TRUNC-PC']);
+
+        $cap = 600;
+        $noise = $cap + 10;
+        $now = now();
+        $rows = [];
+
+        // Alphabetically FIRST, deliberately low severity and non-alerting, so
+        // they sort to the BOTTOM of the page and the TOP of the old fetch.
+        for ($i = 0; $i < $noise; $i++) {
+            $rows[] = [
+                'organization_id' => $owner->organization_id,
+                'machine_id' => $machine->id,
+                'user_id' => $owner->id,
+                'device_name' => 'TRUNC-PC',
+                'kind' => 'extensions',
+                'rule' => 'scraper',
+                'severity' => 'low',
+                'alert' => 0,
+                'label' => sprintf('AAA Filler %04d', $i),
+                'browser_profile' => 'Default',
+                'signature' => 'filler-'.$i,
+                'status' => MachineFlag::STATUS_OPEN,
+                'first_seen_at' => $now,
+                'last_seen_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        // Alphabetically LAST, and the single worst finding in the workspace.
+        $rows[] = [
+            'organization_id' => $owner->organization_id,
+            'machine_id' => $machine->id,
+            'user_id' => $owner->id,
+            'device_name' => 'TRUNC-PC',
+            'kind' => 'extensions',
+            'rule' => 'scraper',
+            'severity' => 'critical',
+            'alert' => 1,
+            'label' => 'Zeta Instant Data Scraper',
+            'browser_profile' => 'Default',
+            'signature' => 'zeta-scraper',
+            'status' => MachineFlag::STATUS_OPEN,
+            'first_seen_at' => $now,
+            'last_seen_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
+
+        // Raw insert bypasses the BelongsToOrganization stamping hook, so
+        // organization_id is set explicitly on every row above.
+        foreach (array_chunk($rows, 250) as $chunk) {
+            MachineFlag::query()->insert($chunk);
+        }
+
+        $response = $this->asTenant($owner)->get(route('monitoring.compliance'));
+        $response->assertOk();
+
+        $data = collect($response->viewData('page')['props']['rows']['data']);
+
+        $worst = $data->firstWhere('label', 'Zeta Instant Data Scraper');
+        $this->assertNotNull($worst, 'The critical finding must be on page 1 — the page orders alerting/severity first.');
+        $this->assertSame(0, $data->search(fn ($row) => $row['label'] === 'Zeta Instant Data Scraper'), 'It is the worst finding in the workspace, so it is row 1.');
+
+        // THE BUG: aggregates said "1 machine carries this", the occurrence list
+        // was empty and occurrences_hidden was 0 — a truncated finding that
+        // looked clean.
+        $this->assertSame(1, $worst['machines']);
+        $this->assertNotEmpty(
+            $worst['occurrences'],
+            'A finding whose aggregate says a machine carries it must never render with an empty occurrence list.',
+        );
+        $this->assertSame('TRUNC-PC', $worst['occurrences'][0]['device']);
+
+        // And the invariant across the WHOLE page, not just the one row: every
+        // row either lists its machines or says how many are hidden.
+        foreach ($data as $row) {
+            $this->assertSame(
+                $row['machines'],
+                count($row['occurrences']) + $row['occurrences_hidden'],
+                'Row "'.$row['label'].'" must account for every machine the aggregate counted.',
+            );
+        }
+    }
+
     public function test_the_by_employee_view_counts_programs_as_well_as_extensions(): void
     {
         $owner = $this->tenant('Employee Co', 'employee@compliance.test');
@@ -686,6 +795,81 @@ class ComplianceDashboardTest extends TestCase
 
         $second = $this->asTenant($owner)->get(route('monitoring.compliance', ['view' => 'machines', 'page' => 2]));
         $this->assertSame(2, $second->viewData('page')['props']['rows']['meta']['current_page']);
+    }
+
+    /**
+     * The two GROUPED views (By employee, By extension) no longer let the
+     * paginator wrap their whole aggregate in `select count(*) from (…)` —
+     * re-running every SUM and COUNT(DISTINCT) over the tenant's entire
+     * inventory purely to count groups was about half of each page at the
+     * ~45,000 rows this page is sized for. The total now comes from a
+     * `COUNT(DISTINCT <group key>)` instead, which must be the SAME number.
+     *
+     * This is the test that catches it if it ever stops being the same number:
+     * a wrong total means a page-2 button that leads nowhere, or one that never
+     * appears at all.
+     */
+    public function test_the_grouped_views_report_the_true_group_count_across_pages(): void
+    {
+        $owner = $this->tenant('Grouped Co', 'grouped@compliance.test');
+
+        // 30 people, one machine each, three extensions apiece — so By employee
+        // has 30 groups and By extension has 40 (a 10-name shared core plus 30
+        // unique tail names), both over one page of 25.
+        for ($person = 0; $person < 30; $person++) {
+            $user = User::factory()->create([
+                'organization_id' => $owner->organization_id,
+                'role' => 'member',
+            ]);
+
+            $machine = $this->machineFor($owner, [
+                'device_name' => 'GRP-PC-'.$person,
+                'user_id' => $user->id,
+            ]);
+
+            $this->itemOn($machine, ['user_id' => $user->id, 'name' => 'Shared Ext '.($person % 10)]);
+            $this->itemOn($machine, ['user_id' => $user->id, 'name' => 'Unique Ext '.$person]);
+            $this->itemOn($machine, [
+                'user_id' => $user->id,
+                'kind' => 'programs',
+                'name' => 'Shared App '.($person % 10),
+                'browser' => null,
+                'browser_profile' => null,
+            ]);
+        }
+
+        foreach ([
+            ['view' => 'employees', 'total' => 30],
+            ['view' => 'extensions', 'total' => 40],
+        ] as $case) {
+            $first = $this->asTenant($owner)->get(route('monitoring.compliance', ['view' => $case['view']]));
+            $first->assertOk();
+
+            $meta = $first->viewData('page')['props']['rows']['meta'];
+            $this->assertSame($case['total'], $meta['total'], $case['view'].' must report every group, not the page.');
+            $this->assertSame(25, $meta['per_page']);
+            $this->assertSame(2, $meta['last_page']);
+            $this->assertCount(25, $first->viewData('page')['props']['rows']['data']);
+
+            $second = $this->asTenant($owner)->get(route('monitoring.compliance', [
+                'view' => $case['view'],
+                'page' => 2,
+            ]));
+            $second->assertOk();
+
+            $secondProps = $second->viewData('page')['props']['rows'];
+            $this->assertSame(2, $secondProps['meta']['current_page']);
+            $this->assertCount($case['total'] - 25, $secondProps['data']);
+
+            // No row may appear on both pages — the manual paginator has to slice
+            // the ordered result, not restart it.
+            $key = $case['view'] === 'employees' ? 'user_id' : 'key';
+            $overlap = array_intersect(
+                collect($first->viewData('page')['props']['rows']['data'])->pluck($key)->all(),
+                collect($secondProps['data'])->pluck($key)->all(),
+            );
+            $this->assertSame([], $overlap, 'Page 2 of '.$case['view'].' repeated a row from page 1.');
+        }
     }
 
     /**

@@ -38,6 +38,16 @@ class SeedBigOrg extends Command
 
     protected $description = 'Seed one realistic BIG tenant (100+ users, months of history) and one brand-new EMPTY tenant, for scale benchmarking.';
 
+    /**
+     * How many inventory names the WHOLE fleet shares.
+     *
+     * These become a small, fixed number of GROUP BY buckets carrying a lot of
+     * rows each; everything past this ordinal is unique to one machine and
+     * becomes its own bucket. A benchmark run against only one of those two
+     * shapes measures the wrong thing.
+     */
+    private const SHARED_CORE_NAMES = 60;
+
     public function handle(): int
     {
         if (! app()->environment(['local', 'testing']) && ! $this->option('force')) {
@@ -172,6 +182,16 @@ class SeedBigOrg extends Command
      * `LOWER(name)` behaves completely differently when every row collapses into
      * 20 groups than when it produces thousands.
      *
+     * ⚠ EVERY ROW MUST BE UNIQUE ON (machine_id, kind, signature). The first cut
+     * of this method drew the shared-core name from `$i % 60`, which handed the
+     * same (name, profile) — and therefore the same signature — to ordinals 0 and
+     * 60 on the SAME machine, and the very first real run died on the unique
+     * index. The ordinal is now the row's absolute position on that machine
+     * (existing rows included, so a second top-up continues the sequence rather
+     * than re-colliding), and the shared core is a PREFIX of that sequence, so a
+     * shared name is used at most once per machine while still being shared
+     * across the whole fleet.
+     *
      * Written with raw chunked `insert()`, which BYPASSES the BelongsToOrganization
      * stamping hook — so `organization_id` is set explicitly on every row. That is
      * the exact hazard the tenancy docs call out, and getting it wrong here would
@@ -217,19 +237,24 @@ class SeedBigOrg extends Command
             $batch = [];
 
             for ($i = 0; $i < $needed; $i++) {
+                // The row's absolute position on THIS machine. Unique by
+                // construction, which is what keeps the signature unique.
+                $ordinal = $existing + $i;
+
                 // ~70% programs, 30% extensions — matching how a real report
                 // splits, and keeping the extensions view's group count honest.
-                $isExtension = ($i % 10) < 3;
+                $isExtension = ($ordinal % 10) < 3;
                 $kind = $isExtension ? 'extensions' : 'programs';
 
                 // A shared core everyone has (collapses into few groups) plus a
-                // per-machine long tail (thousands of groups). Both matter.
-                $shared = $i % 3 === 0;
-                $name = $shared
-                    ? sprintf('%s Core %03d', $isExtension ? 'Ext' : 'App', $i % 60)
-                    : sprintf('%s %s-%d-%d', $isExtension ? 'Extension' : 'Program', substr(md5($machine->id.'|'.$i), 0, 6), $machine->id, $i);
+                // per-machine long tail (thousands of groups). Both matter, and
+                // the core is a PREFIX of the sequence so no name repeats on one
+                // machine.
+                $name = $ordinal < self::SHARED_CORE_NAMES
+                    ? sprintf('%s Core %03d', $isExtension ? 'Ext' : 'App', $ordinal)
+                    : sprintf('%s %s-%d-%d', $isExtension ? 'Extension' : 'Program', substr(md5($machine->id.'|'.$ordinal), 0, 6), $machine->id, $ordinal);
 
-                $profile = $isExtension ? $profiles[$i % count($profiles)] : null;
+                $profile = $isExtension ? $profiles[$ordinal % count($profiles)] : null;
 
                 $batch[] = [
                     // EXPLICIT — insert() never fires the model's stamping hook.
@@ -241,8 +266,8 @@ class SeedBigOrg extends Command
                     'name' => $name,
                     'browser' => $isExtension ? 'chrome' : null,
                     'browser_profile' => $profile,
-                    'publisher' => $publishers[$i % count($publishers)],
-                    'version' => sprintf('%d.%d.%d', 1 + ($i % 9), $i % 20, $i % 50),
+                    'publisher' => $publishers[$ordinal % count($publishers)],
+                    'version' => sprintf('%d.%d.%d', 1 + ($ordinal % 9), $ordinal % 20, $ordinal % 50),
                     'detail' => null,
                     'enabled' => 1,
                     'flagged' => 0,
@@ -251,7 +276,7 @@ class SeedBigOrg extends Command
                     'alert' => 0,
                     'present' => 1,
                     'first_seen_at' => $now->copy()->subDays(30),
-                    'last_seen_at' => $now->copy()->subHours($i % 48),
+                    'last_seen_at' => $now->copy()->subHours($ordinal % 48),
                     'removed_at' => null,
                     'created_at' => $now,
                     'updated_at' => $now,

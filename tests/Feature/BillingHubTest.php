@@ -15,6 +15,7 @@ use App\Services\TenantProvisioner;
 use App\Tenancy\CurrentOrganization;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
@@ -536,6 +537,91 @@ class BillingHubTest extends TestCase
                 ->has('invoices.data', 1)
                 ->where('invoices.data.0.status', Payment::STATUS_PENDING)
             );
+    }
+
+    // -----------------------------------------------------------------------
+    // Seat count: derived once, not once per priced line
+    // -----------------------------------------------------------------------
+
+    /**
+     * The hub prices every add-on card on BOTH cycles and both invoice previews,
+     * and each of those asked `billableSeats()` for the same number — five
+     * identical `select count(*) from users` on this catalogue, and ~13 with the
+     * full one. They cannot disagree inside one request, so the count is
+     * memoised per organization on the (per-resolution) service instance.
+     *
+     * This asserts the SHAPE, not a magic number: however many priced lines the
+     * page grows, the seat count is read exactly once.
+     */
+    public function test_the_billing_hub_counts_seats_once_however_many_lines_it_prices(): void
+    {
+        ['owner' => $owner] = $this->workspace(extraUsers: 6);
+
+        $seatCounts = 0;
+
+        DB::listen(function ($query) use (&$seatCounts) {
+            $sql = strtolower($query->sql);
+
+            if (! str_contains($sql, 'from "users"') && ! str_contains($sql, 'from `users`')) {
+                return;
+            }
+
+            if (str_contains($sql, 'count(*)') && str_contains($sql, 'is_active')) {
+                $seatCounts++;
+            }
+        });
+
+        $response = $this->actingAs($owner)->get(route('billing.index'));
+        $response->assertOk();
+
+        // Sanity: the page really did price several lines off that one count.
+        $props = $response->viewData('page')['props'];
+        $this->assertSame(7, $props['seatsUsed']);
+        $this->assertGreaterThanOrEqual(1, count($props['addons']));
+        $this->assertSame(7, $props['addons'][0]['quotes']['monthly']['seats']);
+        $this->assertSame(7, $props['addons'][0]['quotes']['yearly']['seats']);
+        $this->assertSame(7, $props['previews']['monthly']['seats']);
+        $this->assertSame(7, $props['previews']['yearly']['seats']);
+
+        $this->assertSame(
+            1,
+            $seatCounts,
+            'The billable-seat COUNT(*) must be issued once per request, not once per priced line.',
+        );
+    }
+
+    /**
+     * Memoised must never mean stale or cross-tenant. The cache is keyed by
+     * organization id, and a caller that changes the head-count can drop it.
+     */
+    public function test_the_memoised_seat_count_is_per_organization_and_can_be_dropped(): void
+    {
+        ['org' => $a] = $this->workspace(extraUsers: 2);
+
+        $second = app(TenantProvisioner::class)->provision('Beta Co', 'Owner', 'owner@beta.test', 'super-secret-pw')['owner'];
+        $b = Organization::withoutGlobalScopes()->findOrFail($second->organization_id);
+
+        $pricing = app(BillingPricing::class);
+
+        $this->assertSame(3, $pricing->billableSeats($a));
+        // A different workspace must not be answered from the first one's entry.
+        $this->assertSame(1, $pricing->billableSeats($b));
+        $this->assertSame(3, $pricing->billableSeats($a));
+
+        app(CurrentOrganization::class)->runFor($a, fn () => User::create([
+            'organization_id' => $a->id,
+            'name' => 'Late Joiner',
+            'email' => 'late@acme.test',
+            'password' => bcrypt('super-secret-pw'),
+            'role' => 'member',
+        ]));
+
+        // Still the memoised figure — that is the whole point inside one request.
+        $this->assertSame(3, $pricing->billableSeats($a));
+
+        $pricing->forgetSeats($a);
+        $this->assertSame(4, $pricing->billableSeats($a));
+        $this->assertSame(1, $pricing->billableSeats($b));
     }
 
     public function test_billing_details_are_saved_against_the_workspace(): void

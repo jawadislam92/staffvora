@@ -256,6 +256,12 @@ class Benchmark extends Command
 
         $surfaces[] = ['name' => 'Compliance dashboard', 'uri' => '/compliance', 'inertia' => true];
         $surfaces[] = ['name' => 'Compliance (extensions)', 'uri' => '/compliance?view=extensions', 'inertia' => true];
+        // The per-employee and per-machine rollups were the two that actually
+        // degraded at a realistic inventory size (49 ms and 61 ms at 45,000
+        // rows, against 11 ms at the old 1,976-row fixture). They were invisible
+        // to this gate until now, which is exactly how they went unmeasured.
+        $surfaces[] = ['name' => 'Compliance (employees)', 'uri' => '/compliance?view=employees', 'inertia' => true];
+        $surfaces[] = ['name' => 'Compliance (machines)', 'uri' => '/compliance?view=machines', 'inertia' => true];
         $surfaces[] = ['name' => 'Billing hub', 'uri' => '/billing', 'inertia' => true];
         $surfaces[] = ['name' => 'Settings', 'uri' => '/settings', 'inertia' => true];
         $surfaces[] = ['name' => 'Feedback inbox', 'uri' => '/feedback', 'inertia' => true];

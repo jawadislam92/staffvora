@@ -47,13 +47,34 @@ use Illuminate\Support\Carbon;
  * explicitly (per-company add-on pricing is listed under `deferred`).
  *
  * ─── SCALE ───────────────────────────────────────────────────────────────────
- * Seats are one indexed `COUNT(*)`; add-on lines come from the already-loaded
- * `activeAddons` relation. Nothing here loops over users or payments.
+ * Seats are one indexed `COUNT(*)`, MEMOISED per organization for the life of
+ * this instance; add-on lines come from the already-loaded `activeAddons`
+ * relation. Nothing here loops over users or payments.
  */
 class BillingPricing
 {
     /** Seconds in a day — proration is measured in whole days. */
     private const DAY = 86400;
+
+    /**
+     * Memoised seat counts, keyed by organization id.
+     *
+     * The billing hub asks for the seat count once per add-on quote (two per
+     * card, one per cycle), twice more for the two invoice previews and once
+     * directly — five identical `COUNT(*)` on `users` with the small add-on
+     * catalogue, and ~13 with the full one. They cannot disagree inside one
+     * request, so they are answered once.
+     *
+     * INSTANCE state, deliberately not static: the container hands out a fresh
+     * BillingPricing per resolution, so the cache cannot outlive the request
+     * that built it, cannot leak between tenants in a queue worker, and cannot
+     * be shared with the mutation path (AddonPurchase resolves its own), which
+     * must always price against a live count. Keyed by organization id so an
+     * operator context that prices several workspaces stays correct.
+     *
+     * @var array<int, int>
+     */
+    private array $seatCache = [];
 
     // -----------------------------------------------------------------------
     // Inputs
@@ -64,18 +85,46 @@ class BillingPricing
      * people (who left) keep their history but are not a paid seat.
      *
      * One indexed COUNT(*), explicitly unscoped and re-scoped to the target org
-     * so it is correct whether it runs in a tenant request or an operator one.
-     * Never below 1 — an account always has at least its owner.
+     * so it is correct whether it runs in a tenant request or an operator one,
+     * and memoised per organization for the life of this instance (see
+     * `$seatCache` — a page that quotes ten add-on cards must not issue ten
+     * identical counts). Never below 1 — an account always has at least its
+     * owner.
      */
     public function billableSeats(Organization $organization): int
     {
+        $organizationId = (int) $organization->id;
+
+        if (array_key_exists($organizationId, $this->seatCache)) {
+            return $this->seatCache[$organizationId];
+        }
+
         $count = User::query()
             ->withoutGlobalScope(OrganizationScope::class)
-            ->where('organization_id', $organization->id)
+            ->where('organization_id', $organizationId)
             ->where('is_active', true)
             ->count();
 
-        return max(1, (int) $count);
+        return $this->seatCache[$organizationId] = max(1, (int) $count);
+    }
+
+    /**
+     * Drop the memoised seat count(s).
+     *
+     * Only needed by a caller that CHANGES the seat count and then re-prices
+     * with the same instance — activating a user and immediately quoting, say.
+     * Nothing in the read path needs it; it exists so that "memoised" can never
+     * quietly become "wrong".
+     */
+    public function forgetSeats(?Organization $organization = null): void
+    {
+        if ($organization === null) {
+            $this->seatCache = [];
+
+            return;
+        }
+
+        unset($this->seatCache[(int) $organization->id]);
     }
 
     /** Normalise anything into one of the two cycles the catalogue prices. */
