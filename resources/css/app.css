@@ -26,6 +26,16 @@
     --text-subtle: #6b7793;
     --accent: var(--brand-accent, #2563EB);
 
+    /* Data-viz categorical slots (1 violet, 2 green, 3 blue, 4 amber, 5 pink).
+       Validated against bg-app #070b18 (dataviz validator: all checks pass).
+       Color follows the entity — assign slots in fixed order, never cycle. */
+    --viz-1: #8b5cf6; --viz-2: #059669; --viz-3: #3b82f6; --viz-4: #d97706; --viz-5: #ec4899;
+    --viz-1-soft: color-mix(in srgb, #8b5cf6 14%, transparent);
+    --viz-2-soft: color-mix(in srgb, #059669 14%, transparent);
+    --viz-3-soft: color-mix(in srgb, #3b82f6 14%, transparent);
+    --viz-4-soft: color-mix(in srgb, #d97706 14%, transparent);
+    --viz-5-soft: color-mix(in srgb, #ec4899 14%, transparent);
+
     --c-slate-50: 248 250 252; --c-slate-100: 241 245 249; --c-slate-200: 226 232 240;
     --c-slate-300: 203 213 225; --c-slate-400: 148 163 184; --c-slate-500: 100 116 139;
     --c-slate-600: 71 85 105; --c-slate-700: 51 65 85; --c-slate-800: 30 41 59;
@@ -44,6 +54,15 @@
     --text-muted: #475569;
     --text-subtle: #94a3b8;
     --accent: var(--brand-accent, #f97316);
+
+    /* Data-viz categorical slots (1 violet, 2 green, 3 blue, 4 amber, 5 pink).
+       Validated against bg-app #f6f8fb (dataviz validator: all checks pass). */
+    --viz-1: #7c3aed; --viz-2: #059669; --viz-3: #2563eb; --viz-4: #b45309; --viz-5: #db2777;
+    --viz-1-soft: color-mix(in srgb, #7c3aed 12%, transparent);
+    --viz-2-soft: color-mix(in srgb, #059669 12%, transparent);
+    --viz-3-soft: color-mix(in srgb, #2563eb 12%, transparent);
+    --viz-4-soft: color-mix(in srgb, #b45309 12%, transparent);
+    --viz-5-soft: color-mix(in srgb, #db2777 12%, transparent);
 
     /* Scale inverted by lightness: 950 (was darkest bg) → lightest page,
        900 → white cards, low numbers (text) → dark. */
@@ -65,6 +84,15 @@
     --text-muted: #a3a3a3;
     --text-subtle: #6b6b6b;
     --accent: var(--brand-accent, #f97316);
+
+    /* Data-viz categorical slots — shares the dark set (validated against
+       both #070b18 and #000000; all checks pass). */
+    --viz-1: #8b5cf6; --viz-2: #059669; --viz-3: #3b82f6; --viz-4: #d97706; --viz-5: #ec4899;
+    --viz-1-soft: color-mix(in srgb, #8b5cf6 14%, transparent);
+    --viz-2-soft: color-mix(in srgb, #059669 14%, transparent);
+    --viz-3-soft: color-mix(in srgb, #3b82f6 14%, transparent);
+    --viz-4-soft: color-mix(in srgb, #d97706 14%, transparent);
+    --viz-5-soft: color-mix(in srgb, #ec4899 14%, transparent);
 
     --c-slate-50: 250 250 250; --c-slate-100: 245 245 245; --c-slate-200: 229 229 229;
     --c-slate-300: 212 212 212; --c-slate-400: 163 163 163; --c-slate-500: 107 107 107;

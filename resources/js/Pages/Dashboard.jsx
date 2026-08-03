@@ -19,7 +19,7 @@ import {
     Button,
     Card,
     Badge,
-    StatCard,
+    KpiCard,
     Table,
     THead,
     TBody,
@@ -32,7 +32,9 @@ import {
     Tabs,
     LockedFeature,
 } from "@/Components/ui";
-import { Sparkline, TrendChart, ActivityStrip, RankedBars } from "@/Components/charts";
+import { TrendChart, GradientBar } from "@/Components/charts";
+import { useThemeName, vizColor, cssVar } from "@/Components/charts/theme";
+import { LazyDoughnutChart, ChartWrapper } from "@/Components/LazyLoad";
 import { showError, showExportSuccess, showLoading } from "@/Utils/notifications";
 import { formatHours } from "@/Utils/timeUtils";
 
@@ -175,11 +177,14 @@ const DEV_SAMPLE = {
         { user_id: 5, user_name: "Nida Amin", designation: "Marketing Lead", avatar: null, current_status: "Clocked Out", total_work_hours: 3.08, tracked_hours: 2.5, total_break_hours: 0.7, activity_percent: 47, weekly_work_hours: 19.83, monthly_work_hours: 88.0 },
         { user_id: 6, user_name: "Bilal Tariq", designation: "DevOps", avatar: null, current_status: "Clocked Out", total_work_hours: 2.33, tracked_hours: 1.9, total_break_hours: 0.5, activity_percent: 38, weekly_work_hours: 16.08, monthly_work_hours: 72.4 },
     ],
+    // KpiCard-shaped: accent is a --viz slot (1=violet, 2=green, 3=blue,
+    // 4=amber, 5=pink — the validated categorical order, NOT the raw
+    // reference order), delta follows the kpiTrends contract.
     stats: [
-        { key: "hours", label: "Hours tracked", value: "142h 30m", icon: Clock, delta: { value: "8.4%", dir: "up" }, sparkData: [18, 22, 19, 26, 24, 30, 27, 33, 31, 35, 34, 37, 36, 38], sparkTone: "text-accent", hint: "Team total · this week" },
-        { key: "activity", label: "Avg activity", value: "68%", icon: Activity, delta: { value: "3.1%", dir: "up" }, sparkData: [61, 64, 62, 66, 65, 69, 68, 70, 67, 71, 69, 72, 70, 68], sparkTone: "text-accent", hint: "Across active members" },
-        { key: "active", label: "Active members", value: "12 / 15", icon: Users, delta: { value: "2", dir: "down", good: false }, sparkData: [14, 13, 15, 14, 13, 12, 13, 12], sparkTone: "text-warning", hint: "Clocked in right now" },
-        { key: "break", label: "On break", value: "2", icon: Coffee, hint: "Members paused · now" },
+        { key: "hours", label: "Hours tracked", value: "142h 30m", icon: Clock, accent: 1, sub: "Team total · this week", delta: { pct: 8.4, direction: "up", good: true, label: "vs previous 14 days" }, spark: [18, 22, 19, 26, 24, 30, 27, 33, 31, 35, 34, 37, 36, 38] },
+        { key: "active", label: "Active members", value: "12 / 15", icon: Users, accent: 3, sub: "Clocked in right now", delta: { pct: 14.3, direction: "down", good: false, label: "vs previous 14 days" }, spark: [14, 13, 15, 14, 13, 12, 13, 12] },
+        { key: "activity", label: "Avg activity", value: "68%", icon: Activity, accent: 2, sub: "Across active members", delta: { pct: 3.1, direction: "up", good: true, label: "vs previous 14 days" }, spark: [61, 64, 62, 66, 65, 69, 68, 70, 67, 71, 69, 72, 70, 68] },
+        { key: "break", label: "On break", value: "2", icon: Coffee, accent: 4, sub: "Members paused · now", delta: { pct: 1.8, direction: "up", good: null, label: "vs previous 14 days" }, spark: [38, 42, 40, 45, 41, 44, 43, 47, 44, 46, 45, 48, 46, 44] },
     ],
     trend: [
         { label: "Jul 9", value: 20 }, { label: "Jul 10", value: 24 }, { label: "Jul 11", value: 19 },
@@ -196,13 +201,14 @@ const DEV_SAMPLE = {
         { label: "Avg / day", value: "10.2h" },
         { label: "Idle time", value: "21%", delta: { value: "1.4%", dir: "down" } },
     ],
-    activity: { tracked: 64, idle: 21, manual: 9, untracked: 6 },
+    // Hours, not percentages — the donut legend prints the raw values.
+    activity: { tracked: 91.2, idle: 29.9, manual: 12.8, untracked: 8.6 },
     projects: [
-        { label: "Atlas Mobile App", value: "48h 10m", pct: 100, meta: "34% of tracked time" },
-        { label: "Orbit Dashboard", value: "36h 25m", pct: 76, meta: "26% of tracked time" },
-        { label: "Nimbus API", value: "24h 50m", pct: 52, meta: "17% of tracked time" },
-        { label: "Helio Website", value: "18h 05m", pct: 38, meta: "13% of tracked time" },
-        { label: "Vela CRM", value: "14h 00m", pct: 29, meta: "10% of tracked time" },
+        { label: "Atlas Mobile App", value: "48h 10m", pct: 100 },
+        { label: "Orbit Dashboard", value: "36h 25m", pct: 76 },
+        { label: "Nimbus API", value: "24h 50m", pct: 52 },
+        { label: "Helio Website", value: "18h 05m", pct: 38 },
+        { label: "Vela CRM", value: "14h 00m", pct: 29 },
     ],
 };
 
@@ -395,6 +401,7 @@ export default function Dashboard({
     gettingStarted = null,
     demoData = null,
     topProjects = null,
+    kpiTrends = null,
     preview = false,
 }) {
     const page = usePage();
@@ -605,10 +612,26 @@ export default function Dashboard({
         second: "2-digit",
     });
 
-    // Stat cards — real data only. Deltas/sparklines are shown ONLY in preview
-    // (we have no historical series live, and we never fabricate a trend).
+    // KPI cards — the big values stay live/today (same derivations as before);
+    // each card's spark + delta come from the server's `kpiTrends` block
+    // (14-day series + vs-previous-14-days deltas). kpiTrends is only served
+    // to team viewers, so members' cards simply omit the spark/delta rows —
+    // KpiCard drops them when null. Nothing here fabricates a trend.
+    //
+    // Accent slots follow the validated categorical order (1=violet, 2=green,
+    // 3=blue, 4=amber, 5=pink), picked per card to honour the reference hues:
+    // hours→violet(1), active members→blue(3), activity→green(2), break→amber(4).
     const stats = useMemo(() => {
         if (preview) return DEV_SAMPLE.stats;
+
+        const deltaFor = (key) => {
+            const d = kpiTrends?.deltas?.[key];
+            return d ? { ...d, label: "vs previous 14 days" } : null;
+        };
+        const sparkFor = (key) => {
+            const s = kpiTrends?.series?.[key];
+            return Array.isArray(s) && s.length > 0 ? s : null;
+        };
 
         if (canViewTeam) {
             const withActivity = employees.filter(
@@ -625,26 +648,26 @@ export default function Dashboard({
             const onBreak = employees.filter((e) => e.current_status === "On Break").length;
 
             return [
-                { key: "hours", label: "Hours tracked", value: formatHours(teamTracked), icon: Clock, hint: "Team total · today" },
-                { key: "activity", label: "Avg activity", value: avgActivity != null ? `${avgActivity}%` : "—", icon: Activity, hint: "Across active members" },
-                { key: "active", label: "Active members", value: `${working} / ${employees.length}`, icon: Users, hint: "Clocked in right now" },
-                { key: "break", label: "On break", value: `${onBreak}`, icon: Coffee, hint: "Members paused · now" },
+                { key: "hours", label: "Hours tracked", value: formatHours(teamTracked), icon: Clock, accent: 1, sub: "Team total · today", delta: deltaFor("hours"), spark: sparkFor("hours") },
+                { key: "active", label: "Active members", value: `${working} / ${employees.length}`, icon: Users, accent: 3, sub: "Clocked in right now", delta: deltaFor("active"), spark: sparkFor("active") },
+                { key: "activity", label: "Avg activity", value: avgActivity != null ? `${avgActivity}%` : "—", icon: Activity, accent: 2, sub: "Across active members", delta: deltaFor("activity"), spark: sparkFor("activity") },
+                { key: "break", label: "On break", value: `${onBreak}`, icon: Coffee, accent: 4, sub: "Members paused · now", delta: deltaFor("breakMinutes"), spark: sparkFor("breakMinutes") },
             ];
         }
 
-        // Self view.
+        // Self view — no kpiTrends (team-level series are never served here).
         const me = employees.find((e) => e.user_id === user?.id);
         const myActivity = me?.activity_percent;
         return [
-            { key: "office", label: "In office", value: formatHours(todayStats.totalHours), icon: Clock, hint: "Clocked-in time · today" },
-            { key: "tracked", label: "Tracked work", value: formatHours(me?.tracked_hours || 0), icon: Activity, hint: "Tracker active · today" },
-            { key: "activity", label: "Activity", value: myActivity != null ? `${Math.round(myActivity)}%` : "—", icon: Activity, hint: "Keyboard / mouse · today" },
-            { key: "break", label: "Break time", value: formatHours(todayStats.totalBreakTime), icon: Coffee, hint: "On break · today" },
+            { key: "office", label: "In office", value: formatHours(todayStats.totalHours), icon: Clock, accent: 1, sub: "Clocked-in time · today" },
+            { key: "tracked", label: "Tracked work", value: formatHours(me?.tracked_hours || 0), icon: Activity, accent: 3, sub: "Tracker active · today" },
+            { key: "activity", label: "Activity", value: myActivity != null ? `${Math.round(myActivity)}%` : "—", icon: Activity, accent: 2, sub: "Keyboard / mouse · today" },
+            { key: "break", label: "Break time", value: formatHours(todayStats.totalBreakTime), icon: Coffee, accent: 4, sub: "On break · today" },
         ];
-    }, [preview, canViewTeam, employees, todayStats, user?.id]);
+    }, [preview, canViewTeam, employees, todayStats, user?.id, kpiTrends]);
 
     // Activity breakdown — honestly derived from the summary (active vs idle vs
-    // clocked-in-but-untracked). ActivityStrip renders its own empty state when
+    // clocked-in-but-untracked). The donut card renders an empty state when
     // there's nothing to show.
     const breakdown = useMemo(() => {
         if (preview) return DEV_SAMPLE.activity;
@@ -661,6 +684,45 @@ export default function Dashboard({
             { tracked: 0, idle: 0, untracked: 0 }
         );
     }, [preview, employees]);
+
+    // Donut view of the breakdown. Colors resolve from the --viz custom
+    // properties at render time, so the memo re-runs on theme flips (Chart.js
+    // rasterizes colors — it can't consume `var()` strings). Slots follow the
+    // ENTITY, fixed forever: tracked→green(2), manual→blue(3), idle→amber(4);
+    // untracked is not a category of work, so it wears the subtle text token.
+    const themeName = useThemeName();
+    const donut = useMemo(() => {
+        const DONUT_ENTITIES = [
+            { key: "tracked", label: "Tracked", slot: 2 },
+            { key: "manual", label: "Manual", slot: 3 },
+            { key: "idle", label: "Idle", slot: 4 },
+            { key: "untracked", label: "Untracked", slot: null },
+        ];
+        const rows = DONUT_ENTITIES.map((o) => ({
+            ...o,
+            value: Math.round((Number(breakdown[o.key]) || 0) * 10) / 10,
+        })).filter((r) => r.value > 0);
+        const total = rows.reduce((s, r) => s + r.value, 0);
+
+        return {
+            total,
+            data: {
+                labels: rows.map((r) => r.label),
+                datasets: [
+                    {
+                        data: rows.map((r) => r.value),
+                        backgroundColor: rows.map((r) =>
+                            r.slot ? vizColor(r.slot) : cssVar("--text-subtle", "#6b7793")
+                        ),
+                        borderWidth: 0,
+                        hoverOffset: 4,
+                    },
+                ],
+            },
+        };
+        // themeName is a deliberate dep: it re-resolves the CSS variables.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [breakdown, themeName]);
 
     // Average worked hours/day across the live trend — drives TrendChart's dotted
     // average line + legend. Only meaningful with 2+ non-empty days.
@@ -681,16 +743,30 @@ export default function Dashboard({
     const projectRank = useMemo(() => {
         if (preview) return DEV_SAMPLE.projects;
 
+        // `pct` is relative to the leader (the server also sends `share` of all
+        // logged time, but on client-heavy tenants every share is a sliver —
+        // leader-relative bars keep the ranking readable, and the card
+        // description says exactly what the % means).
         return (topProjects?.items || []).map((row) => ({
             label: row.label,
             value: formatHours(row.hours),
             pct: row.pct,
-            meta: row.share > 0 ? `${row.share}% of logged time` : undefined,
         }));
     }, [preview, topProjects]);
+
+    // GradientBar slot per project — color follows the ENTITY, not its rank:
+    // slots are assigned in fixed (alphabetical) order over the displayed set,
+    // so two projects swapping rank between visits keep their colors. The list
+    // is server-capped at 5, matching the 5 categorical slots — never cycled.
+    const projectSlots = useMemo(() => {
+        const sorted = projectRank
+            .map((r) => r.label)
+            .sort((a, b) => String(a).localeCompare(String(b)));
+        return new Map(sorted.map((label, i) => [label, Math.min(i + 1, 5)]));
+    }, [projectRank]);
     const projectRankHeading = `${
         projectScope === "team" ? "Across the team" : "Your hours"
-    } · last ${projectWindowDays} days`;
+    } · last ${projectWindowDays} days · % vs the leader`;
 
     const teamHeading = canViewTeam ? "Team activity" : "Your activity";
     const activeCount = employees.filter((e) => e.current_status === "Working").length;
@@ -791,23 +867,15 @@ export default function Dashboard({
                         {stats.map((s) => {
                             const Icon = s.icon || Clock;
                             return (
-                                <StatCard
+                                <KpiCard
                                     key={s.key}
+                                    accent={s.accent}
                                     label={s.label}
                                     value={s.value}
-                                    hint={s.hint}
+                                    sub={s.sub}
                                     delta={s.delta}
+                                    spark={s.spark}
                                     icon={<Icon className="h-[18px] w-[18px]" />}
-                                    spark={
-                                        s.sparkData ? (
-                                            <Sparkline
-                                                data={s.sparkData}
-                                                area
-                                                height={30}
-                                                className={s.sparkTone || "text-accent"}
-                                            />
-                                        ) : undefined
-                                    }
                                 />
                             );
                         })}
@@ -834,6 +902,8 @@ export default function Dashboard({
                                     compare={DEV_SAMPLE.compare}
                                     avg={DEV_SAMPLE.trendAvg}
                                     unit="h"
+                                    gradientFill
+                                    glow
                                 />
                                 <div className="mt-4 grid grid-cols-2 border-t border-line sm:grid-cols-4">
                                     {DEV_SAMPLE.cstats.map((c, i) => (
@@ -872,18 +942,34 @@ export default function Dashboard({
                         ) : (
                             // TrendChart renders its own empty state when the series
                             // is empty (no activity in the last 14 days).
-                            <TrendChart data={trend} avg={trendAvg} unit="h" />
+                            // glow is theme-aware: halo in dark/black, crisp in light.
+                            <TrendChart data={trend} avg={trendAvg} unit="h" gradientFill glow />
                         )}
                     </Card>
 
-                    <Card title="Time breakdown" description="Tracked vs idle vs untracked · today">
+                    <Card className="min-w-0" title="Time breakdown" description="Tracked vs idle vs untracked · hours today">
                         {initialLoading ? (
                             <div className="space-y-4">
                                 <Skeleton className="h-11 w-full" rounded="rounded-xl" />
                                 <Skeleton className="h-3 w-2/3" />
                             </div>
+                        ) : donut.total > 0 ? (
+                            <ChartWrapper
+                                component={LazyDoughnutChart}
+                                data={donut.data}
+                                centerValue={formatHours(donut.total)}
+                                centerLabel="hours today"
+                                legend="dots"
+                                // animation off: the dashboard re-polls every 45s with a
+                                // fresh data object — an animated donut would visibly
+                                // re-spin on every refresh.
+                                options={{ maintainAspectRatio: true, aspectRatio: 1.9, animation: false }}
+                            />
                         ) : (
-                            <ActivityStrip breakdown={breakdown} hours={false} />
+                            <EmptyState
+                                title="No activity yet"
+                                description="The tracked / idle / untracked split appears here once time is tracked today."
+                            />
                         )}
                     </Card>
                 </div>
@@ -1040,11 +1126,22 @@ export default function Dashboard({
                     </Card>
 
                     <Card
+                        className="min-w-0"
                         title={`Top ${projectTerm.toLowerCase()}s`}
                         description={projectRankHeading}
                     >
                         {projectRank.length > 0 ? (
-                            <RankedBars items={projectRank} />
+                            <div className="space-y-4">
+                                {projectRank.map((row) => (
+                                    <GradientBar
+                                        key={row.label}
+                                        accent={projectSlots.get(row.label)}
+                                        label={row.label}
+                                        pct={row.pct}
+                                        count={row.value}
+                                    />
+                                ))}
+                            </div>
                         ) : (
                             <EmptyState
                                 title={`No ${projectTerm.toLowerCase()} hours yet`}

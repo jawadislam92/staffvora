@@ -7,6 +7,7 @@ export { default as Button } from './Button';
 export { default as Card, CardHeader } from './Card';
 export { default as Badge } from './Badge';
 export { default as StatCard, DeltaChip } from './StatCard';
+export { default as KpiCard } from './KpiCard';
 export { default as Table, THead, TBody, Tr, Th, Td } from './Table';
 export { default as Field, Input, Select, Textarea, Checkbox, Toggle } from './Form';
 export { default as EmptyState, DefaultInboxIcon } from './EmptyState';

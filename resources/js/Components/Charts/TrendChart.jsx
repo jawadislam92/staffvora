@@ -1,5 +1,6 @@
 import React from "react";
 import { EmptyState } from "@/Components/ui";
+import { useThemeName, themeAllowsGlow } from "./theme";
 
 const cx = (...a) => a.filter(Boolean).join(" ");
 
@@ -44,6 +45,12 @@ const LegendSwatch = ({ variant }) => {
  * - unit     {string}          Y-axis unit suffix. Default "h".
  * - height   {number}          Plot height in px. Default 240.
  * - avg      {number}          If given, draws a dotted average line + legend entry.
+ * - gradientFill {bool}        Vertical accent→transparent underfill. Default true
+ *                              (the chart has always drawn it); false disables.
+ * - glow     {bool}            Line halo. Omitted → legacy always-on behaviour
+ *                              (unchanged call sites render identically).
+ *                              true → theme-aware: dark/black themes only.
+ *                              false → never.
  * - className {string}
  */
 export default function TrendChart({
@@ -52,10 +59,14 @@ export default function TrendChart({
   unit = "h",
   height = 240,
   avg,
+  gradientFill = true,
+  glow,
   className,
   ...rest
 }) {
   const gid = React.useId().replace(/[:]/g, "");
+  const theme = useThemeName();
+  const drawGlow = glow === undefined ? true : glow === true && themeAllowsGlow(theme);
 
   const points = Array.isArray(data)
     ? data.filter((d) => d && typeof d.value === "number" && !Number.isNaN(d.value))
@@ -244,7 +255,7 @@ export default function TrendChart({
         ) : null}
 
         {/* area + current line */}
-        <path d={curArea} fill={`url(#area-${gid})`} stroke="none" />
+        {gradientFill ? <path d={curArea} fill={`url(#area-${gid})`} stroke="none" /> : null}
         <path
           d={curLine}
           fill="none"
@@ -252,7 +263,7 @@ export default function TrendChart({
           strokeWidth="2.6"
           strokeLinecap="round"
           strokeLinejoin="round"
-          filter={`url(#glow-${gid})`}
+          filter={drawGlow ? `url(#glow-${gid})` : undefined}
         />
 
         {/* peak marker + connector */}

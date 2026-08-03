@@ -1,4 +1,5 @@
 import React from "react";
+import { useThemeName, themeAllowsGlow } from "./theme";
 
 const cx = (...a) => a.filter(Boolean).join(" ");
 
@@ -13,6 +14,10 @@ const cx = (...a) => a.filter(Boolean).join(" ");
  * - data      {number[]} Series values. Empty / single-point renders a flat baseline.
  * - height    {number}   Rendered height in px (viewBox height too). Default 32.
  * - area      {bool}     Draw a soft gradient fill under the line. Default false.
+ * - accent    {1..5}     Paint from the categorical --viz slot instead of
+ *                        currentColor, and turn on the gradient underfill.
+ * - glow      {bool}     Soft halo around the line in the stroke color.
+ *                        Dark/black themes only — light stays crisp.
  * - className {string}   Extra classes on the <svg> (put the color class here).
  * - ...rest              Spread onto the <svg>.
  */
@@ -20,13 +25,22 @@ export default function Sparkline({
   data = [],
   height = 32,
   area = false,
+  accent,
+  glow = false,
   className,
+  style,
   ...rest
 }) {
   const W = 100; // viewBox width; preserveAspectRatio="none" stretches to fit
   const H = Math.max(1, height);
   const pad = 2; // keep stroke off the very edge
   const gid = React.useId();
+  const theme = useThemeName();
+
+  const hasAccent = accent != null;
+  const drawArea = area || hasAccent; // accent slot implies the gradient underfill
+  const drawGlow = glow && themeAllowsGlow(theme);
+  const svgStyle = hasAccent ? { color: `var(--viz-${accent})`, ...style } : style;
 
   const nums = Array.isArray(data) ? data.filter((n) => typeof n === "number" && !Number.isNaN(n)) : [];
 
@@ -52,7 +66,7 @@ export default function Sparkline({
     if (n === 1) {
       const y = pts[0][1];
       const l = `M0,${y} L${W},${y}`;
-      return { line: l, fill: area ? `${l} L${W},${H} L0,${H} Z` : "" };
+      return { line: l, fill: drawArea ? `${l} L${W},${H} L0,${H} Z` : "" };
     }
 
     // Catmull-Rom -> cubic bezier for a soft curve.
@@ -68,9 +82,9 @@ export default function Sparkline({
       const c2y = p2[1] - (p3[1] - p1[1]) / 6;
       d += ` C${c1x.toFixed(2)},${c1y.toFixed(2)} ${c2x.toFixed(2)},${c2y.toFixed(2)} ${p2[0].toFixed(2)},${p2[1].toFixed(2)}`;
     }
-    const f = area ? `${d} L${W},${H} L0,${H} Z` : "";
+    const f = drawArea ? `${d} L${W},${H} L0,${H} Z` : "";
     return { line: d, fill: f };
-  }, [nums, H, area]);
+  }, [nums, H, drawArea]);
 
   return (
     <svg
@@ -82,9 +96,10 @@ export default function Sparkline({
       role="img"
       aria-hidden="true"
       className={cx("block overflow-visible", className)}
+      style={svgStyle}
       {...rest}
     >
-      {area && fill ? (
+      {drawArea && fill ? (
         <>
           <defs>
             <linearGradient id={`spark-${gid}`} x1="0" y1="0" x2="0" y2="1">
@@ -103,6 +118,7 @@ export default function Sparkline({
         strokeLinecap="round"
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
+        style={drawGlow ? { filter: "drop-shadow(0 0 5px currentColor)" } : undefined}
       />
     </svg>
   );
