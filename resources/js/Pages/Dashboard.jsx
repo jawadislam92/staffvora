@@ -1,8 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Head, Link, usePage } from "@inertiajs/react";
+import { Head, Link, router, usePage } from "@inertiajs/react";
 import axios from "axios";
 import toast from "react-hot-toast";
-import { Activity, Clock, Coffee, Download, Sparkles, Users } from "lucide-react";
+import {
+    Activity,
+    Check,
+    Clock,
+    Coffee,
+    Download,
+    FlaskConical,
+    Sparkles,
+    Users,
+    X,
+} from "lucide-react";
 import AppShell from "@/Layouts/AppShell";
 import Avatar from "@/Components/Avatar";
 import {
@@ -202,7 +212,190 @@ const RANGE_TABS = [
     { key: "month", label: "This month" },
 ];
 
-export default function Dashboard({ auth, needsOnboarding, preview = false }) {
+// ---------------------------------------------------------------------------
+// FIRST RUN
+//
+// An empty workspace is the moment a customer decides whether this product is
+// real. Two pieces live here:
+//
+//  1. GET STARTED — four things that have to happen before the dashboard can
+//     say anything. Every done-state is computed server-side from actual rows
+//     (App\Services\GettingStartedChecklist) — there is no per-step flag that
+//     could keep a green tick after the thing it claims stopped being true.
+//
+//  2. DEMO DATA — a small, loudly-labelled sample so the customer can see a
+//     populated product without waiting a fortnight for their own history.
+//     Its removability is the whole promise, so the control to remove it is
+//     never more than one click from wherever the demo data is visible.
+//
+// Dismissal is stored in the browser, per person. That is deliberate: it is a
+// preference about what to LOOK at, not a claim about the data, so it cannot
+// lie about progress the way a stored "onboarded" flag would.
+// ---------------------------------------------------------------------------
+const DISMISS_KEY = (userId) => `staffvora.getting-started.dismissed.${userId ?? "anon"}`;
+
+// Ziggy throws on an unknown route name, so ask before offering a control that
+// depends on one. Keeps this page renderable even if the demo endpoints are not
+// present in a given deployment.
+const routeExists = (name) => {
+    try {
+        return typeof route === "function" && route().has(name);
+    } catch {
+        return false;
+    }
+};
+
+function readDismissed(userId) {
+    try {
+        return window.localStorage.getItem(DISMISS_KEY(userId)) === "1";
+    } catch {
+        return false;
+    }
+}
+
+function GettingStarted({ checklist, demo, onDismiss, onLoadDemo, onRemoveDemo, busy, demoAvailable }) {
+    const { steps = [], done = 0, total = 0 } = checklist || {};
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    const canLoadDemo = !demo?.loaded && (demo?.seat_headroom ?? 0) > 0;
+
+    return (
+        <Card
+            padded={false}
+            className="overflow-hidden border-accent/30"
+            title="Get started"
+            description={`${done} of ${total} done — finish these and every screen in Staffvora has something to say.`}
+            actions={
+                <button
+                    type="button"
+                    onClick={onDismiss}
+                    className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted transition hover:bg-surface-2 hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                    <X className="h-3.5 w-3.5" /> Dismiss
+                </button>
+            }
+        >
+            <div className="h-1.5 w-full bg-surface-2">
+                <div
+                    className="h-full bg-accent transition-all"
+                    style={{ width: `${pct}%` }}
+                    role="progressbar"
+                    aria-valuenow={done}
+                    aria-valuemin={0}
+                    aria-valuemax={total}
+                    aria-label="Setup progress"
+                />
+            </div>
+
+            <ol className="divide-y divide-line">
+                {steps.map((step) => (
+                    <li
+                        key={step.key}
+                        className="flex flex-wrap items-start justify-between gap-3 px-5 py-4"
+                    >
+                        <div className="flex min-w-0 items-start gap-3">
+                            <span
+                                aria-hidden="true"
+                                className={cx(
+                                    "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+                                    step.done
+                                        ? "border-success bg-success text-white"
+                                        : "border-line bg-surface-2"
+                                )}
+                            >
+                                {step.done && <Check className="h-3 w-3" />}
+                            </span>
+                            <div className="min-w-0">
+                                <p
+                                    className={cx(
+                                        "text-sm font-semibold",
+                                        step.done ? "text-muted line-through" : "text-body"
+                                    )}
+                                >
+                                    {step.title}
+                                </p>
+                                <p className="mt-0.5 text-xs text-subtle">{step.description}</p>
+                            </div>
+                        </div>
+
+                        {step.done ? (
+                            <span className="text-xs font-semibold text-success">Done</span>
+                        ) : step.can && step.route ? (
+                            <Button as={Link} href={route(step.route)} variant="secondary" size="sm">
+                                {step.cta}
+                            </Button>
+                        ) : null}
+                    </li>
+                ))}
+            </ol>
+
+            {/* Sample data lives at the bottom of the checklist: it is the
+                answer to "what will this look like when it's full?", which is
+                exactly the question an empty workspace provokes. */}
+            <div
+                className={cx(
+                    "flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface-2 px-5 py-4",
+                    !demoAvailable && "hidden"
+                )}
+            >
+                <p className="flex items-start gap-2 text-xs text-muted">
+                    <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                    <span>
+                        {demo?.loaded
+                            ? "Demo data is loaded. Every demo person and project is named “Demo · …”, and none of it touches your real hours."
+                            : canLoadDemo
+                              ? "Want to see a populated workspace first? Load two weeks of clearly-labelled sample data — demo teammates take up seats while loaded, and one click removes all of it."
+                              : "Sample data needs a spare seat for its demo teammates, and your plan's seats are all in use."}
+                    </span>
+                </p>
+                {demo?.loaded ? (
+                    <Button variant="secondary" size="sm" onClick={onRemoveDemo} disabled={busy}>
+                        Remove demo data
+                    </Button>
+                ) : (
+                    <Button variant="secondary" size="sm" onClick={onLoadDemo} disabled={busy || !canLoadDemo}>
+                        Load demo data
+                    </Button>
+                )}
+            </div>
+        </Card>
+    );
+}
+
+function DemoDataBanner({ demo, onRemove, busy, demoAvailable }) {
+    return (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning/40 bg-warning-soft px-5 py-4">
+            <div className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-warning text-white">
+                    <FlaskConical className="h-4 w-4" />
+                </span>
+                <div>
+                    <p className="text-sm font-semibold text-body">
+                        You're looking at demo data
+                    </p>
+                    <p className="text-xs text-muted">
+                        {demo.people} demo {demo.people === 1 ? "teammate" : "teammates"} and{" "}
+                        {demo.entries} sample entries over the last {demo.days} days. They are
+                        named “Demo · …” everywhere they appear and are never counted as anyone's
+                        real hours. Remove them whenever you like.
+                    </p>
+                </div>
+            </div>
+            {demoAvailable && (
+                <Button variant="secondary" size="sm" onClick={onRemove} disabled={busy}>
+                    Remove demo data
+                </Button>
+            )}
+        </div>
+    );
+}
+
+export default function Dashboard({
+    auth,
+    needsOnboarding,
+    gettingStarted = null,
+    demoData = null,
+    preview = false,
+}) {
     const page = usePage();
     const workspace = page.props?.workspace || {};
     const timezone = workspace.timezone || (preview ? "Asia/Karachi" : "UTC");
@@ -228,6 +421,59 @@ export default function Dashboard({ auth, needsOnboarding, preview = false }) {
         );
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [preview, entitlements, user?.is_super_admin, user?.permissions]);
+
+    // --- first-run state ---------------------------------------------------
+    const [checklistDismissed, setChecklistDismissed] = useState(() =>
+        preview ? false : readDismissed(auth?.user?.id)
+    );
+    const [demoBusy, setDemoBusy] = useState(false);
+
+    const dismissChecklist = () => {
+        setChecklistDismissed(true);
+        try {
+            window.localStorage.setItem(DISMISS_KEY(auth?.user?.id), "1");
+        } catch {
+            /* private mode — the card simply comes back next visit. */
+        }
+    };
+
+    // Both demo actions are full Inertia visits, so the page re-renders from
+    // freshly derived server state rather than from anything guessed here.
+    const runDemoAction = (method, routeName, fallbackMessage) => {
+        if (preview) return;
+        setDemoBusy(true);
+        const options = {
+            preserveScroll: true,
+            // Read the flash off the RESPONSE page, not off the closure's stale
+            // props — a refusal (no spare seats) has to surface as a refusal.
+            onSuccess: (nextPage) => {
+                const flash = nextPage?.props?.flash || {};
+                if (flash.error) showError(flash.error);
+                else toast.success(flash.success || fallbackMessage);
+            },
+            onError: () => showError("That didn't work. Please try again."),
+            onFinish: () => setDemoBusy(false),
+        };
+
+        if (method === "delete") router.delete(route(routeName), options);
+        else router.post(route(routeName), {}, options);
+    };
+
+    const loadDemoData = () =>
+        runDemoAction("post", "onboarding.demo.load", "Demo data loaded.");
+    const removeDemoData = () =>
+        runDemoAction("delete", "onboarding.demo.remove", "Demo data removed.");
+
+    const showChecklist =
+        !preview && gettingStarted && !gettingStarted.complete && !checklistDismissed;
+    const demoLoaded = !preview && !!demoData?.loaded;
+    const demoAvailable = useMemo(
+        () =>
+            !preview &&
+            routeExists("onboarding.demo.load") &&
+            routeExists("onboarding.demo.remove"),
+        [preview]
+    );
 
     // --- live state --------------------------------------------------------
     const [entries, setEntries] = useState([]);
@@ -455,6 +701,31 @@ export default function Dashboard({ auth, needsOnboarding, preview = false }) {
                     </Link>
                 )}
 
+                {/* Demo data is announced ABOVE everything it affects, and the
+                    banner outlives the checklist — it must stay visible even
+                    once setup is finished or the checklist has been dismissed,
+                    or the numbers below would be unexplained. */}
+                {demoLoaded && (
+                    <DemoDataBanner
+                        demo={demoData}
+                        onRemove={removeDemoData}
+                        busy={demoBusy}
+                        demoAvailable={demoAvailable}
+                    />
+                )}
+
+                {showChecklist && (
+                    <GettingStarted
+                        checklist={gettingStarted}
+                        demo={demoData}
+                        onDismiss={dismissChecklist}
+                        onLoadDemo={loadDemoData}
+                        onRemoveDemo={removeDemoData}
+                        busy={demoBusy}
+                        demoAvailable={demoAvailable}
+                    />
+                )}
+
                 {/* 1 — Page header: greeting + live clock + range control + export */}
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                     <div className="min-w-0">
@@ -633,11 +904,33 @@ export default function Dashboard({ auth, needsOnboarding, preview = false }) {
                                 ))}
                             </div>
                         ) : employees.length === 0 ? (
-                            <EmptyState
-                                icon={<Users className="h-5 w-5" />}
-                                title="No activity recorded today"
-                                description="Time-tracking activity will appear here as your team clocks in."
-                            />
+                            // A workspace that has NEVER been clocked into is at
+                            // a beginning, not at a fault — so it gets a
+                            // different sentence, and something to do, from a
+                            // workspace whose team simply hasn't started today.
+                            gettingStarted && !gettingStarted.complete ? (
+                                <EmptyState
+                                    icon={<Users className="h-5 w-5" />}
+                                    title="Nobody has clocked in yet"
+                                    description="This is where your team appears — who's working, who's on break, how long they've been at it. It fills in the moment the first person clocks in."
+                                    action={
+                                        <Button
+                                            as={Link}
+                                            href={route("users.create")}
+                                            variant="secondary"
+                                            size="sm"
+                                        >
+                                            Invite your team
+                                        </Button>
+                                    }
+                                />
+                            ) : (
+                                <EmptyState
+                                    icon={<Users className="h-5 w-5" />}
+                                    title="No activity recorded today"
+                                    description="Time-tracking activity will appear here as your team clocks in."
+                                />
+                            )
                         ) : (
                             <Table>
                                 <THead>

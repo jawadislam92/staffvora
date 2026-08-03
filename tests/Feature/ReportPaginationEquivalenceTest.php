@@ -246,10 +246,20 @@ class ReportPaginationEquivalenceTest extends TestCase
         $this->assertSame($expectedParts, $actualParts, "{$context}: merged descriptions");
     }
 
-    /** @return array<string,mixed> the `workHours` paginator prop */
+    /**
+     * @return array<string,mixed> the `workHours` paginator prop
+     *
+     * `filter=all` is the default here ON PURPOSE. This file is an equivalence
+     * guard for the merged GROUP BY, so it must see EVERY seeded row; the page
+     * itself now opens on a 90-day window (WorkHourController::
+     * DEFAULT_REPORT_FILTER), which would otherwise silently truncate the
+     * fixture as the calendar moves and turn this into a date-sensitive test.
+     * The default window has its own coverage in FirstRunExperienceTest.
+     */
     private function fetchReport(array $query = []): array
     {
         $props = null;
+        $query = array_merge(['filter' => 'all'], $query);
 
         $this->actingAs($this->admin)
             ->get(route('work-hours.report', $query))

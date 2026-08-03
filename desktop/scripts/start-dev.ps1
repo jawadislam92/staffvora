@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string] $ServerUrl = 'http://tracksuite.test',
+    [string] $ServerUrl = 'http://staffvora.test',
     [switch] $SkipMigrate,
     [switch] $SkipRebuild
 )
@@ -19,7 +19,7 @@ if (-not (Test-Path (Join-Path $desktopRoot 'package.json'))) {
     throw "Could not find desktop package.json at $desktopRoot"
 }
 
-Write-Host "Tracksuite Desktop dev startup" -ForegroundColor Cyan
+Write-Host "Staffvora Desktop dev startup" -ForegroundColor Cyan
 Write-Host "Web app:  $webRoot"
 Write-Host "Desktop:  $desktopRoot"
 Write-Host "Server:   $serverUrl"

@@ -13,7 +13,13 @@ const updater = require('./updater');
 const report = require('./report');
 const collector = require('./collector');
 
-const PROTOCOL = 'tracksuite';
+// Deep-link schemes, preferred first. `staffvora://` is the product's own
+// scheme; `tracksuite://` is the pre-rebrand one and stays registered so links
+// the web app already emits (Timeline's "open the desktop app") keep working on
+// both old and new installs. Remove the legacy entry only once nothing on the
+// web side emits it — grep for `tracksuite://` in resources/js first.
+const PROTOCOLS = ['staffvora', 'tracksuite'];
+const PROTOCOL = PROTOCOLS[0];
 
 // How often buffered telemetry is pushed, and how often the agent posts a
 // compact state snapshot. The snapshot is deliberately HOURLY, not per-minute:
@@ -83,7 +89,7 @@ let mainWindow = null;
 let pendingDeepLink = null;
 
 // ---- Single instance + protocol registration -------------------------------
-// A second launch (including the browser invoking tracksuite://...) focuses
+// A second launch (including the browser invoking staffvora://...) focuses
 // the existing window and forwards the URL instead of opening a duplicate.
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -167,22 +173,26 @@ if (!gotLock) {
 }
 
 function registerProtocol() {
-  try {
-    if (isDev && process.platform === 'win32') {
-      // In dev the executable is electron.exe, so the protocol must point at
-      // it with our app path as argument. Packaged builds register cleanly
-      // via the installer; this is best-effort for local testing.
-      app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1] || '.')]);
-    } else {
-      app.setAsDefaultProtocolClient(PROTOCOL);
+  for (const scheme of PROTOCOLS) {
+    try {
+      if (isDev && process.platform === 'win32') {
+        // In dev the executable is electron.exe, so the protocol must point at
+        // it with our app path as argument. Packaged builds register cleanly
+        // via the installer; this is best-effort for local testing.
+        app.setAsDefaultProtocolClient(scheme, process.execPath, [path.resolve(process.argv[1] || '.')]);
+      } else {
+        app.setAsDefaultProtocolClient(scheme);
+      }
+    } catch {
+      // Non-fatal: launching from web simply won't work until installed.
     }
-  } catch {
-    // Non-fatal: launching from web simply won't work until installed.
   }
 }
 
 function extractDeepLink(argv) {
-  return (argv || []).find((arg) => typeof arg === 'string' && arg.startsWith(`${PROTOCOL}://`)) || null;
+  return (argv || []).find(
+    (arg) => typeof arg === 'string' && PROTOCOLS.some((scheme) => arg.startsWith(`${scheme}://`))
+  ) || null;
 }
 
 function handleDeepLink(url) {
@@ -190,7 +200,7 @@ function handleDeepLink(url) {
   try {
     const parsed = new URL(url);
     payload = {
-      action: parsed.hostname || 'open', // tracksuite://start -> "start"
+      action: parsed.hostname || 'open', // staffvora://start -> "start"
       client_id: parsed.searchParams.get('client_id'),
       task_note: parsed.searchParams.get('note'),
     };
@@ -218,7 +228,7 @@ function createWindow() {
     height: 720,
     minWidth: 400,
     minHeight: 560,
-    title: 'Tracksuite Desktop',
+    title: 'Staffvora Desktop',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),

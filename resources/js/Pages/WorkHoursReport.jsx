@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import AuthenticatedLayout from '../Layouts/AuthenticatedLayout';
 import { TraditionalPagination } from '../Components/Pagination';
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
+import { CalendarDays } from 'lucide-react';
 import { timeFormat } from '../helpers';
 import { exportRowsToCsv } from '@/Utils/csvExport';
 import SearchableMultiSelect from '../Components/Filters/SearchableMultiSelect';
@@ -84,12 +85,24 @@ const shortDate = (iso) => {
     return `${MONTHS[Number(parts[1]) - 1] || parts[1]} ${Number(parts[2])}`;
 };
 
+// The report's DEFAULT window. `/report` used to open on all time, whose
+// GROUP BY grows for the life of the workspace; it now opens on the last 90
+// days. "All dates" stays in the picker, so nothing is unreachable — see
+// WorkHourController::DEFAULT_REPORT_FILTER for the server half.
+const DEFAULT_DATE_FILTER = 'last90';
+const DEFAULT_RANGE_DAYS = 90;
+
 const getDateRange = (filter) => {
     const today = new Date();
     let start, end;
 
     if (filter === 'today') {
         start = end = formatDateLocal(today);
+    } else if (filter === 'last90') {
+        const from = new Date(today);
+        from.setDate(from.getDate() - (DEFAULT_RANGE_DAYS - 1));
+        start = formatDateLocal(from);
+        end = formatDateLocal(today);
     } else if (filter === 'week') {
         const dayOfWeek = today.getDay();
         const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
@@ -123,12 +136,15 @@ const formatWorkType = (workType) => {
 };
 
 const DATE_PRESETS = [
-    { value: 'all', label: 'All dates' },
     { value: 'today', label: 'Today' },
     { value: 'week', label: 'This week' },
     { value: 'month', label: 'This month' },
+    { value: 'last90', label: 'Last 90 days' },
     { value: 'custom', label: 'Custom range' },
+    { value: 'all', label: 'All dates' },
 ];
+
+const DATE_PRESET_LABEL = (value) => DATE_PRESETS.find((p) => p.value === value)?.label || value;
 
 const slackFieldOptions = [
     { value: 'client', label: 'Client', description: 'Group entries by client.' },
@@ -190,7 +206,9 @@ export default function WorkHoursReport({
     workHours,
     users = [],
     flash,
-    filter = 'all',
+    filter = DEFAULT_DATE_FILTER,
+    defaultFilter = DEFAULT_DATE_FILTER,
+    hasAnyEntries = true,
     startDate = null,
     endDate = null,
     userId = 'all',
@@ -317,7 +335,10 @@ export default function WorkHoursReport({
     };
 
     const clearFilters = () => {
-        setDateFilter('all');
+        // Back to the page's default view, which is the 90-day window — not
+        // all time. A bare GET is what the server treats as "no opinion", so
+        // the two halves agree without passing anything.
+        setDateFilter(defaultFilter);
         setCustomStartDate('');
         setCustomEndDate('');
         setSelectedUsers([]);
@@ -368,7 +389,10 @@ export default function WorkHoursReport({
                 key: 'date',
                 label: dateFilter === 'custom' && customStartDate && customEndDate
                     ? `Date: ${customStartDate} to ${customEndDate}`
-                    : `Date: ${dateFilter === 'week' ? 'This Week' : dateFilter === 'month' ? 'This Month' : 'Today'}`,
+                    : `Date: ${DATE_PRESET_LABEL(dateFilter)}`,
+                // Removing the date chip means "show me everything", so it
+                // clears to All dates rather than back to the 90-day default —
+                // otherwise the all-time view would be unreachable from here.
                 onRemove: () => removeFilterValue('date'),
             }]
             : []),
@@ -849,15 +873,55 @@ export default function WorkHoursReport({
                 {/* Data Table */}
                 <Card padded={false} className="overflow-hidden">
                     {filteredData.length === 0 ? (
-                        <EmptyState
-                            title="No data found"
-                            description="Try adjusting your filters or widening the date range."
-                            icon={(
-                                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.75}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                </svg>
-                            )}
-                        />
+                        // TWO DIFFERENT EMPTIES, and they must not be worded the
+                        // same. A workspace that has never logged an hour is at
+                        // a BEGINNING, and telling it to "adjust your filters"
+                        // reads as though it did something wrong. Which case
+                        // this is comes from the server (`hasAnyEntries`), not
+                        // from the page of rows in front of us.
+                        !hasAnyEntries && !preview ? (
+                            <EmptyState
+                                icon={<CalendarDays className="h-6 w-6" />}
+                                title="No time has been logged yet"
+                                description="This report fills in as your team tracks. Once someone clocks in with the desktop app — or adds time to their work diary — every hour shows up here, ready to filter, total and export."
+                                action={(
+                                    <Link
+                                        href={route('work-hours.create')}
+                                        className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+                                    >
+                                        Add time manually
+                                    </Link>
+                                )}
+                            />
+                        ) : (
+                            <EmptyState
+                                title="Nothing in this view"
+                                description={
+                                    dateFilter === 'all'
+                                        ? 'No entries match these filters. Clear one and try again.'
+                                        : `No entries match these filters between ${customStartDate || getDateRange(dateFilter).start || '—'} and ${customEndDate || getDateRange(dateFilter).end || '—'}. Widen the date range or clear a filter.`
+                                }
+                                icon={(
+                                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.75}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                    </svg>
+                                )}
+                                action={(
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setDateFilter('all');
+                                            setCustomStartDate('');
+                                            setCustomEndDate('');
+                                            applyFilters({ dateFilter: 'all', customStartDate: '', customEndDate: '' });
+                                        }}
+                                        className="inline-flex items-center gap-1.5 rounded-lg border border-line px-4 py-2 text-sm font-semibold text-body transition hover:bg-surface-2"
+                                    >
+                                        Search all dates
+                                    </button>
+                                )}
+                            />
+                        )
                     ) : (
                         <Table>
                             <THead>

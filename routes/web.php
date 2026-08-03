@@ -282,6 +282,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/onboarding/team', [OnboardingController::class, 'invite'])->name('onboarding.team');
     Route::post('/onboarding/client', [OnboardingController::class, 'storeClient'])->name('onboarding.client');
     Route::post('/onboarding/complete', [OnboardingController::class, 'complete'])->name('onboarding.complete');
+
+    // Sample-data demo mode. Owner/admin only (enforced inside the controller,
+    // the same gate as the rest of the wizard). Everything it creates is named
+    // "Demo · " and removable in one call — see App\Services\DemoDataService.
+    Route::post('/onboarding/demo-data', [OnboardingController::class, 'loadDemoData'])->name('onboarding.demo.load');
+    Route::delete('/onboarding/demo-data', [OnboardingController::class, 'removeDemoData'])->name('onboarding.demo.remove');
 });
 
 Route::middleware(['auth'])->group(function () {

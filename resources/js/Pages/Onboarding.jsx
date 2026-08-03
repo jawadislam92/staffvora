@@ -8,6 +8,7 @@ import {
     Check,
     CheckCircle2,
     Copy,
+    FlaskConical,
     MonitorDown,
     Rocket,
     Sparkles,
@@ -69,9 +70,36 @@ function Stepper({ steps, current, onJump }) {
     );
 }
 
-export default function Onboarding({ workspaceType, clientTerm, usesProfiles, workTypes, progress, seats, downloads }) {
+export default function Onboarding({ workspaceType, clientTerm, usesProfiles, workTypes, progress, seats, downloads, demoData = null }) {
     const { auth, flash } = usePage().props;
     const [step, setStep] = useState(0);
+    const [demoBusy, setDemoBusy] = useState(false);
+
+    // ── Sample data ─────────────────────────────────────────────────────────
+    // Offered at the END of the wizard, never before it: a customer who has
+    // just typed in their real team should not be handed fake people first.
+    // Everything it creates is labelled "Demo · " and removable in one click
+    // (see App\Services\DemoDataService).
+    // Ziggy throws on an unknown route name, so the block is only offered where
+    // the endpoints actually exist.
+    const demoAvailable = (() => {
+        try {
+            return typeof route === 'function' && route().has('onboarding.demo.load');
+        } catch {
+            return false;
+        }
+    })();
+    const demoLoaded = !!demoData?.loaded;
+    const canLoadDemo = !demoLoaded && (demoData?.seat_headroom ?? 0) > 0;
+    const toggleDemo = () => {
+        setDemoBusy(true);
+        const finish = { preserveScroll: true, onFinish: () => setDemoBusy(false) };
+        if (demoLoaded) {
+            router.delete(route('onboarding.demo.remove'), finish);
+        } else {
+            router.post(route('onboarding.demo.load'), {}, finish);
+        }
+    };
 
     // ── Step 1: workspace type ──────────────────────────────────────────────
     const typeForm = useForm({ workspace_type: workspaceType || 'general' });
@@ -162,6 +190,23 @@ export default function Onboarding({ workspaceType, clientTerm, usesProfiles, wo
                     <h1 className="text-2xl font-bold text-body sm:text-3xl">Welcome, {auth.user?.name?.split(' ')[0] || 'there'} 👋</h1>
                     <p className="mt-2 text-sm text-muted">Four quick steps to get your team tracking. You can skip any of them.</p>
                 </div>
+
+                {/* Nothing else on this page surfaces flash, and a refusal
+                    (for example: no spare seats for the demo teammates) must
+                    never be silent. */}
+                {(flash?.success || flash?.error) && (
+                    <div
+                        role="status"
+                        className={[
+                            'mb-5 rounded-xl border px-4 py-3 text-sm',
+                            flash?.error
+                                ? 'border-danger/40 bg-danger-soft text-body'
+                                : 'border-success/40 bg-success-soft text-body',
+                        ].join(' ')}
+                    >
+                        {flash?.error || flash?.success}
+                    </div>
+                )}
 
                 <div className="rounded-2xl border border-line bg-surface p-6 shadow-sm sm:p-8">
                     <Stepper steps={steps} current={step} onJump={setStep} />
@@ -310,6 +355,29 @@ export default function Onboarding({ workspaceType, clientTerm, usesProfiles, wo
                             <p className="mx-auto mt-2 max-w-md text-sm text-muted">
                                 Your workspace is set up. Head to the dashboard to see hours roll in as your team starts tracking.
                             </p>
+
+                            <div className={['mx-auto mt-6 max-w-md rounded-xl border border-line bg-surface-2 p-4 text-left', demoAvailable ? '' : 'hidden'].join(' ')}>
+                                <p className="flex items-start gap-2 text-sm font-semibold text-body">
+                                    <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                                    {demoLoaded ? 'Demo data is loaded' : 'Want to see it full first?'}
+                                </p>
+                                <p className="mt-1.5 text-xs text-muted">
+                                    {demoLoaded
+                                        ? 'A few demo teammates and two weeks of sample work are in your workspace. Everything demo is named “Demo · …”, none of it counts as anyone’s real hours, and removing it leaves nothing behind.'
+                                        : canLoadDemo
+                                            ? 'Load two weeks of clearly-labelled sample work so the dashboard, reports and insights have something to show. Demo teammates take up seats while loaded, and one click removes all of it.'
+                                            : 'Sample data needs a spare seat for its demo teammates, and your plan’s seats are all in use right now.'}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={toggleDemo}
+                                    disabled={demoBusy || (!demoLoaded && !canLoadDemo)}
+                                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3.5 py-2 text-xs font-semibold text-body transition hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {demoLoaded ? 'Remove demo data' : 'Load demo data'}
+                                </button>
+                            </div>
+
                             <button
                                 type="button"
                                 onClick={finish}

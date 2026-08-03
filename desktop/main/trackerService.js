@@ -281,7 +281,7 @@ class Tracker extends EventEmitter {
       const idlePref = (store.get('prefs') || {}).idleNotifications;
       if (Notification && idlePref !== false) {
         try {
-          new Notification({ title: 'Tracksuite', body: message }).show();
+          new Notification({ title: 'Staffvora', body: message }).show();
         } catch { /* best effort */ }
       }
     }
@@ -335,7 +335,7 @@ class Tracker extends EventEmitter {
     if (!shouldNotify || !Notification) return;
     try {
       new Notification({
-        title: 'Tracksuite',
+        title: 'Staffvora',
         body: 'Screenshot taken',
         silent: true,
       }).show();

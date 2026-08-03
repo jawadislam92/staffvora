@@ -44,6 +44,25 @@ class WorkHourController extends Controller
     ];
 
     /**
+     * THE REPORT'S DEFAULT WINDOW.
+     *
+     * `/report` used to open on ALL TIME. That is a query whose GROUP BY widens
+     * for the entire life of the workspace: every day a customer uses the
+     * product, the first page they see gets slower, and a three-year-old tenant
+     * pays for three years of grouping to look at last week. The first load now
+     * opens on the last ninety days instead — long enough to contain any pay
+     * period, any monthly review and any invoice run — and "All dates" is still
+     * one click away in the date picker, so nothing has become unreachable.
+     *
+     * The narrowing applies ONLY when the request says nothing about dates. An
+     * explicit `filter=all`, or an explicit start/end pair (a saved link, a
+     * Slack digest link, a bookmark), is always honoured exactly as given.
+     */
+    public const DEFAULT_REPORT_FILTER = 'last90';
+
+    public const DEFAULT_REPORT_DAYS = 90;
+
+    /**
      * A still-open clock-in older than this is treated as forgotten, so the
      * in-office span it opens is capped instead of running to "now" forever.
      * Mirrors the attendance-hours state machine.
@@ -1357,6 +1376,22 @@ class WorkHourController extends Controller
         $filter = $request->input('filter', 'all');
         $startDate = $request->input('startDate');
         $endDate = $request->input('endDate');
+
+        // DEFAULT WINDOW — see self::DEFAULT_REPORT_FILTER. Applied only when
+        // the caller has expressed no opinion at all about dates: no `filter`
+        // key and no start/end pair. Everything else is left untouched, so
+        // `?filter=all`, a custom range and every existing deep link behave
+        // exactly as they did.
+        $statedFilter = trim((string) $request->input('filter', ''));
+        $statedRange = $startDate && $endDate;
+
+        if ($statedFilter === '' && ! $statedRange) {
+            $today = Carbon::now(BusinessTime::tz());
+            $filter = self::DEFAULT_REPORT_FILTER;
+            $startDate = $today->copy()->subDays(self::DEFAULT_REPORT_DAYS - 1)->toDateString();
+            $endDate = $today->toDateString();
+        }
+
         $selectedWorkTypes = $this->filterValues($request, 'workTypes', 'workType');
         $selectedUserIds = $this->filterValues($request, 'userIds', 'userId');
         $selectedDesignations = $this->filterValues($request, 'designations', 'designation');
@@ -1579,6 +1614,12 @@ class WorkHourController extends Controller
                 'trackers' => $availableTrackers,
                 'clients' => $availableClients,
             ],
+            'defaultFilter' => self::DEFAULT_REPORT_FILTER,
+            // FIRST-RUN vs FILTERED-OUT. Without this the page can only say
+            // "no data found — try adjusting your filters", which tells a brand
+            // new workspace it did something wrong when in fact it has simply
+            // not tracked anything yet. One EXISTS on the tenant index.
+            'hasAnyEntries' => WorkHour::query()->exists(),
             'slackConfigured' => $slack->configured(),
             'slackWeeklyEnabled' => (bool) config('services.slack_reports.weekly_enabled'),
             'flash' => [

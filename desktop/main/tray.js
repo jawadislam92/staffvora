@@ -43,9 +43,9 @@ function show() {
 function create() {
   if (tray) return;
   tray = new Tray(buildIcon());
-  tray.setToolTip('Tracksuite Desktop');
+  tray.setToolTip('Staffvora Desktop');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Open Tracksuite', click: show },
+    { label: 'Open Staffvora', click: show },
     { type: 'separator' },
     { label: 'Quit', click: () => { app.isQuitting = true; app.quit(); } },
   ]));

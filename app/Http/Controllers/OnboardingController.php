@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Client;
 use App\Models\User;
+use App\Services\DemoDataService;
 use App\Tenancy\CurrentOrganization;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,7 +30,7 @@ class OnboardingController extends Controller
 
     public function __construct(private CurrentOrganization $current) {}
 
-    public function show(Request $request): Response|RedirectResponse
+    public function show(Request $request, DemoDataService $demo): Response|RedirectResponse
     {
         $user = $request->user();
 
@@ -39,8 +40,13 @@ class OnboardingController extends Controller
         }
 
         $org = $this->organization();
+        $demoLoaded = $demo->isLoaded();
 
         return Inertia::render('Onboarding', [
+            'demoData' => [
+                'loaded' => $demoLoaded,
+                'seat_headroom' => $demoLoaded ? 0 : $demo->seatHeadroom(),
+            ],
             'workspaceType' => $org?->workspace_type ?: 'general',
             'clientTerm' => $org?->clientTerm() ?? 'Client',
             'usesProfiles' => (bool) $org?->usesProfiles(),
@@ -130,6 +136,34 @@ class OnboardingController extends Controller
         ]);
 
         return back()->with('success', 'First '.strtolower($organization?->clientTerm() ?? 'project').' created.');
+    }
+
+    /**
+     * SAMPLE-DATA DEMO MODE — load.
+     *
+     * Same gate as the rest of the wizard (owner/admin only): this writes user
+     * rows and occupies plan seats, which is not something a member may do. All
+     * the guarantees — labelling, seat headroom, refusing a second copy — live
+     * in {@see DemoDataService}, so the console command and this endpoint can
+     * never drift apart.
+     */
+    public function loadDemoData(Request $request, DemoDataService $demo): RedirectResponse
+    {
+        $this->authorizeOnboarding($request);
+
+        $result = $demo->load();
+
+        return back()->with($result['ok'] ? 'success' : 'error', $result['message']);
+    }
+
+    /** SAMPLE-DATA DEMO MODE — remove. Leaves nothing behind; see the service. */
+    public function removeDemoData(Request $request, DemoDataService $demo): RedirectResponse
+    {
+        $this->authorizeOnboarding($request);
+
+        $result = $demo->remove();
+
+        return back()->with('success', $result['message']);
     }
 
     /** Finish (or skip) — stamp completion and head to the dashboard. */

@@ -1,24 +1,31 @@
-# Tracksuite Desktop
+# Staffvora Desktop
 
-Electron companion app for Tracksuite. It authenticates against the Laravel
+Electron companion app for Staffvora. It authenticates against the Laravel
 API, starts and stops tracking sessions, stores a local retry queue, and can
 capture screenshots, activity levels, and app/URL metadata when the workspace
 has explicitly enabled those features.
 
 ## Local development
 
-Requirements: Node.js 22, npm 10, a running Tracksuite web application, and the
+Requirements: Node.js 22, npm 10, a running Staffvora web application, and the
 native build prerequisites required by Electron modules on your operating
 system.
 
 ```powershell
-cd C:\laragon\www\tracksuite\desktop
+cd C:\laragon\www\Staffvora\desktop
 npm install
 npm run dev
 ```
 
-The default local API URL is `http://tracksuite.test`. It can be changed from
-the sign-in screen's Advanced section.
+The default local API URL is `http://staffvora.test`; packaged builds default to
+`https://staffvora.com`. It can be changed from the sign-in screen's Advanced
+section.
+
+## Releasing
+
+Building, code-signing and publishing a release — and how the auto-update feed
+at `https://staffvora.com/desktop-updates` is served — is documented in
+`../documents/DESKTOP_RELEASE_CHECKLIST.md`. Read it before building anything.
 
 ## Diagnostics & telemetry (0.4.0)
 
