@@ -19,8 +19,8 @@ class SlackBotService
 
     /**
      * Resolve the bot token for the active tenant: the organization's own token
-     * when connected, otherwise the platform/env default (empty in the product,
-     * so each workspace connects its own Slack).
+     * when connected. The platform/env default is ONLY for genuinely
+     * platform-level messages, i.e. when no tenant is bound at all.
      */
     private function token(): ?string
     {
@@ -30,7 +30,22 @@ class SlackBotService
             $orgToken = null;
         }
 
-        return $orgToken ?: config('services.slack_bot.token');
+        if (filled($orgToken)) {
+            return $orgToken;
+        }
+
+        // FAIL CLOSED. When a tenant IS bound, a workspace that has not
+        // connected its own Slack gets NOTHING — it must never silently borrow
+        // the operator's platform bot, because that delivered one customer's
+        // password-reset code straight into the operator's own Slack workspace
+        // where every operator staffer could read it. Same rule as
+        // SlackReportDestination. Sending nothing is the safe outcome; sending
+        // a tenant's secrets to the wrong workspace is not.
+        if (app(\App\Tenancy\CurrentOrganization::class)->check()) {
+            return null;
+        }
+
+        return config('services.slack_bot.token');
     }
 
     /**

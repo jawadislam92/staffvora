@@ -27,10 +27,19 @@ class BlogPost extends Model
         'published_at' => 'datetime',
     ];
 
+    /**
+     * Sanitise the body on the way in, whatever the write path.
+     *
+     * NOT gated on is_string(): the same `is_string()` guard on SitePage's block
+     * sanitiser was bypassable by posting an ARRAY where a string was expected,
+     * which walked straight past the sanitiser and got stringified back into the
+     * original markup by the browser. Anything non-scalar here is not a body —
+     * fail closed to an empty string rather than letting it through unexamined.
+     */
     public function setAttribute($key, $value)
     {
-        if ($key === 'body' && is_string($value)) {
-            $value = HtmlSanitizer::clean($value);
+        if ($key === 'body') {
+            $value = HtmlSanitizer::clean(is_scalar($value) ? (string) $value : '');
         }
 
         return parent::setAttribute($key, $value);
@@ -68,7 +77,10 @@ class BlogPost extends Model
     public function publicPayload(): array
     {
         return array_merge($this->cardPayload(), [
-            'body' => HtmlSanitizer::clean((string) $this->body),
+            // Read-pass sanitising, same contract as the write pass: anything
+            // that is not a scalar never reaches (string) — casting an array
+            // would fatal, and stringifying one is how the bypass worked.
+            'body' => HtmlSanitizer::clean(is_scalar($this->body) ? (string) $this->body : ''),
             'meta' => [
                 'title' => $this->meta_title ?: $this->title,
                 'description' => $this->meta_description ?: $this->excerpt,

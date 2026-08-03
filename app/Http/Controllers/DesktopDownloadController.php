@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\RateLimiter;
 use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 /**
  * The human-facing /desktop-downloads page and the raw installer downloads.
@@ -58,6 +61,47 @@ class DesktopDownloadController extends Controller
 
     private const CACHE_PREFIX = 'desktop-release:v2:';
 
+    /**
+     * The two halves of the public update feed, and why they are treated
+     * completely differently.
+     *
+     * MANIFESTS (latest.yml, *.blockmap) are a few kilobytes. Every installed
+     * copy of the desktop app polls them every four hours; if they ever start
+     * failing, existing installs silently stop updating. They are therefore
+     * NEVER throttled and NEVER deferred to the web server — they are cheap
+     * enough that serving them from PHP costs nothing.
+     *
+     * PAYLOADS (.exe, .dmg, .zip) are ~100 MB each. Streaming one through PHP
+     * occupies a PHP-FPM worker for the whole download, so a handful of
+     * concurrent anonymous requests exhausts the pool and takes the site — and,
+     * on this shared VPS, the owner's other live sites — down with it. They are
+     * rate limited, and handed to the web server where that is configured.
+     *
+     * Only the CHEAP half is listed, so the classification fails safe: if the
+     * route's extension allow-list ever grows, the new extension is treated as
+     * a payload and throttled rather than silently exempted.
+     */
+    private const MANIFEST_EXTENSIONS = ['yml', 'blockmap'];
+
+    /**
+     * Full-file payload fetches allowed per client IP per minute.
+     *
+     * Generous enough that a NAT'd office rolling out the tracker never sees a
+     * 429, small enough that one host cannot pin the worker pool.
+     */
+    private const PAYLOAD_HITS_PER_MINUTE = 20;
+
+    /**
+     * Ranged payload fetches get their own, far larger budget.
+     *
+     * electron-updater's differential download reads the blockmap and then
+     * fetches only the changed byte ranges — many small requests that together
+     * cost far LESS than one full download. Counting them against the full-file
+     * budget would 429 the auto-updater mid-update, which is exactly the thing
+     * that must keep working.
+     */
+    private const PAYLOAD_RANGE_HITS_PER_MINUTE = 240;
+
     public function index()
     {
         return Inertia::render('DesktopDownloads', [
@@ -74,10 +118,10 @@ class DesktopDownloadController extends Controller
 
         abort_unless($release, 404);
 
-        return response()->download($release['path'], $release['filename'], [
+        return self::sendPayload($release['path'], $release['filename'], [
             'Content-Type' => 'application/vnd.microsoft.portable-executable',
             'X-Content-Type-Options' => 'nosniff',
-        ]);
+        ], attachment: true);
     }
 
     public function mac()
@@ -90,33 +134,119 @@ class DesktopDownloadController extends Controller
             ? 'application/zip'
             : 'application/x-apple-diskimage';
 
-        return response()->download($release['path'], $release['filename'], [
+        return self::sendPayload($release['path'], $release['filename'], [
             'Content-Type' => $contentType,
             'X-Content-Type-Options' => 'nosniff',
-        ]);
+        ], attachment: true);
     }
 
     /**
      * electron-updater feed: latest.yml plus the artifacts it references.
      * Public — the desktop updater has no web session. Single path segment
      * only; the patterns below block traversal and non-update files.
+     *
+     * The manifest half stays exactly as it was — cheap, unthrottled, always
+     * served — because every installed client polls it every four hours and
+     * breaking it breaks every existing install. The ~100 MB payload half is
+     * rate limited per IP and, where the web server is configured for it,
+     * handed off so it never occupies a PHP-FPM worker. See the extension
+     * constants above for the full reasoning.
      */
-    public function updates(string $file)
+    public function updates(Request $request, string $file)
     {
         abort_unless(preg_match('/^[A-Za-z0-9][A-Za-z0-9 ._-]*$/', $file) === 1, 404);
         abort_unless(preg_match('/\.(yml|exe|blockmap|dmg|zip)$/i', $file) === 1, 404);
 
+        $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        $isPayload = ! in_array($extension, self::MANIFEST_EXTENSIONS, true);
+
+        if ($isPayload && ($retryAfter = self::payloadRateLimit($request)) !== null) {
+            return response('Too many installer downloads from this address.', 429, [
+                'Retry-After' => $retryAfter,
+                'Cache-Control' => 'no-store',
+            ]);
+        }
+
         foreach (self::searchDirs() as $dir) {
             $path = rtrim($dir, '/\\').DIRECTORY_SEPARATOR.$file;
-            if (File::isFile($path)) {
-                return response()->file($path, [
-                    'Cache-Control' => 'no-cache',
-                    'X-Content-Type-Options' => 'nosniff',
-                ]);
+
+            if (! File::isFile($path)) {
+                continue;
             }
+
+            $headers = [
+                'Cache-Control' => 'no-cache',
+                'X-Content-Type-Options' => 'nosniff',
+            ];
+
+            // Manifests keep the original inline BinaryFileResponse: a few KB,
+            // and the updater's contract with this endpoint has not changed.
+            if (! $isPayload) {
+                return response()->file($path, $headers);
+            }
+
+            return self::sendPayload($path, $file, $headers, attachment: false);
         }
 
         abort(404);
+    }
+
+    /**
+     * Per-IP budget for the big artifacts on the public update feed.
+     *
+     * Returns the number of seconds to wait when the caller is over budget, or
+     * null when the request may proceed. Ranged requests are metered separately
+     * (see PAYLOAD_RANGE_HITS_PER_MINUTE) so a differential auto-update — many
+     * small ranges, less total traffic than one full download — is never the
+     * thing that trips the limit.
+     */
+    private static function payloadRateLimit(Request $request): ?int
+    {
+        $ranged = $request->headers->has('Range');
+        $limit = $ranged ? self::PAYLOAD_RANGE_HITS_PER_MINUTE : self::PAYLOAD_HITS_PER_MINUTE;
+        $key = 'desktop-payload:'.($ranged ? 'range:' : 'full:').sha1((string) $request->ip());
+
+        if (RateLimiter::tooManyAttempts($key, $limit)) {
+            return max(1, RateLimiter::availableIn($key));
+        }
+
+        RateLimiter::hit($key, 60);
+
+        return null;
+    }
+
+    /**
+     * Serve a ~100 MB installer without holding a PHP-FPM worker open for the
+     * whole transfer, when the web server has been told how.
+     *
+     * With DESKTOP_X_ACCEL_PREFIX set to an nginx `internal` location that maps
+     * onto the installers directory, PHP returns an empty 200 carrying an
+     * X-Accel-Redirect header and the worker is free immediately; nginx does the
+     * transfer (including Range handling) itself. That is the difference between
+     * "a few concurrent downloads exhaust the pool" and "downloads cost us
+     * nothing but bandwidth".
+     *
+     * Without it we fall back to the previous behaviour — a BinaryFileResponse,
+     * which still supports Range and sets Content-Length, but does occupy a
+     * worker. The nginx side is an ops change; see the deploy runbook.
+     */
+    private static function sendPayload(string $path, string $filename, array $headers, bool $attachment): SymfonyResponse
+    {
+        $disposition = ($attachment ? 'attachment' : 'inline').'; filename="'.str_replace('"', '', $filename).'"';
+        $prefix = trim((string) config('desktop.x_accel_prefix', ''));
+
+        if ($prefix !== '') {
+            return response('', 200, $headers + [
+                // rawurlencode, not the raw name: filenames legitimately contain
+                // spaces ("Staffvora Setup 0.4.5.exe") and this value is a URI
+                // path that nginx re-resolves internally.
+                'X-Accel-Redirect' => '/'.trim($prefix, '/').'/'.rawurlencode($filename),
+                'Content-Disposition' => $disposition,
+                'Content-Length' => 0,
+            ]);
+        }
+
+        return response()->file($path, $headers + ['Content-Disposition' => $disposition]);
     }
 
     // ── Discovery ────────────────────────────────────────────────────────────

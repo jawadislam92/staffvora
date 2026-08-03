@@ -3,13 +3,18 @@
 namespace App\Http\Controllers\Site;
 
 use App\Http\Controllers\Controller;
+use App\Models\Addon;
+use App\Models\BlogPost;
+use App\Models\Plan;
 use App\Models\SiteMedia;
 use App\Models\SitePage;
 use App\Models\SiteTheme;
-use App\Support\DefaultSiteContent;
+use App\Support\ImageResizer;
+use App\Support\SiteContext;
 use App\Support\SiteNavigation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
@@ -20,10 +25,17 @@ use Inertia\Inertia;
  */
 class PageController extends Controller
 {
+    /**
+     * ⚠️ READ-ONLY. Nothing on this path may write.
+     *
+     * `DefaultSiteContent::ensure()` used to run here, so every anonymous hit on
+     * the least-protected page in the product re-ran the site seeder: ~13
+     * site_pages lookups plus the blog seeder, in the request, for a page that
+     * only ever needs to READ one row. Seeding is now a deploy step
+     * (`php artisan site:sync`) — see App\Console\Commands\SyncSiteContent.
+     */
     public function home(Request $request)
     {
-        DefaultSiteContent::ensure();
-
         return $this->render('home', $request);
     }
 
@@ -108,7 +120,7 @@ class PageController extends Controller
 
         if (config('features.blog', false)) {
             $entries->push(['loc' => url('/blog'), 'lastmod' => now()->toAtomString(), 'priority' => '0.6']);
-            foreach (\App\Models\BlogPost::live()->get() as $post) {
+            foreach (BlogPost::live()->get() as $post) {
                 $entries->push(['loc' => $post->url(), 'lastmod' => $post->updated_at->toAtomString(), 'priority' => '0.6']);
             }
         }
@@ -122,13 +134,19 @@ class PageController extends Controller
         return response($xml, 200, ['Content-Type' => 'application/xml']);
     }
 
-    /** Public plan tiers for the PricingTable block — wired to the live catalogue. */
+    /**
+     * Public plan tiers for the PricingTable block — wired to the live catalogue.
+     *
+     * ⚠️ READ-ONLY. `Plan::ensureSeeded()` used to run here, which meant an
+     * anonymous page view issued one SELECT per catalogue plan (and a write on a
+     * cold catalogue) before it could render a price list. The catalogue is
+     * seeded on deploy (`php artisan site:sync`, which calls PlanSeeder), so an
+     * empty table here means "the deploy step has not run", not "seed it now".
+     */
     private function plansPayload(): array
     {
-        \App\Models\Plan::ensureSeeded();
-
-        return \App\Models\Plan::where('is_public', true)->orderBy('sort')->get()
-            ->map(fn (\App\Models\Plan $p) => [
+        return Plan::where('is_public', true)->orderBy('sort')->get()
+            ->map(fn (Plan $p) => [
                 'key' => $p->key,
                 'name' => $p->name,
                 'price_cents' => (int) $p->price_cents,
@@ -155,12 +173,12 @@ class PageController extends Controller
      */
     private function addonsPayload(): array
     {
-        if (! \Illuminate\Support\Facades\Schema::hasTable('addons')) {
+        if (! Schema::hasTable('addons')) {
             return [];
         }
 
-        return \App\Models\Addon::query()->visible()->ordered()->get()
-            ->map(fn (\App\Models\Addon $a) => [
+        return Addon::query()->visible()->ordered()->get()
+            ->map(fn (Addon $a) => [
                 'key' => $a->key,
                 'name' => $a->name,
                 'description' => $a->description,
@@ -177,7 +195,7 @@ class PageController extends Controller
      */
     private function brandPayload(): array
     {
-        return \App\Support\SiteContext::brand();
+        return SiteContext::brand();
     }
 
     /** Serve a builder-uploaded image by id, cached a month, ETag-validated. */
@@ -221,7 +239,7 @@ class PageController extends Controller
             if ($fallbackMime === 'image/svg+xml') {
                 return ['bytes' => Storage::disk('avatars')->get($path), 'mime' => $fallbackMime];
             }
-            $resized = \App\Support\ImageResizer::fit(Storage::disk('avatars')->get($path), 400);
+            $resized = ImageResizer::fit(Storage::disk('avatars')->get($path), 400);
 
             return ['bytes' => $resized['bytes'], 'mime' => $resized['mime'] ?? $fallbackMime];
         });

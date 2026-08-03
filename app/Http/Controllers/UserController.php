@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Designation;
 use App\Models\MonitoringSetting;
+use App\Models\Organization;
 use App\Models\Shift;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -86,6 +88,23 @@ class UserController extends Controller
             $query->active();
         } elseif ($status === 'archived') {
             $query->archived();
+        }
+
+        // Sample-data teammates are rows DemoDataService owns, not staff this
+        // directory manages — they are free, they cannot sign in, and every
+        // per-user action here refuses them. Showing them offered an Edit
+        // button whose only working outcome used to be laundering a free row
+        // into a real seat, so they are hidden unless explicitly asked for.
+        // They remain visible where the sample is meant to teach (dashboard,
+        // attendance, reports), all of which carry the "Demo · " prefix.
+        $sample = (string) $request->get('sample', 'exclude');
+        if (! in_array($sample, ['exclude', 'include', 'only'], true)) {
+            $sample = 'exclude';
+        }
+        if ($sample === 'exclude') {
+            $query->excludingDemoIdentities();
+        } elseif ($sample === 'only') {
+            $query->demoIdentities();
         }
 
         $startOfWeek = now()->startOfWeek(MonitoringSetting::weekStartDay())->format('Y-m-d');
@@ -176,6 +195,7 @@ class UserController extends Controller
                 'designations' => $designations,
                 'roles' => $roles,
                 'status' => $status,
+                'sample' => $sample,
                 'sort' => $sort,
                 'dir' => $dir,
             ],
@@ -189,6 +209,11 @@ class UserController extends Controller
                     ['value' => 'all', 'label' => 'All'],
                     ['value' => 'active', 'label' => 'Active'],
                     ['value' => 'archived', 'label' => 'Deactivated'],
+                ],
+                'sample' => [
+                    ['value' => 'exclude', 'label' => 'Hide sample data'],
+                    ['value' => 'include', 'label' => 'Include sample data'],
+                    ['value' => 'only', 'label' => 'Sample data only'],
                 ],
             ],
             'managedDesignations' => $this->designationOptions(),
@@ -239,9 +264,17 @@ class UserController extends Controller
         // User::seatUsage() excludes sample-data teammates so a loaded demo can
         // never stand between a customer and a real hire. That exclusion is not
         // an exploit — User::booted() refuses the reserved demo e-mail namespace
-        // on every request-reachable write path, so the address validated above
-        // can never be made to match it.
-        $seatLimit = $request->user()->organization?->seatLimit();
+        // on every request-reachable write path, and freezes the identity of the
+        // rows already in it, so the address validated above can never be made
+        // to match one and a demo row can never be renamed out of it.
+        //
+        // This is only the PRE-FLIGHT: it fails an obviously-over-limit request
+        // before we upload an avatar we would then have to orphan. The
+        // authoritative check is the atomic one below — reading the count here
+        // and inserting later is precisely the race that let fifty concurrent
+        // requests all pass a two-seat plan.
+        $organization = $request->user()->organization;
+        $seatLimit = $organization?->seatLimit();
         if ($seatLimit !== null && User::seatUsage() >= $seatLimit) {
             throw ValidationException::withMessages([
                 'email' => "Your plan includes up to {$seatLimit} users. Upgrade your plan to add more.",
@@ -292,9 +325,15 @@ class UserController extends Controller
         //
         // Not mass assigned: email_verified_at is deliberately absent from
         // $fillable, so no request payload can ever set it.
-        $user = new User($userData);
-        $user->email_verified_at = now();
-        $user->save();
+        //
+        // The seat check and the INSERT share one transaction and one lock (see
+        // User::withSeatGuard) so two simultaneous requests cannot both read the
+        // same pre-insert count.
+        User::withSeatGuard($organization, function () use ($userData) {
+            $user = new User($userData);
+            $user->email_verified_at = now();
+            $user->save();
+        });
 
         $this->rememberDesignation($userData['designation']);
 
@@ -304,6 +343,7 @@ class UserController extends Controller
     public function edit(User $user)
     {
         $this->guardSuperAdminTarget($user);
+        $this->guardDemoIdentityTarget($user);
 
         return Inertia::render('UserEdit', [
             'user' => [
@@ -364,6 +404,7 @@ class UserController extends Controller
 
         $validated = $request->validate($rules);
         $this->guardSuperAdminTarget($user);
+        $this->guardDemoIdentityTarget($user);
 
         if ($request->user()->is($user)
             && $request->user()->isSuperAdmin()
@@ -411,7 +452,23 @@ class UserController extends Controller
             $user->avatar = $request->file('avatar')->store('avatars', 'avatars');
         }
 
-        $user->save();
+        // A row that was NOT consuming a seat and would start to after this
+        // save has to pay for one, exactly like a new hire. Nothing this action
+        // can do reaches that state today — demo identities are refused above
+        // and is_active is not a field on this form — but the invariant is
+        // "anything that raises seatUsage() runs the seat check", not "the
+        // fields today's form happens to submit". Editing a demo user's e-mail
+        // was how a two-seat plan grew to eight users.
+        $consumedBefore = ! User::isReservedDemoEmail($user->getOriginal('email'))
+            && (bool) ($user->getOriginal('is_active') ?? true);
+        $consumesAfter = ! User::isReservedDemoEmail($user->email) && $user->isActive();
+
+        if (! $consumedBefore && $consumesAfter) {
+            User::withSeatGuard($request->user()->organization, fn () => $user->save());
+        } else {
+            $user->save();
+        }
+
         $this->rememberDesignation($user->designation);
 
         return $this->redirectToReturnPath($request, 'users.index', [
@@ -653,7 +710,11 @@ class UserController extends Controller
             abort(403, 'Only Super Admins can change permissions.');
         }
 
-        $users = User::whereIn('id', $data['user_ids'])->get();
+        // Sample-data teammates are never bulk-editable: they are not staff,
+        // and every attribute worth bulk-editing on them is frozen by
+        // User::booted() anyway — sweeping one into the batch would throw
+        // mid-loop and abandon the rest half-applied.
+        $users = User::whereIn('id', $data['user_ids'])->excludingDemoIdentities()->get();
         $updated = 0;
 
         foreach ($users as $user) {
@@ -714,13 +775,30 @@ class UserController extends Controller
     {
         $data = $request->validate(['is_active' => ['required', 'boolean']]);
         $this->guardSuperAdminTarget($user);
+        $this->guardDemoIdentityTarget($user);
 
         if (! $data['is_active'] && $request->user()->is($user)) {
             throw ValidationException::withMessages(['is_active' => 'You cannot deactivate your own account.']);
         }
 
+        $wasActive = $user->isActive();
         $user->is_active = $data['is_active'];
-        $user->save();
+
+        // Reactivating someone LIGHTS UP A SEAT — a deactivated person is
+        // neither billed nor counted (see User::scopeSeatConsuming), so this is
+        // a seat-increasing path and must run the same atomic check a new hire
+        // does. Otherwise "deactivate one, hire two, reactivate the first" is a
+        // free seat.
+        if ($data['is_active'] && ! $wasActive) {
+            User::withSeatGuard(
+                $request->user()->organization,
+                fn () => $user->save(),
+                'Your plan includes up to :limit users. Upgrade your plan to reactivate this person.',
+                'is_active',
+            );
+        } else {
+            $user->save();
+        }
 
         if (! $user->is_active) {
             $user->tokens()->delete(); // revoke desktop access immediately
@@ -757,6 +835,7 @@ class UserController extends Controller
 
         $isActive = (bool) $data['is_active'];
         $changed = 0;
+        $hitSeatLimit = false;
 
         // The array cap cannot bound "select all N matching" — that branch used
         // to pluck EVERY matching id into memory and then save() one row at a
@@ -765,48 +844,105 @@ class UserController extends Controller
         // through the same chunked, batched path. The OrganizationScope keeps
         // either one inside the acting tenant, so ids from another org resolve
         // to nothing.
-        $base = ! empty($data['all_matching'])
+        //
+        // Sample-data teammates are excluded from both: they are not staff, and
+        // an admin cannot select what the directory no longer lists.
+        $base = (! empty($data['all_matching'])
             ? $this->filteredUserQuery($request)
-            : User::whereIn('id', $data['ids'] ?? []);
+            : User::whereIn('id', $data['ids'] ?? []))->excludingDemoIdentities();
 
-        $base->select(['id', 'role', 'is_active'])
-            ->chunkById(500, function ($chunk) use ($actor, $isActive, &$changed) {
-                $ids = $chunk
-                    ->reject(fn (User $user) => $user->isSuperAdmin() && ! $actor->isSuperAdmin())
-                    ->reject(fn (User $user) => $actor->is($user))
-                    ->reject(fn (User $user) => (bool) $user->is_active === $isActive)
-                    ->pluck('id')
-                    ->all();
+        // Reactivation is a SEAT-INCREASING path (a deactivated person is
+        // neither billed nor counted), so it is capped by the plan's remaining
+        // headroom instead of being allowed to overshoot silently. Deactivation
+        // never needs a cap and must not pay for a lock.
+        $headroom = null;
 
-                if ($ids === []) {
-                    return;
-                }
+        $apply = function () use ($base, $actor, $isActive, &$changed, &$hitSeatLimit, &$headroom) {
+            $base->select(['id', 'role', 'is_active'])
+                ->chunkById(500, function ($chunk) use ($actor, $isActive, &$changed, &$hitSeatLimit, &$headroom) {
+                    $ids = $chunk
+                        ->reject(fn (User $user) => $user->isSuperAdmin() && ! $actor->isSuperAdmin())
+                        ->reject(fn (User $user) => $actor->is($user))
+                        ->reject(fn (User $user) => (bool) $user->is_active === $isActive)
+                        ->pluck('id')
+                        ->all();
 
-                // One UPDATE per chunk instead of one per row. No model events
-                // ride on is_active, so nothing is lost by skipping them —
-                // updated_at is stamped explicitly since a mass update does not
-                // touch timestamps on its own.
-                User::whereIn('id', $ids)->update([
-                    'is_active' => $isActive,
-                    'updated_at' => now(),
-                ]);
+                    if ($ids === []) {
+                        return;
+                    }
 
-                // Revoke desktop access immediately, in one statement rather
-                // than one per user. getMorphClass() so a future morph map
-                // cannot silently orphan these tokens.
-                if (! $isActive) {
-                    PersonalAccessToken::where('tokenable_type', (new User)->getMorphClass())
-                        ->whereIn('tokenable_id', $ids)
-                        ->delete();
-                }
+                    if ($headroom !== null) {
+                        if (count($ids) > $headroom) {
+                            $hitSeatLimit = true;
+                            $ids = array_slice($ids, 0, $headroom);
+                        }
+                        $headroom -= count($ids);
 
-                $changed += count($ids);
+                        if ($ids === []) {
+                            // Stop the scan rather than walking the rest of a
+                            // "select all N matching" set we can no longer act
+                            // on — this loop runs inside the seat transaction,
+                            // and holding the organizations lock while reading
+                            // tens of thousands of rows would queue every other
+                            // signup behind it.
+                            return false;
+                        }
+                    }
+
+                    // One UPDATE per chunk instead of one per row. No model
+                    // events ride on is_active, so nothing is lost by skipping
+                    // them — updated_at is stamped explicitly since a mass
+                    // update does not touch timestamps on its own.
+                    User::whereIn('id', $ids)->update([
+                        'is_active' => $isActive,
+                        'updated_at' => now(),
+                    ]);
+
+                    // Revoke desktop access immediately, in one statement rather
+                    // than one per user. getMorphClass() so a future morph map
+                    // cannot silently orphan these tokens.
+                    if (! $isActive) {
+                        PersonalAccessToken::where('tokenable_type', (new User)->getMorphClass())
+                            ->whereIn('tokenable_id', $ids)
+                            ->delete();
+                    }
+
+                    $changed += count($ids);
+
+                    if ($headroom !== null && $headroom <= 0) {
+                        $hitSeatLimit = true;
+
+                        return false;
+                    }
+                });
+        };
+
+        if ($isActive && User::seatHeadroom($actor->organization) !== null) {
+            // Same transaction + same organizations-row lock a new hire takes,
+            // so a bulk reactivation racing a POST /users cannot both spend the
+            // last seat. The headroom is read INSIDE the lock.
+            DB::transaction(function () use ($actor, $apply, &$headroom) {
+                Organization::query()
+                    ->whereKey($actor->organization_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                $headroom = User::seatHeadroom($actor->organization) ?? 0;
+                $apply();
             });
+        } else {
+            $apply();
+        }
 
         $verb = $isActive ? 'Reactivated' : 'Deactivated';
+        $message = "{$verb} {$changed} user(s).";
+
+        if ($hitSeatLimit) {
+            $message .= ' The rest stayed deactivated — your plan has no free seats left.';
+        }
 
         return $this->redirectToReturnPath($request, 'users.index', [
-            'success' => "{$verb} {$changed} user(s).",
+            'success' => $message,
         ]);
     }
 
@@ -870,6 +1006,25 @@ class UserController extends Controller
     {
         if ($user->isSuperAdmin() && ! request()->user()->isSuperAdmin()) {
             abort(403, 'Only a Super Admin can manage another Super Admin account.');
+        }
+    }
+
+    /**
+     * Sample-data teammates are not staff — they are rows DemoDataService owns
+     * and removes whole. Managing one here is how the seat exclusion used to be
+     * laundered: this action rewrote a demo row's e-mail and password with no
+     * seat check at all, turning a free, sign-in-incapable placeholder into a
+     * real, counted, LOGIN-CAPABLE account — and, because the "is a demo
+     * loaded?" test keys on the same address, freeing the workspace to mint
+     * another three. A two-seat plan reached eight users that way.
+     *
+     * User::booted() is the floor and refuses the write regardless; this exists
+     * so an admin who reaches the URL gets a 403 rather than a 500.
+     */
+    private function guardDemoIdentityTarget(User $user): void
+    {
+        if ($user->isDemoIdentity()) {
+            abort(403, 'Sample-data teammates cannot be edited. Remove the sample data instead.');
         }
     }
 }

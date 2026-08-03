@@ -28,13 +28,21 @@ Route::middleware('guest')->group(function () {
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');
 
+    // Throttled like its /forgot-password/code sibling: anonymous, sends mail,
+    // and was previously an unlimited-rate account-existence oracle.
     Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])
+        ->middleware('throttle:6,1')
         ->name('password.email');
 
     Route::get('reset-password/{token}', [NewPasswordController::class, 'create'])
         ->name('password.reset');
 
+    // Every POST here runs a bcrypt (cost 12) comparison — ~0.2-0.4s of CPU
+    // each — on a box that also serves the operator's other live sites, and it
+    // is the unlimited back door onto the 6-digit Slack code. The controller
+    // adds a per-address lockout on top of this per-IP cap.
     Route::post('reset-password', [NewPasswordController::class, 'store'])
+        ->middleware('throttle:6,1')
         ->name('password.store');
 
     // Slack-code reset flow (email reset links stay available alongside).

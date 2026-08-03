@@ -10,6 +10,7 @@ use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\User;
 use App\Tenancy\CurrentOrganization;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -62,6 +63,38 @@ class TenantProvisioner
         $trialPlan = $this->regionTrialPlan($this->trialPlan(), $country);
         $trialDays = $trialPlan?->trial_days ?? $trialDays;
 
+        // ⚠️ ALL OR NOTHING. Provisioning writes an Organization, then a User,
+        // then the org's owner_user_id, settings, team and subscription. Any
+        // throw after the first write used to COMMIT the organization row and
+        // abandon it: an anonymous signup that hit a guard or a constraint left
+        // behind a tenant with owner_user_id = NULL, which the operator console
+        // then listed as a real customer. A transaction makes a half-provisioned
+        // tenant impossible — a failed signup leaves the database untouched.
+        //
+        // Plan::ensureSeeded() above deliberately stays OUTSIDE: it is catalogue
+        // data shared by every tenant, and rolling it back because one signup
+        // failed would be wrong.
+        return DB::transaction(fn () => $this->createTenant(
+            $orgName, $ownerName, $email, $plainPassword, $slug, $trialDays, $workspaceType, $country, $trialPlan,
+        ));
+    }
+
+    /**
+     * The actual writes, run inside the transaction opened by provision().
+     *
+     * @return array{organization: Organization, owner: User}
+     */
+    private function createTenant(
+        string $orgName,
+        string $ownerName,
+        string $email,
+        string $plainPassword,
+        ?string $slug,
+        int $trialDays,
+        string $workspaceType,
+        ?string $country,
+        ?Plan $trialPlan,
+    ): array {
         $org = Organization::create([
             'name' => $orgName,
             'slug' => $this->uniqueSlug($slug ?: $orgName),
@@ -214,16 +247,50 @@ class TenantProvisioner
         return Plan::whereKey($offeredIds[0])->first() ?? $default;
     }
 
+    /**
+     * A free workspace slug derived from the company name.
+     *
+     * ⚠️ THIS RUNS ON AN ANONYMOUS, UNAUTHENTICATED PATH (public signup), so it
+     * has to stay cheap no matter what an attacker feeds it. It used to walk
+     * `base-2`, `base-3`, `base-4`… issuing one EXISTS query per step, so
+     * flooding signups with a single company name cost the database O(n²) work
+     * overall: the ten-thousandth "Acme" signup was ten thousand queries on its
+     * own. It is now two queries in the normal case.
+     *
+     * The count of `base-%` rows is a prefix scan on the unique slug index, and
+     * `count + 2` is always past the end of a contiguous `base-2..base-k` run.
+     * Unrelated slugs that merely share the prefix (an org literally called
+     * "Acme Ltd" → `acme-ltd`) only inflate the count, which skips a number —
+     * harmless. The `exists()` check after it keeps the result correct even
+     * then, and the bounded probe loop covers pathological prefix collisions
+     * without ever becoming unbounded.
+     */
     public function uniqueSlug(string $name): string
     {
-        $base = Str::slug($name) ?: 'org';
-        $slug = $base;
-        $i = 2;
+        // Bound the base: `slug` is a VARCHAR(255) and the suffix needs room.
+        $base = Str::limit(Str::slug($name) ?: 'org', 200, '') ?: 'org';
 
-        while (Organization::where('slug', $slug)->exists()) {
-            $slug = $base.'-'.$i++;
+        if (! Organization::where('slug', $base)->exists()) {
+            return $base;
         }
 
-        return $slug;
+        $next = Organization::where('slug', 'like', $base.'-%')->count() + 2;
+
+        // A handful of probes, not a walk. Each iteration steps past a whole
+        // block of collisions rather than a single one, so this cannot degrade
+        // into the per-row loop it replaced.
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $slug = $base.'-'.$next;
+
+            if (! Organization::where('slug', $slug)->exists()) {
+                return $slug;
+            }
+
+            $next += max(1, (int) ($next / 2));
+        }
+
+        // Give up on being pretty rather than on being fast: a random suffix is
+        // collision-free in practice and the unique index is the final word.
+        return $base.'-'.Str::lower(Str::random(8));
     }
 }

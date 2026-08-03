@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\MonitoringSetting;
 use App\Models\User;
+use App\Tenancy\CurrentOrganization;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -28,6 +30,15 @@ class PasswordResetCodeTest extends TestCase
     {
         $this->fakeSlack();
         $user = User::factory()->create(['email' => 'worker@example.com']);
+
+        // The reset now runs bound to the user's OWN tenant, and SlackBotService
+        // fails closed rather than borrowing the operator's platform bot — so
+        // the workspace has to have connected its own Slack for a code to go out.
+        app(CurrentOrganization::class)->runFor(
+            $user->organization_id,
+            fn () => MonitoringSetting::current()->update(['slack_bot_token' => 'xoxb-workspace-token'])
+        );
+        app(CurrentOrganization::class)->forget();
 
         $this->post(route('password.code.request'), ['email' => 'worker@example.com'])
             ->assertRedirect()

@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Addon;
 use App\Models\Organization;
-use App\Models\Scopes\OrganizationScope;
 use App\Models\Subscription;
 use App\Models\User;
 use Carbon\CarbonInterface;
@@ -81,15 +80,28 @@ class BillingPricing
     // -----------------------------------------------------------------------
 
     /**
-     * The seats this workspace is billed for: its ACTIVE users. Deactivated
-     * people (who left) keep their history but are not a paid seat.
+     * The seats this workspace is billed for.
+     *
+     * WHAT COUNTS IS NOT DECIDED HERE. This asks {@see User::seatUsageFor()},
+     * which is the same scope the PLAN LIMIT counts — because this class used
+     * to run its own `COUNT(*) WHERE is_active` and that count included
+     * sample-data teammates. The product tells the customer in two places that
+     * demo teammates are free, and the plan-limit counter agreed, so clicking
+     * "Load sample data" silently added three seats to the plan line and to
+     * every per-seat add-on line on the invoice preview. Billing a customer for
+     * something we called free is a refund, not a rounding error, so the two
+     * counters now share ONE definition and SeatCountersAgreeTest fails if they
+     * ever drift apart again.
      *
      * One indexed COUNT(*), explicitly unscoped and re-scoped to the target org
      * so it is correct whether it runs in a tenant request or an operator one,
      * and memoised per organization for the life of this instance (see
      * `$seatCache` — a page that quotes ten add-on cards must not issue ten
-     * identical counts). Never below 1 — an account always has at least its
-     * owner.
+     * identical counts).
+     *
+     * Never below 1 — an account always has at least its owner, and a workspace
+     * whose owner has somehow been deactivated must not price at zero. That
+     * floor is the ONLY sanctioned difference from the plan-limit counter.
      */
     public function billableSeats(Organization $organization): int
     {
@@ -99,13 +111,7 @@ class BillingPricing
             return $this->seatCache[$organizationId];
         }
 
-        $count = User::query()
-            ->withoutGlobalScope(OrganizationScope::class)
-            ->where('organization_id', $organizationId)
-            ->where('is_active', true)
-            ->count();
-
-        return $this->seatCache[$organizationId] = max(1, (int) $count);
+        return $this->seatCache[$organizationId] = max(1, User::seatUsageFor($organizationId));
     }
 
     /**

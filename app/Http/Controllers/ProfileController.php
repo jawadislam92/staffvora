@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\UserMonitoringSetting;
+use App\Support\ImageGuard;
 use App\Tenancy\CurrentOrganization;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -124,13 +126,32 @@ class ProfileController extends Controller
 
         // Handle avatar upload
         if ($request->hasFile('avatar')) {
+            $file = $request->file('avatar');
+
+            // Second half of the decompression-bomb guard (the `dimensions`
+            // rule on ProfileUpdateRequest is the first). A total-pixel budget
+            // is the only shape of check that works: 7999x7999 passes any
+            // per-axis bound and still costs GD ~256 MB when AvatarController
+            // downscales it on the next team-page render. Header-only, so
+            // nothing hostile is ever decoded here.
+            $image = ImageGuard::inspect($file->getRealPath(), ImageGuard::MAX_PIXELS, ['jpg', 'png', 'gif', 'webp']);
+
+            if ($image === null) {
+                throw ValidationException::withMessages([
+                    'avatar' => 'That image is too large or is not a supported image file.',
+                ]);
+            }
+
             // Delete old avatar if exists
             if ($user->avatar) {
                 Storage::disk('avatars')->delete($user->avatar);
             }
 
-            // Store new avatar
-            $avatarPath = $request->file('avatar')->store('avatars', 'avatars');
+            // Store new avatar. store() names the file from hashName(), whose
+            // extension comes from guessExtension() (finfo on the CONTENT), so
+            // the client never gets to pick the stored extension — see
+            // ImageGuard for why that matters.
+            $avatarPath = $file->store('avatars', 'avatars');
             $validatedData['avatar'] = $avatarPath;
         } elseif ($request->has('avatar') && $request->input('avatar') === null) {
             // Handle avatar removal

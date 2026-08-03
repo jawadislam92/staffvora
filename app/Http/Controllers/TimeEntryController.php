@@ -9,6 +9,7 @@ use App\Models\TrackingSession;
 use App\Models\User;
 use App\Models\WorkHour;
 use App\Support\BusinessTime;
+use App\Support\CsvExport;
 use App\Support\TimeClockRules;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -188,20 +189,30 @@ class TimeEntryController extends Controller
 
         $entries = $query->orderBy('action_timestamp', 'desc')->get();
 
-        $csv = "Date,Time,Employee,Action,Notes\n";
-        foreach ($entries as $entry) {
-            $csv .= implode(',', [
-                $entry->formatted_action_date,
-                $entry->formatted_action_time,
-                $entry->user->name,
-                str_replace('_', ' ', ucwords($entry->action_type)),
-                '"'.($entry->notes ?? '').'"',
-            ])."\n";
-        }
+        // Built with fputcsv + CsvExport::row, never string concatenation.
+        // `notes` is employee-supplied free text and the display name is
+        // self-service, so the old '"'.$v.'"' quoting let either one close its
+        // own cell and invent columns, and a leading = / + / - / @ made Excel
+        // execute it on the manager's machine. Columns, order, sort, filters and
+        // the filename are unchanged — payroll reads these files.
+        return CsvExport::stream(
+            'time-entries-'.now()->format('Y-m-d').'.csv',
+            function ($handle) use ($entries) {
+                // Fixed header, written verbatim so the bytes are unchanged
+                // (fputcsv quotes any cell containing a space).
+                CsvExport::literal($handle, "Date,Time,Employee,Action,Notes\n");
 
-        return response($csv)
-            ->header('Content-Type', 'text/csv')
-            ->header('Content-Disposition', 'attachment; filename="time-entries-'.now()->format('Y-m-d').'.csv"');
+                foreach ($entries as $entry) {
+                    CsvExport::row($handle, [
+                        $entry->formatted_action_date,
+                        $entry->formatted_action_time,
+                        $entry->user->name,
+                        str_replace('_', ' ', ucwords($entry->action_type)),
+                        $entry->notes ?? '',
+                    ]);
+                }
+            }
+        );
     }
 
     public function getTodaysEntries()

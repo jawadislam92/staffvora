@@ -3,11 +3,17 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrganization;
+use App\Models\Scopes\OrganizationScope;
+use App\Services\BillingPricing;
+use App\Services\DemoDataService;
+use App\Support\BusinessTime;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
@@ -42,7 +48,6 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     use BelongsToOrganization;
-
     use HasApiTokens, HasFactory, Notifiable;
 
     /**
@@ -225,8 +230,30 @@ class User extends Authenticatable
     }
 
     /**
-     * Refuse any attempt to create or rename a user into the reserved demo
-     * namespace. This is what makes the seat exclusion safe to rely on.
+     * The attributes of a sample-data row that a customer may NEVER rewrite.
+     *
+     * Deliberately not "every column": cosmetic fields (name, designation,
+     * shift, team…) stay writable so a bulk edit or some future feature that
+     * happens to save a demo row does not explode. What is frozen is exactly
+     * the set that decides IDENTITY, ACCESS and TENANCY — i.e. everything that
+     * could turn a free, sign-in-incapable placeholder into a real account.
+     *
+     * @var array<int, string>
+     */
+    private const DEMO_IMMUTABLE_ATTRIBUTES = [
+        'email',
+        'password',
+        'remember_token',
+        'role',
+        'permissions',
+        'is_platform_admin',
+        'organization_id',
+    ];
+
+    /**
+     * Refuse any attempt to create or rename a user INTO the reserved demo
+     * namespace, and any attempt to rewrite an existing demo row OUT of it.
+     * Both directions have to be closed or the seat exclusion is worthless.
      */
     protected static function booted(): void
     {
@@ -235,9 +262,14 @@ class User extends Authenticatable
         });
 
         static::updating(function (self $user): void {
+            // Direction 1 — INTO the namespace: mints a row the seat count
+            // ignores, i.e. a free seat.
             if ($user->isDirty('email')) {
                 $user->guardDemoIdentity();
             }
+
+            // Direction 2 — OUT of it: launders a free row into a real one.
+            $user->guardDemoIdentityImmutable();
         });
     }
 
@@ -250,6 +282,52 @@ class User extends Authenticatable
         throw new \RuntimeException(
             'The '.self::DEMO_EMAIL_DOMAIN.' address space is reserved for sample data and cannot be assigned.'
         );
+    }
+
+    /**
+     * Sample-data rows belong to DemoDataService, not to the customer.
+     *
+     * Guarding only the "into the namespace" direction was not enough: a demo
+     * teammate is a real `users` row that is merely EXCLUDED from
+     * {@see seatUsage()} by its address, so rewriting that address (and its
+     * password) the other way converted a free row into a real, counted,
+     * LOGIN-CAPABLE account. Worse, {@see DemoDataService::isLoaded()}
+     * keys on the same address, so once renamed the workspace read as "no demo
+     * loaded" and could mint another free cast — repeatedly. That was proven to
+     * eight real users on a two-seat plan.
+     *
+     * The guard lives HERE rather than in the one controller that did it,
+     * because every write path (admin edit, bulk edit, console command, a
+     * feature written next year) goes through Eloquent's updating event, and
+     * only {@see asDemoIdentityWriter()} — which no request can reach — is
+     * allowed through.
+     */
+    private function guardDemoIdentityImmutable(): void
+    {
+        if (self::$demoIdentityWrites || ! self::isReservedDemoEmail($this->getOriginal('email'))) {
+            return;
+        }
+
+        $frozen = array_values(array_filter(
+            self::DEMO_IMMUTABLE_ATTRIBUTES,
+            fn (string $attribute) => $this->isDirty($attribute)
+        ));
+
+        if ($frozen === []) {
+            return;
+        }
+
+        throw new \RuntimeException(
+            'Sample-data teammates are reserved for demo mode and their identity cannot be changed ('
+            .implode(', ', $frozen).'). Remove the sample data instead.'
+        );
+    }
+
+    /** Is THIS row one of DemoDataService's sample-data teammates? */
+    public function isDemoIdentity(): bool
+    {
+        return self::isReservedDemoEmail($this->email)
+            || self::isReservedDemoEmail($this->getOriginal('email'));
     }
 
     /** Sample-data teammates in the current organization. */
@@ -270,17 +348,127 @@ class User extends Authenticatable
     }
 
     /**
+     * THE SEAT DEFINITION. One predicate, used by BOTH counters.
+     *
+     * A seat is an ACTIVE, REAL person:
+     *   • sample-data teammates are excluded — the product tells the customer
+     *     in two places that they are free, and the plan-limit counter agreed,
+     *     but the BILLING counter used to count them, so clicking "Load sample
+     *     data" quietly added three seats to the invoice and to every per-seat
+     *     add-on line. Charging for something we called free is not a rounding
+     *     error, it is a refund.
+     *   • deactivated people (who left the company) keep their history but can
+     *     neither sign in nor track, so they are neither billed nor counted
+     *     against the plan.
+     *
+     * Both {@see seatUsage()} (the plan limit) and
+     * {@see BillingPricing::billableSeats()} (the invoice) MUST
+     * stay built from this scope. When they disagree the customer is either
+     * over-charged or shown a ceiling that has nothing to do with their bill —
+     * SeatCountersAgreeTest exists to make a future divergence fail loudly.
+     */
+    public function scopeSeatConsuming($query)
+    {
+        return $query->excludingDemoIdentities()->where('is_active', true);
+    }
+
+    /**
      * Seats consumed in the current organization — the ONE number every plan
-     * seat check must use. Sample-data teammates are excluded so loading a demo
-     * can never block a real hire; see the note above for why that exclusion
-     * cannot be forged.
+     * seat check must use. See {@see scopeSeatConsuming()} for what counts and
+     * why; see the note above for why the demo exclusion cannot be forged.
      *
      * Org-scoped by OrganizationScope, so the `not like` runs over one tenant's
      * roster (~100 rows), never the whole users table.
      */
     public static function seatUsage(): int
     {
-        return static::query()->excludingDemoIdentities()->count();
+        return static::query()->seatConsuming()->count();
+    }
+
+    /**
+     * The same number for an EXPLICIT organization, for code that runs outside
+     * a tenant request (the billing hub prices a workspace an operator is
+     * looking at). Deliberately the same scope — a second, subtly different
+     * COUNT(*) is exactly how the billing and limit counters drifted apart.
+     */
+    public static function seatUsageFor(int $organizationId): int
+    {
+        return static::query()
+            ->withoutGlobalScope(OrganizationScope::class)
+            ->where('organization_id', $organizationId)
+            ->seatConsuming()
+            ->count();
+    }
+
+    /**
+     * Run $callback with a seat RESERVED — the seat check and the write that
+     * consumes it happen inside one transaction, behind one lock.
+     *
+     * The old shape was a textbook check-then-act race: fifty concurrent
+     * `POST /users` all ran `seatUsage() >= $limit` against the same stale
+     * count, all fifty passed, and a two-seat plan ended up with fifty-one
+     * users. Every writer now queues on the SAME `organizations` row, so the
+     * second request only reads the count AFTER the first request's user row
+     * is in it.
+     *
+     * Engine parity: `lockForUpdate()` compiles to `FOR UPDATE` on MySQL
+     * (prod) and to an empty string on SQLite (tests) — SQLite serialises
+     * writers at the database level, so the invariant holds on both without
+     * two code paths. DO NOT "simplify" the lock away because the test suite
+     * cannot observe it; SQLite is why it looks redundant.
+     *
+     * Unlimited plans take no lock at all: there is nothing to serialise, and
+     * an unlimited workspace must not funnel every signup through one row.
+     *
+     * @template TReturn
+     *
+     * @param  \Closure(): TReturn  $callback
+     * @return TReturn
+     *
+     * @throws ValidationException when the plan is full
+     */
+    public static function withSeatGuard(
+        ?Organization $organization,
+        \Closure $callback,
+        string $message = 'Your plan includes up to :limit users. Upgrade your plan to add more.',
+        string $field = 'email',
+    ) {
+        if ($organization === null || $organization->seatLimit() === null) {
+            return $callback();
+        }
+
+        return DB::transaction(function () use ($organization, $callback, $message, $field) {
+            // The serialisation point. Reading the row for update is what makes
+            // the count below authoritative rather than a snapshot.
+            Organization::query()
+                ->withoutGlobalScopes()
+                ->whereKey($organization->getKey())
+                ->lockForUpdate()
+                ->first();
+
+            $limit = $organization->seatLimit();
+
+            if ($limit !== null && static::seatUsage() >= $limit) {
+                throw ValidationException::withMessages([
+                    $field => str_replace(':limit', (string) $limit, $message),
+                ]);
+            }
+
+            return $callback();
+        });
+    }
+
+    /**
+     * How many more seats this workspace may light up right now; null =
+     * unlimited. Callers that reactivate people in BULK need the headroom
+     * rather than a yes/no, so they can fill it and report the remainder
+     * instead of failing the whole batch.
+     */
+    public static function seatHeadroom(?Organization $organization): ?int
+    {
+        $limit = $organization?->seatLimit();
+
+        return $limit === null ? null : max(0, $limit - static::seatUsage());
     }
 
     public function isSuperAdmin(): bool
@@ -512,7 +700,7 @@ class User extends Authenticatable
 
     public function attendanceDateFor(Carbon $timestamp): string
     {
-        $localTimestamp = $timestamp->copy()->setTimezone(\App\Support\BusinessTime::tz());
+        $localTimestamp = $timestamp->copy()->setTimezone(BusinessTime::tz());
         $calendarDate = $localTimestamp->toDateString();
 
         // Effective shift start for the day this timestamp falls on: a one-day

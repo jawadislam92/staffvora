@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Models\Organization;
 use App\Models\User;
 use App\Services\DemoDataService;
 use App\Tenancy\CurrentOrganization;
@@ -12,7 +13,6 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -94,30 +94,31 @@ class OnboardingController extends Controller
             'email' => ['required', 'not_regex:/[\r\n]/', 'email', 'max:255', 'unique:users,email', User::reservedEmailRule()],
         ]);
 
-        // Respect the plan's seat limit (null = unlimited). Sample-data
-        // teammates are excluded from the count (see User::seatUsage) so a
-        // loaded demo can never block a real invite; the reserved demo e-mail
-        // namespace is refused at the model layer, so the validated address
-        // above cannot imitate one to win a free seat.
-        $seatLimit = $this->organization()?->seatLimit();
-        if ($seatLimit !== null && User::seatUsage() >= $seatLimit) {
-            throw ValidationException::withMessages([
-                'email' => "Your plan includes up to {$seatLimit} users. Upgrade to add more.",
-            ]);
-        }
-
         // No tenant email-invite pipeline exists yet, and member accounts are
         // admin-provisioned (see UserController). So we mint a strong temporary
         // password and surface it once for the owner to hand over.
         $tempPassword = Str::password(14);
 
-        User::create([
-            'name' => $validated['name'],
-            'email' => strtolower(trim($validated['email'])),
-            'password' => Hash::make($tempPassword),
-            'role' => 'member',
-            'permissions' => [],
-        ]);
+        // Respect the plan's seat limit (null = unlimited). Sample-data
+        // teammates are excluded from the count (see User::seatUsage) so a
+        // loaded demo can never block a real invite; the reserved demo e-mail
+        // namespace is refused at the model layer, so the validated address
+        // above cannot imitate one to win a free seat.
+        //
+        // The check and the INSERT share one transaction and one lock: reading
+        // the count and creating the row as two separate steps is the race that
+        // let concurrent invites all pass the same stale count.
+        User::withSeatGuard(
+            $this->organization(),
+            fn () => User::create([
+                'name' => $validated['name'],
+                'email' => strtolower(trim($validated['email'])),
+                'password' => Hash::make($tempPassword),
+                'role' => 'member',
+                'permissions' => [],
+            ]),
+            'Your plan includes up to :limit users. Upgrade to add more.',
+        );
 
         return back()->with('invited', [
             'name' => $validated['name'],
@@ -191,7 +192,7 @@ class OnboardingController extends Controller
     {
         $id = $this->current->id();
 
-        return $id ? \App\Models\Organization::find($id) : null;
+        return $id ? Organization::find($id) : null;
     }
 
     private function canOnboard(?User $user): bool

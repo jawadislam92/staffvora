@@ -14,11 +14,26 @@ class ImageResizer
      * A 1–2 MB photo dropped to ~160 px lands around 30–60 KB, which is what
      * turns a multi-second avatar/logo load into an instant one.
      *
+     * DECOMPRESSION BOMBS. imagecreatefromstring() allocates the FULL source
+     * raster (~4 bytes/pixel) before any downscale happens, so a 2 MB file
+     * declaring 20,000 x 20,000 px costs ~1.6 GB — inside a plain web request,
+     * on a box shared with the owner's other live sites. Dimensions are
+     * therefore read from the header first (getimagesizefromstring never
+     * decodes) and anything over the pixel budget is handed straight back
+     * undecoded, which is the same "give up, keep the original" contract every
+     * other failure path here already has.
+     *
      * @return array{bytes: string, mime: ?string}
      */
-    public static function fit(string $bytes, int $maxDim): array
+    public static function fit(string $bytes, int $maxDim, int $maxPixels = ImageGuard::MAX_PIXELS): array
     {
         if (! function_exists('imagecreatefromstring') || $bytes === '') {
+            return ['bytes' => $bytes, 'mime' => null];
+        }
+
+        // Header-only budget check BEFORE GD allocates anything. Also rejects
+        // non-raster bytes, so the decode below is never handed a surprise.
+        if (ImageGuard::inspectBytes($bytes, $maxPixels) === null) {
             return ['bytes' => $bytes, 'mime' => null];
         }
 

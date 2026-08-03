@@ -8,6 +8,7 @@ use App\Models\MonitoringSetting;
 use App\Models\TrackingScreenshot;
 use App\Models\TrackingSession;
 use App\Services\TrackingSessionService;
+use App\Support\ImageGuard;
 use App\Support\WebDomain;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
@@ -19,7 +20,14 @@ class ScreenshotController extends DesktopController
      * 64 Mpx (~256 MB under GD) and passes any "max 8000 wide" rule. 40 Mpx
      * comfortably covers a dual-4K capture.
      */
-    private const MAX_PIXELS = 40_000_000;
+    private const MAX_PIXELS = ImageGuard::MAX_PIXELS;
+
+    /**
+     * Formats we are willing to store. Mirrors the `mimes:` rule on
+     * UploadScreenshotRequest, but decided from the DECODED HEADER rather than
+     * from anything the client said.
+     */
+    private const ALLOWED_FORMATS = ['jpg', 'png', 'webp'];
 
     /**
      * How stale a capture may claim to be. The desktop app buffers while
@@ -48,20 +56,28 @@ class ScreenshotController extends DesktopController
 
         $file = $request->file('image');
 
-        // Refuse decompression bombs BEFORE anything decodes the image.
-        // getimagesize reads the header only, so it is safe on hostile input;
-        // GenerateScreenshotThumbnail (which runs inline while QUEUE_CONNECTION
-        // is sync) would otherwise allocate ~4 bytes per pixel and take the
-        // worker — 60 worker kills a minute is enough to empty a shared FPM pool
-        // for every tenant on the box.
-        $dimensions = @getimagesize($file->getRealPath());
+        // Single header-only inspection that answers BOTH questions before
+        // anything decodes or stores the upload:
+        //
+        //  - Is it a decompression bomb? getimagesize reads the header only, so
+        //    it is safe on hostile input; GenerateScreenshotThumbnail (which
+        //    runs inline while QUEUE_CONNECTION is sync) would otherwise
+        //    allocate ~4 bytes per pixel and take the worker — 60 worker kills a
+        //    minute is enough to empty a shared FPM pool for every tenant on the
+        //    box.
+        //  - What is it REALLY? The answer, not the client's filename, decides
+        //    the stored extension below.
+        $image = ImageGuard::inspect($file->getRealPath(), self::MAX_PIXELS, self::ALLOWED_FORMATS);
 
-        if ($dimensions === false || ($dimensions[0] * $dimensions[1]) > self::MAX_PIXELS) {
-            Log::warning('Rejected oversized or unreadable screenshot upload.', [
+        if ($image === null) {
+            $raw = @getimagesize($file->getRealPath());
+
+            Log::warning('Rejected oversized, unreadable or non-raster screenshot upload.', [
                 'user_id' => $user->id,
                 'tracking_session_id' => $session->id,
-                'width' => $dimensions[0] ?? null,
-                'height' => $dimensions[1] ?? null,
+                'width' => $raw[0] ?? null,
+                'height' => $raw[1] ?? null,
+                'declared_mime' => $raw['mime'] ?? null,
                 'bytes' => $file->getSize(),
             ]);
 
@@ -118,8 +134,24 @@ class ScreenshotController extends DesktopController
             $session->id,
         );
 
-        $filename = $capturedAt->format('His').'_'.uniqid().'.'.$file->getClientOriginalExtension();
-        $path = $file->storeAs($dir, $filename, 'screenshots');
+        // The extension comes from the VALIDATED CONTENT, never from the client.
+        // The desktop agent is attacker-controlled (every employee holds a
+        // token), and the stored key's extension is what the S3 adapter turns
+        // into the object's ContentType: Flysystem writes the upload as a
+        // stream, so its mime detector cannot sniff the buffer and falls back to
+        // the extension. Letting the client send `payload.html` for a genuine
+        // PNG that carries <script> in a tEXt chunk therefore had the app serve
+        // it back to the manager as text/html from our own origin — stored XSS
+        // inside the manager's logged-in session.
+        //
+        // ContentType is pinned explicitly for the same reason: it removes the
+        // extension→mime inference entirely instead of relying on it landing on
+        // the right answer.
+        $filename = $capturedAt->format('His').'_'.uniqid().'.'.$image['extension'];
+        $path = $file->storeAs($dir, $filename, [
+            'disk' => 'screenshots',
+            'ContentType' => $image['mime'],
+        ]);
 
         $screenshot = TrackingScreenshot::create([
             'tracking_session_id' => $session->id,

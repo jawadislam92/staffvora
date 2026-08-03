@@ -9,6 +9,7 @@ use App\Http\Middleware\PermissionMiddleware;
 use App\Http\Middleware\PreventRequestsDuringMaintenance;
 use App\Http\Middleware\RedirectIfAuthenticated;
 use App\Http\Middleware\TrimStrings;
+use App\Http\Middleware\TrustHosts;
 use App\Http\Middleware\TrustProxies;
 use App\Http\Middleware\ValidateSignature;
 use App\Http\Middleware\VerifyCsrfToken;
@@ -40,7 +41,12 @@ class Kernel extends HttpKernel
      * @var array<int, class-string|string>
      */
     protected $middleware = [
-        // \App\Http\Middleware\TrustHosts::class,
+        // MUST stay enabled, and MUST stay first. Without it Laravel builds
+        // every absolute URL from the caller-supplied Host header, so an
+        // anonymous POST to /forgot-password carrying `Host: evil.test` mails
+        // a real customer a genuine Staffvora reset link that points at the
+        // attacker. Harmless while mail was a no-op; not harmless now.
+        TrustHosts::class,
         TrustProxies::class,
         HandleCors::class,
         PreventRequestsDuringMaintenance::class,

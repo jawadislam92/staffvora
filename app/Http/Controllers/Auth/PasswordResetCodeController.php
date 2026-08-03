@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\SlackBotService;
+use App\Tenancy\CurrentOrganization;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -39,33 +40,52 @@ class PasswordResetCodeController extends Controller
         }
         RateLimiter::hit($throttleKey, 600);
 
-        $user = User::where('email', $email)->first();
+        // This endpoint is anonymous, so no tenant is bound. Resolve the
+        // account explicitly unscoped rather than relying on the global scope
+        // happening to be a no-op here.
+        $user = app(CurrentOrganization::class)->runUnscoped(
+            fn () => User::where('email', $email)->first()
+        );
 
         // Never reveal whether an account exists.
         $neutralMessage = 'If that account exists, a reset code is on its way via Slack.';
 
-        if (! $user || ! $slack->configured()) {
+        if (! $user || ! $user->organization_id) {
             return back()->with('status', $neutralMessage);
         }
 
-        $code = (string) random_int(100000, 999999);
+        // BIND THE OWNING TENANT FOR THE WHOLE DELIVERY.
+        //
+        // Without this, MonitoringSetting::current() resolved the
+        // organization_id = NULL row (whose bot token is null) and
+        // SlackBotService fell back to the PLATFORM token — so a customer's
+        // password reset code was DMed/posted inside the OPERATOR's own Slack
+        // workspace, readable by everyone in it. configured() must be inside
+        // the binding too, since it consults the same token resolver.
+        app(CurrentOrganization::class)->runFor($user->organization_id, function () use ($user, $slack) {
+            if (! $slack->configured()) {
+                return;
+            }
 
-        DB::table('password_reset_tokens')->updateOrInsert(
-            ['email' => $user->email],
-            ['token' => Hash::make($code), 'created_at' => now()]
-        );
+            $code = (string) random_int(100000, 999999);
 
-        $delivered = $slack->dmByEmail(
-            $user->email,
-            "Your {$this->appName()} password reset code is *{$code}*. It expires in ".self::CODE_TTL_MINUTES.' minutes. If you didn\'t request this, ignore it.'
-        );
-
-        if (! $delivered && ($channel = config('services.slack_bot.resets_channel'))) {
-            $slack->postToChannel(
-                $channel,
-                "Password reset code for *{$user->name}* ({$user->email}): *{$code}* — expires in ".self::CODE_TTL_MINUTES.' minutes.'
+            DB::table('password_reset_tokens')->updateOrInsert(
+                ['email' => $user->email],
+                ['token' => Hash::make($code), 'created_at' => now()]
             );
-        }
+
+            $delivered = $slack->dmByEmail(
+                $user->email,
+                "Your {$this->appName()} password reset code is *{$code}*. It expires in ".self::CODE_TTL_MINUTES.' minutes. If you didn\'t request this, ignore it.'
+            );
+
+            if (! $delivered && ($channel = config('services.slack_bot.resets_channel'))) {
+                $slack->postToChannel(
+                    $channel,
+                    "Password reset code for *{$user->name}* ({$user->email}): *{$code}* — expires in ".self::CODE_TTL_MINUTES.' minutes.'
+                );
+            }
+        });
 
         return back()->with('status', $neutralMessage);
     }
@@ -94,7 +114,10 @@ class PasswordResetCodeController extends Controller
             && Carbon::parse($record->created_at)->gt(now()->subMinutes(self::CODE_TTL_MINUTES))
             && Hash::check($request->input('code'), $record->token);
 
-        $user = User::where('email', $email)->first();
+        // Anonymous endpoint: no tenant bound, so resolve explicitly unscoped.
+        $user = app(CurrentOrganization::class)->runUnscoped(
+            fn () => User::where('email', $email)->first()
+        );
 
         if (! $valid || ! $user) {
             throw ValidationException::withMessages([

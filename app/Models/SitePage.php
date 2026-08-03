@@ -25,6 +25,24 @@ use Illuminate\Support\Facades\Cache;
  */
 class SitePage extends Model
 {
+    /**
+     * Longest slug we will ever build a cache key from.
+     *
+     * A cache key is a file on the production (file) cache driver, and the
+     * public `/{slug}` catch-all lets an anonymous visitor choose the slug. The
+     * builder itself caps a slug at 120 characters (SiteBuilderController), so
+     * anything longer cannot match a row and must never reach the cache.
+     */
+    private const MAX_SLUG_LENGTH = 120;
+
+    /**
+     * The only shape a real page slug can have: lowercase alphanumerics and
+     * hyphens, with at most one nested level (`solutions/agencies`). This is the
+     * public route's own pattern, restated here because `published()` is also
+     * reachable from code that never went through the router.
+     */
+    private const SLUG_PATTERN = '#^[a-z0-9][a-z0-9-]*(?:/[a-z0-9][a-z0-9-]*)?$#';
+
     protected $guarded = [];
 
     protected $casts = [
@@ -57,17 +75,78 @@ class SitePage extends Model
         static::forgetCache($this->slug);
     }
 
-    /** The live page (published blocks + meta) for a slug, cached. Null if unpublished/missing. */
+    /**
+     * The live page (published blocks + meta) for a slug, cached. Null if
+     * unpublished/missing.
+     *
+     * ⚠️ ONLY A HIT IS EVER WRITTEN TO THE CACHE. This used to be a plain
+     * Cache::remember(), and Laravel's remember() stores the null a miss
+     * returns — so every made-up URL an anonymous visitor asked for minted a
+     * permanent entry keyed by their own string. On the production file driver
+     * that is one file plus one inode per bogus request, and the file store
+     * only reclaims an expired entry when that exact key is read again, which
+     * for a random slug never happens. A few thousand curl calls therefore fill
+     * the disk — and this VPS co-hosts other live sites. Resolving first and
+     * caching only a real page bounds the key space to the pages that actually
+     * exist; a 404 now costs one indexed lookup instead of a permanent write.
+     */
     public static function published(string $slug): ?self
     {
-        return Cache::remember('site_page.'.$slug, now()->addHours(6), function () use ($slug) {
-            return static::where('slug', $slug)->where('status', 'published')->first();
-        });
+        $slug = static::normalizeSlug($slug);
+
+        if ($slug === null) {
+            return null;
+        }
+
+        $key = static::cacheKey($slug);
+        $cached = Cache::get($key);
+
+        if ($cached instanceof static) {
+            return $cached;
+        }
+
+        $page = static::where('slug', $slug)->where('status', 'published')->first();
+
+        if ($page !== null) {
+            Cache::put($key, $page, now()->addHours(6));
+        }
+
+        return $page;
     }
 
     public static function forgetCache(string $slug): void
     {
-        Cache::forget('site_page.'.$slug);
+        $slug = static::normalizeSlug($slug);
+
+        if ($slug !== null) {
+            Cache::forget(static::cacheKey($slug));
+        }
+    }
+
+    /**
+     * Fold a requested slug onto the single canonical form used for both the
+     * lookup and the cache key, or reject it outright.
+     *
+     * Case, surrounding whitespace and leading/trailing slashes are normalised
+     * so `/Pricing`, `/pricing ` and `/pricing/` cannot become three cache
+     * entries for one page. Anything that is not a plausible slug — non-ASCII,
+     * control characters, over-long strings — is rejected here and therefore
+     * never touches the cache or the database at all.
+     */
+    private static function normalizeSlug(string $slug): ?string
+    {
+        $slug = strtolower(trim($slug, " \t\n\r\0\x0B/"));
+
+        if ($slug === '' || strlen($slug) > self::MAX_SLUG_LENGTH) {
+            return null;
+        }
+
+        return preg_match(self::SLUG_PATTERN, $slug) === 1 ? $slug : null;
+    }
+
+    private static function cacheKey(string $normalizedSlug): string
+    {
+        return 'site_page.'.$normalizedSlug;
     }
 
     /**

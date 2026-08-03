@@ -7,9 +7,17 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * Marketing contact form. Emails the message to the brand support address
- * (MAIL is log-driver until SMTP is configured) and returns to the page with a
- * success flag the ContactBlock reads. Public + throttled.
+ * Marketing contact form. Emails the message to the brand support address ONLY
+ * and returns to the page with a success flag the ContactBlock reads.
+ * Public + throttled.
+ *
+ * SECURITY INVARIANT — the only recipient of anything this action sends is the
+ * operator's own support address, which comes from config, never from the
+ * request. It previously also auto-acknowledged the submitter, which turned a
+ * public form into a spam/phishing amplifier: an anonymous caller chose the
+ * recipient AND wrote the body, and the mail left staffvora.com with our
+ * reputation and SPF/DKIM behind it, with no proof the address was theirs.
+ * Do not reintroduce a mail whose recipient is derived from user input.
  */
 class ContactController extends Controller
 {
@@ -18,7 +26,9 @@ class ContactController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'company' => ['nullable', 'string', 'max:160'],
-            'email' => ['required', 'email', 'max:190'],
+            // not_regex guards the Reply-To header below against CRLF
+            // injection, matching the auth controllers.
+            'email' => ['required', 'not_regex:/[\r\n]/', 'email', 'max:190'],
             'team_size' => ['nullable', 'string', 'max:40'],
             'message' => ['required', 'string', 'max:5000'],
         ]);
@@ -40,16 +50,10 @@ class ContactController extends Controller
             // Non-fatal: still confirm to the visitor; the message is logged.
         }
 
-        // Auto-acknowledge the lead (best-effort; log driver until SMTP is set up).
-        try {
-            $brandName = config('brand.name', 'Staffvora');
-            Mail::raw(
-                "Hi {$data['name']},\n\nThanks for reaching out to {$brandName} — we've received your message and will get back to you within one business day.\n\nFor your reference, here's what you sent:\n\"{$data['message']}\"\n\n— The {$brandName} team",
-                fn ($m) => $m->to($data['email'], $data['name'])->subject("We got your message — {$brandName}")
-            );
-        } catch (\Throwable $e) {
-            // ignore
-        }
+        // NO auto-acknowledgement — see the class docblock. The on-page
+        // confirmation below is the visitor's receipt. If an acknowledgement
+        // email is ever wanted back, it needs a verified-address step first
+        // (double opt-in), not a mail to whatever was typed into the box.
 
         return back()->with('success', 'Thanks — we will get back to you shortly.');
     }

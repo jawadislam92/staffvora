@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Services\RegionPricing;
 use App\Services\TenantProvisioner;
 use Illuminate\Auth\Events\Registered;
@@ -32,7 +33,12 @@ class RegisteredUserController extends Controller
         $validated = $request->validate([
             'company' => ['required', 'string', 'max:255'],
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'not_regex:/[\r\n]/'],
+            // reservedEmailRule: the reserved demo namespace is excluded from
+            // billable seats, and User's model guard THROWS on any attempt to
+            // create one. Without this rule a public signup on a reserved
+            // address escaped the provisioner mid-flight with a 500 instead of
+            // a form error. Same rule the invite/onboarding paths already use.
+            'email' => ['required', 'string', 'email', 'max:255', 'not_regex:/[\r\n]/', User::reservedEmailRule()],
             'password' => ['required', 'confirmed', Password::min(12)],
             'workspace_type' => ['nullable', Rule::in(['general', 'agency', 'bpo', 'freelancer'])],
             // The customer's own country choice (ISO-3166-1 alpha-2). Optional,

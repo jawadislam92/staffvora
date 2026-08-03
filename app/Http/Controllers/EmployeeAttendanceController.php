@@ -11,6 +11,7 @@ use App\Models\TrackingAuditLog;
 use App\Models\User;
 use App\Services\AttendanceSlackReportService;
 use App\Support\BusinessTime;
+use App\Support\CsvExport;
 use App\Support\TimeClockRules;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
@@ -1156,49 +1157,65 @@ class EmployeeAttendanceController extends Controller
     {
         $date = Carbon::parse($request->input('date', Carbon::today(\App\Support\BusinessTime::tz())->toDateString()), \App\Support\BusinessTime::tz())->toDateString();
 
-        $csv = "Employee,Designation,Status,Work Hours,Break Hours,First Clock In,Last Action,Total Actions\n";
-
         $entriesByUser = $this->entriesForDateByUser($date);
         $employees = $this->employeesForIds($entriesByUser->keys()->all());
 
-        foreach ($employees as $employee) {
-            $entries = $entriesByUser->get($employee->id, collect());
+        // Built with fputcsv + CsvExport::row, never string concatenation.
+        // Display names and clock notes are both employee-supplied and land in
+        // this MANAGER-facing file: the old '"'.$v.'"' quoting let a name like
+        // Bob","=1+1","x close its cell and add columns, and a leading
+        // = / + / - / @ made Excel execute the cell (=cmd|' /C calc'!A1 is a
+        // live DDE shell launch on the manager's own PC). Every column, the
+        // per-employee "Detailed Activity" sub-block, the row order and the
+        // filename are byte-for-byte the same shape as before.
+        return CsvExport::stream(
+            'employee-attendance-'.$date.'.csv',
+            function ($handle) use ($employees, $entriesByUser) {
+                // Fixed header, written verbatim: fputcsv would quote every
+                // cell containing a space ("Work Hours"), and the header text is
+                // what the owner's downstream payroll sheet matches on.
+                CsvExport::literal($handle, "Employee,Designation,Status,Work Hours,Break Hours,First Clock In,Last Action,Total Actions\n");
 
-            if ($entries->isEmpty()) {
-                continue;
+                foreach ($employees as $employee) {
+                    $entries = $entriesByUser->get($employee->id, collect());
+
+                    if ($entries->isEmpty()) {
+                        continue;
+                    }
+
+                    $stats = $this->calculateTimeStats($entries);
+                    $firstClockIn = $entries->firstWhere('action_type', 'clock_in');
+                    $lastEntry = $entries->last();
+
+                    CsvExport::row($handle, [
+                        $employee->name,
+                        $employee->designation ?? 'Employee',
+                        $stats['status'],
+                        number_format($stats['workHours'], 2),
+                        number_format($stats['breakHours'], 2),
+                        $firstClockIn ? $firstClockIn->local_time->format('g:i A') : '-',
+                        $lastEntry ? $lastEntry->local_time->format('g:i A') : '-',
+                        $entries->count(),
+                    ]);
+
+                    // Fixed section separators — literal app text, never user
+                    // data, so they are written verbatim to keep the file's
+                    // existing shape (fputcsv would quote the space in the
+                    // heading).
+                    CsvExport::literal($handle, "\nDetailed Activity:\nTime,Action,Notes\n");
+
+                    foreach ($entries as $entry) {
+                        CsvExport::row($handle, [
+                            $entry->local_time->format('g:i A'),
+                            str_replace('_', ' ', ucwords($entry->action_type)),
+                            $entry->notes ?? '',
+                        ]);
+                    }
+
+                    CsvExport::literal($handle, "\n");
+                }
             }
-
-            $stats = $this->calculateTimeStats($entries);
-            $firstClockIn = $entries->firstWhere('action_type', 'clock_in');
-            $lastEntry = $entries->last();
-
-            $csv .= implode(',', [
-                '"'.$employee->name.'"',
-                '"'.($employee->designation ?? 'Employee').'"',
-                '"'.$stats['status'].'"',
-                number_format($stats['workHours'], 2),
-                number_format($stats['breakHours'], 2),
-                '"'.($firstClockIn ? $firstClockIn->local_time->format('g:i A') : '-').'"',
-                '"'.($lastEntry ? $lastEntry->local_time->format('g:i A') : '-').'"',
-                $entries->count(),
-            ])."\n";
-
-            // Add detailed entries
-            $csv .= "\nDetailed Activity:\n";
-            $csv .= "Time,Action,Notes\n";
-            foreach ($entries as $entry) {
-                $csv .= implode(',', [
-                    '"'.$entry->local_time->format('g:i A').'"',
-                    '"'.str_replace('_', ' ', ucwords($entry->action_type)).'"',
-                    '"'.($entry->notes ?? '').'"',
-                ])."\n";
-            }
-            $csv .= "\n";
-        }
-
-        return response($csv)
-            ->header('Content-Type', 'text/csv')
-            ->header('Content-Disposition', 'attachment; filename="employee-attendance-'.$date.'.csv"');
+        );
     }
 
     /**

@@ -233,8 +233,11 @@ Route::domain(config('platform.host'))->group(function () {
 Route::get('/', [SitePageController::class, 'home'])->name('home');
 
 // Marketing contact form handler (the /contact page itself is a CMS block-page).
+// 5 per 10 minutes, not 6 per minute: a marketing contact form has no honest
+// need for 360 submissions an hour, and this is an anonymous endpoint that
+// writes a row and sends mail.
 Route::post('/contact', [\App\Http\Controllers\Site\ContactController::class, 'submit'])
-    ->middleware('throttle:6,1')->name('contact.submit');
+    ->middleware('throttle:5,10')->name('contact.submit');
 
 // Builder-uploaded images + the marketing-site logo (public, cached).
 Route::get('/site/media/{media}', [SitePageController::class, 'media'])->name('site.media');
@@ -319,8 +322,14 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/feedback/{feedback}/seen', [\App\Http\Controllers\FeedbackController::class, 'seen'])->middleware('throttle:feedback')->name('feedback.seen');
 
     Route::get('/desktop-downloads', [DesktopDownloadController::class, 'index'])->name('desktop-downloads.index');
-    Route::get('/desktop-downloads/windows', [DesktopDownloadController::class, 'windows'])->name('desktop-downloads.windows');
-    Route::get('/desktop-downloads/mac', [DesktopDownloadController::class, 'mac'])->name('desktop-downloads.mac');
+    // Throttled: these stream a ~100 MB installer, and PHP-FPM holds one worker
+    // for the whole transfer. A handful of concurrent downloads exhausted the
+    // pool and took the site down — along with the other sites on this box.
+    // 10/min is far above any honest use (you install the app once).
+    Route::get('/desktop-downloads/windows', [DesktopDownloadController::class, 'windows'])
+        ->middleware('throttle:10,1')->name('desktop-downloads.windows');
+    Route::get('/desktop-downloads/mac', [DesktopDownloadController::class, 'mac'])
+        ->middleware('throttle:10,1')->name('desktop-downloads.mac');
 
     Route::get('/users', [UserController::class, 'index'])->middleware('permission:users.view')->name('users.index');
     Route::get('/users/create', [UserController::class, 'create'])->middleware('permission:users.manage')->name('users.create');

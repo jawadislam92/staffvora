@@ -121,6 +121,25 @@ final class HtmlSanitizer
     /** Attributes carrying a URL, which get scheme-checked rather than passed through. */
     private const URL_ATTRIBUTES = ['href', 'src'];
 
+    /**
+     * Block-data keys whose value ends up in an `href`/`src` on the public site
+     * (Hero/CtaBand `primary_cta.url`, ImageBlock/LogoBar `image_url`,
+     * TeamGrid/Testimonials `avatar_url`, …).
+     *
+     * React does NOT block `javascript:` in an href — the production react-dom
+     * bundle carries no URL sanitiser at all — so an operator-planted
+     * `javascript:` CTA runs script on staffvora.com for anyone who clicks it,
+     * on the same origin as the customer app's session cookie. Scheme-checking
+     * these keys here means every write path (builder, seeders, future imports)
+     * and every read path is covered by one rule.
+     *
+     * @var list<string>
+     */
+    private const URL_KEYS = [
+        'url', 'href', 'src', 'link_url', 'image_url', 'avatar_url',
+        'cover_url', 'logo_url', 'video_url', 'demo_url',
+    ];
+
     /** URL schemes that may appear in href/src. */
     private const SAFE_SCHEMES = ['http', 'https', 'mailto', 'tel'];
 
@@ -189,11 +208,29 @@ final class HtmlSanitizer
     }
 
     /**
-     * Recursively sanitise `html` values anywhere in a block tree.
+     * Recursively sanitise the dangerous values anywhere in a block tree:
+     * `html` (goes into dangerouslySetInnerHTML) and the URL keys above (go
+     * into an href/src).
      *
      * Only keys literally named `html` are treated as markup — every other
      * string is rendered as a React child (escaped by React) and running it
      * through the DOM would corrupt legitimate text such as `Q&A` or `5 < 6`.
+     *
+     * ORDER IS THE SECURITY PROPERTY. The dangerous keys are matched BEFORE the
+     * is_array() recursion and are NOT gated on is_string().
+     *
+     * The previous order (recurse into arrays first, then clean only strings)
+     * was defeated by TYPE CONFUSION: posting `data[html][0]=<img src=x
+     * onerror=…>` made the value an ARRAY, so the recursion walked into it and
+     * the payload came to rest under integer key `0` — which is not `html`, so
+     * neither the write pass (SitePage::setAttribute) nor the read pass
+     * (SitePage::publicPayload) ever cleaned it. React then assigns the array
+     * straight to `.innerHTML`, and WebIDL stringifies it back into the exact
+     * markup that went in — stored XSS on every public page, permanently.
+     *
+     * Do not "simplify" this by moving the is_array() branch back to the top,
+     * and do not re-add an is_string() guard: coercing whatever arrives is what
+     * makes the attacker's choice of JSON type irrelevant.
      *
      * @param  array<mixed>  $blocks
      * @return array<mixed>
@@ -201,18 +238,76 @@ final class HtmlSanitizer
     public static function sanitizeBlocks(array $blocks): array
     {
         foreach ($blocks as $key => $value) {
-            if (is_array($value)) {
-                $blocks[$key] = self::sanitizeBlocks($value);
+            if ($key === 'html') {
+                $blocks[$key] = self::clean(self::coerceToString($value));
 
                 continue;
             }
 
-            if ($key === 'html' && is_string($value)) {
-                $blocks[$key] = self::clean($value);
+            if (in_array($key, self::URL_KEYS, true)) {
+                $blocks[$key] = self::safeUrl(self::coerceToString($value));
+
+                continue;
+            }
+
+            if (is_array($value)) {
+                $blocks[$key] = self::sanitizeBlocks($value);
             }
         }
 
         return $blocks;
+    }
+
+    /**
+     * Normalise a link authored OUTSIDE block markup — header nav, footer
+     * columns, social links — to a safe URL, or null if it is not one.
+     *
+     * Same guarantee as the href check inside clean(), exposed so callers that
+     * do not go through the HTML parser (SiteBuilderController::updateTheme)
+     * enforce the identical rule instead of inventing a second, weaker one.
+     */
+    public static function safeLink(mixed $value): ?string
+    {
+        return self::safeUrl(self::coerceToString($value));
+    }
+
+    /**
+     * Validation-rule companion to safeLink(): true when the value may be
+     * emitted as an href. Blank counts as safe — an empty link field is how the
+     * operator clears a nav entry, and nothing is rendered for it.
+     */
+    public static function isSafeLink(mixed $value): bool
+    {
+        if (is_array($value) || is_object($value)) {
+            // A structure where a URL string belongs is the type-confusion
+            // shape, not a link. Reject rather than stringify.
+            return false;
+        }
+
+        $url = self::coerceToString($value);
+
+        return trim($url) === '' || self::safeUrl($url) !== null;
+    }
+
+    /**
+     * Reduce any JSON value to the string the browser would end up with, with
+     * arrays/objects failing CLOSED.
+     *
+     * `String(["<img src=x onerror=1>"])` is the payload again, so flattening an
+     * array here would re-open the very hole this exists to close: a value that
+     * is not scalar was never legitimate content for a markup or URL key.
+     */
+    private static function coerceToString(mixed $value): string
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+
+        return '';
     }
 
     /** Depth-first scrub of an element's children, in place. */
@@ -344,6 +439,14 @@ final class HtmlSanitizer
         $probe = preg_replace('/[\x00-\x20\x7f]/', '', $probe) ?? $probe;
 
         if ($probe === '') {
+            return null;
+        }
+
+        // `//evil.test/x` and `/\evil.test/x` are PROTOCOL-RELATIVE, not
+        // site-relative: the browser resolves them against another host while
+        // they read like an internal path in the builder. Site-relative means
+        // exactly one leading slash.
+        if (str_starts_with($probe, '//') || str_starts_with($probe, '/\\')) {
             return null;
         }
 

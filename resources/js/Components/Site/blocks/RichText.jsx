@@ -24,7 +24,14 @@
 // dark grey on the dark canvas. Ordered lists are styled too, because the
 // download page numbers its install steps.
 export default function RichText({ data }) {
-    if (!data.html) return null;
+    // typeof check, not just truthiness. dangerouslySetInnerHTML assigns
+    // whatever it is given to .innerHTML, and WebIDL stringifies it — so an
+    // ARRAY of markup renders as that markup. That was the exact shape used to
+    // walk past the server-side sanitiser (an array-valued `html` key). The
+    // server now coerces it, and this refuses to render anything that is not
+    // already a string, so a future gap on the write side cannot reach a
+    // browser through this component.
+    if (typeof data.html !== 'string' || !data.html) return null;
     return (
         <section className="mx-auto max-w-3xl px-6 py-12">
             <div

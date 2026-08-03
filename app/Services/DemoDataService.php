@@ -57,16 +57,25 @@ use Illuminate\Support\Str;
  * ─────────────────────────────────────────────────────────────────────────────
  * SEATS
  * ─────────────────────────────────────────────────────────────────────────────
- * Demo teammates are real user rows, but they DO NOT consume plan seats: every
- * seat check goes through {@see User::seatUsage()}, which excludes the demo
- * namespace. Loading the sample can therefore never block a real hire, and on a
- * 2-seat Free workspace the customer still gets the full three-person cast.
+ * Demo teammates are real user rows, but they DO NOT consume plan seats AND
+ * ARE NOT BILLED: both counters — the plan limit ({@see User::seatUsage()}) and
+ * the invoice ({@see BillingPricing::billableSeats()}) — are built
+ * from the one scope {@see User::scopeSeatConsuming()}, which excludes the demo
+ * namespace. Loading the sample can therefore never block a real hire, never
+ * raise an invoice, and on a 2-seat Free workspace the customer still gets the
+ * full three-person cast.
  *
  * That exclusion is a plan-limit bypass, so the marker it keys on is closed at
- * the MODEL layer — `User::booted()` refuses to create or rename any user into
- * `@demo.staffvora.invalid` unless the write is wrapped in
- * {@see User::asDemoIdentityWriter()}, which only this file calls and which no
- * request can reach. A customer cannot mint free seats by imitating it.
+ * the MODEL layer, in BOTH directions:
+ *   • nothing may be created or renamed INTO `@demo.staffvora.invalid` unless
+ *     the write is wrapped in {@see User::asDemoIdentityWriter()}, which only
+ *     this file calls and which no request can reach;
+ *   • and an existing demo row's identity (e-mail, password, role, permissions,
+ *     tenancy) is FROZEN, so it cannot be renamed back OUT of the namespace
+ *     either. Without that second half, editing a demo teammate converted a
+ *     free row into a real, counted, login-capable account and — because
+ *     {@see isLoaded()} keys on the same address — left the workspace free to
+ *     mint another three. Repeatable: a 2-seat plan reached eight real users.
  */
 class DemoDataService
 {
