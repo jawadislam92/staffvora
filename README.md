@@ -175,6 +175,9 @@ See `documents/SECURITY.md`.
 
 ## License
 
-Proprietary — all rights reserved. The repository still contains an MIT
-`LICENSE` file inherited from the Laravel skeleton; it does not reflect the
-intended licensing of this product and needs the owner's decision.
+Proprietary — all rights reserved. See `LICENSE`.
+
+The repository previously carried an MIT grant naming Zulfiqar Ali, who authored
+the earlier work this codebase was forked from and transferred it to the owner
+for continued development. That grant was removed: an MIT licence on a
+commercial SaaS lets anyone who obtains the source resell it.

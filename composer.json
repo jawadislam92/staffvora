@@ -1,9 +1,9 @@
 {
-    "name": "tracksuite/tracksuite",
+    "name": "staffvora/staffvora",
     "type": "project",
     "description": "Privacy-conscious time tracking and workforce insights for teams.",
     "keywords": ["time-tracking", "workforce", "laravel", "electron"],
-    "license": "MIT",
+    "license": "proprietary",
     "require": {
         "php": "^8.2",
         "guzzlehttp/guzzle": "^7.2",
