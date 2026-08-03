@@ -47,6 +47,7 @@ class PageController extends Controller
             'brand' => $this->brandPayload(),
             'nav' => SiteNavigation::resolve(),
             'plans' => $this->plansPayload(),
+            'addons' => $this->addonsPayload(),
             'jsonLd' => $this->jsonLd($payload),
             'isAuthed' => (bool) $request->user(),
         ]);
@@ -134,6 +135,38 @@ class PageController extends Controller
                 'currency' => $p->currency ?: 'USD',
                 'max_users' => $p->max_users,
                 'contact' => $p->key === 'enterprise',
+            ])->values()->all();
+    }
+
+    /**
+     * Public add-ons for the PricingTable block — wired to the live catalogue
+     * for exactly the reason plans are. The Agency toolkit price used to sit in
+     * the page's authored content, so changing it in the operator panel left the
+     * public page advertising the old figure: a price a customer could
+     * reasonably hold us to.
+     *
+     * ONLY `visible()` rows leave this method — `visibility = public` AND not
+     * archived. Hidden, custom-negotiated and legacy add-ons are commercial
+     * terms belonging to individual companies and must never reach an anonymous
+     * page. Entitlements are deliberately NOT exposed: this is a price list, not
+     * an access-control document.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function addonsPayload(): array
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('addons')) {
+            return [];
+        }
+
+        return \App\Models\Addon::query()->visible()->ordered()->get()
+            ->map(fn (\App\Models\Addon $a) => [
+                'key' => $a->key,
+                'name' => $a->name,
+                'description' => $a->description,
+                'price_cents' => (int) $a->price_cents,
+                'price_cents_yearly' => $a->price_cents_yearly === null ? null : (int) $a->price_cents_yearly,
+                'currency' => $a->currency ?: 'USD',
             ])->values()->all();
     }
 

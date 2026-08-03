@@ -205,7 +205,10 @@ class UserController extends Controller
     {
         $rules = [
             'name' => 'required|string|max:255',
-            'email' => ['required', 'not_regex:/[\r\n]/', 'email', 'unique:users'],
+            // reservedEmailRule keeps the sample-data namespace out of a
+            // customer-supplied address. User::booted() refuses it regardless;
+            // this is here so the form says so instead of throwing.
+            'email' => ['required', 'not_regex:/[\r\n]/', 'email', 'unique:users', User::reservedEmailRule()],
             'password' => ['required', 'string', Password::min(12)],
             'role' => ['nullable', Rule::in(array_keys(User::ROLES))],
             'permissions' => 'nullable|array',
@@ -232,9 +235,14 @@ class UserController extends Controller
         $validated = $request->validate($rules);
 
         // Enforce the plan's seat limit (null = unlimited). Counts only this
-        // org's users via the global scope.
+        // org's users via the global scope, and only the REAL ones:
+        // User::seatUsage() excludes sample-data teammates so a loaded demo can
+        // never stand between a customer and a real hire. That exclusion is not
+        // an exploit — User::booted() refuses the reserved demo e-mail namespace
+        // on every request-reachable write path, so the address validated above
+        // can never be made to match it.
         $seatLimit = $request->user()->organization?->seatLimit();
-        if ($seatLimit !== null && User::count() >= $seatLimit) {
+        if ($seatLimit !== null && User::seatUsage() >= $seatLimit) {
             throw ValidationException::withMessages([
                 'email' => "Your plan includes up to {$seatLimit} users. Upgrade your plan to add more.",
             ]);
@@ -329,6 +337,9 @@ class UserController extends Controller
                 'not_regex:/[\r\n]/',
                 'email',
                 Rule::unique('users')->ignore($user->id),
+                // Renaming a real person into the sample-data namespace would
+                // take them off the seat count. Refused here and in the model.
+                User::reservedEmailRule(),
             ],
             'password' => ['nullable', 'string', Password::min(12)],
             'role' => ['nullable', Rule::in(array_keys(User::ROLES))],

@@ -419,7 +419,8 @@ BUILD PATH (incremental):
   persist), published to GitHub release desktop-v0.3.2-mac. Claude pulled the
   DMG+zip from the public release (sha256 19cfac2a… verified) and scp'd them to
   the prod feed as "SA Track-0.3.2-arm64.dmg" + ".zip" (space form to match
-  DesktopDownloadController MAC_INSTALLERS; MAC_VERSION bumped to 0.3.2). Serving
+  DesktopDownloadController MAC_INSTALLERS; MAC_VERSION bumped to 0.3.2 — those
+  constants no longer exist, see the 2026-08 discovery rewrite). Serving
   over HTTP (200, 123MB). Shows on /desktop-downloads.
 - Mac smoke test: login + tracking VERIFIED server-side (session 312, platform
   darwin, app_version 0.3.2). Screenshots NOT yet confirmed (0 shots) — needs

@@ -231,8 +231,10 @@ Sitewide notes:
 - TTFB: a controlled server-side A/B showed `config:cache` makes **no measurable difference** on
   this host (~0.08s either way — OPcache already makes config parsing cheap). The shell's baseline
   TTFB seen by users (~0.7-1.1s) is dominated by network RTT/TLS to the visitor's location, not
-  server time. `config:cache` is still safe (route:cache remains forbidden) and a
-  `config-cache-self-heal` scheduler task exists, but it is not a perf lever here.
+  server time. `config:cache` is still safe (route:cache was forbidden at the time; that
+  ban was lifted in 2026-08 — the closure routes it protected against are gone, see
+  `documents/PRODUCTION_DEPLOYMENT.md` §6.5) and a `config-cache-self-heal` scheduler task
+  exists, but it is not a perf lever here.
 - New DB indexes: `time_entries(action_date)`, `time_entries(user_id, action_date)`,
   `work_hours(user_id, date)`.
 - Monitoring/screenshot pages already used locally-signed S3 presigned URLs and `loading="lazy"`;

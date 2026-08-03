@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\Addon;
 use App\Models\Plan;
 use App\Models\SitePage;
 use App\Support\DefaultSiteContent;
 use Database\Seeders\SiteContentSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
 /**
@@ -196,6 +198,90 @@ class PublicSiteContentTest extends TestCase
             $plans['pro']->max_users,
             $plans['enterprise']->max_users,
         ]);
+    }
+
+    /**
+     * THE ADD-ON PRICE MUST BE LIVE, NOT AUTHORED.
+     *
+     * The Agency toolkit price used to exist only inside the pricing page's
+     * content, because BlockRenderer forwarded `plans` and nothing else. An
+     * operator changing `agency_toolkit` in the panel therefore left the public
+     * page advertising the old figure — a price a customer could reasonably hold
+     * us to. The catalogue is now forwarded the same way plans are.
+     */
+    public function test_the_pricing_page_is_served_the_live_addon_catalogue(): void
+    {
+        $this->get('/pricing')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $p) {
+                $toolkit = collect($p->toArray()['props']['addons'])->firstWhere('key', 'agency_toolkit');
+
+                $this->assertNotNull($toolkit, 'the pricing page must be served the add-on catalogue');
+                $this->assertSame(400, $toolkit['price_cents']);
+                $this->assertSame(4000, $toolkit['price_cents_yearly']);
+            });
+
+        // Move the price the way an operator would, and the page must follow.
+        Addon::where('key', 'agency_toolkit')->update([
+            'price_cents' => 650,
+            'price_cents_yearly' => 6500,
+        ]);
+
+        $this->get('/pricing')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $p) {
+                $toolkit = collect($p->toArray()['props']['addons'])->firstWhere('key', 'agency_toolkit');
+
+                $this->assertSame(650, $toolkit['price_cents'], 'the public page still quotes the old price');
+                $this->assertSame(6500, $toolkit['price_cents_yearly']);
+            });
+    }
+
+    /**
+     * Hidden, custom-negotiated, legacy and archived add-ons are commercial
+     * terms belonging to individual companies. None of them may ever reach an
+     * anonymous visitor, and neither may the entitlements they grant.
+     */
+    public function test_only_public_unarchived_addons_reach_the_public_page(): void
+    {
+        foreach (['hidden', 'custom', 'legacy'] as $i => $visibility) {
+            Addon::create([
+                'key' => 'secret_'.$visibility,
+                'name' => 'Secret '.$visibility,
+                'price_cents' => 9900,
+                'currency' => 'USD',
+                'entitlements' => ['machine_compliance' => true],
+                'visibility' => $visibility,
+                'sort' => 50 + $i,
+            ]);
+        }
+
+        Addon::create([
+            'key' => 'retired_toolkit',
+            'name' => 'Retired toolkit',
+            'price_cents' => 100,
+            'currency' => 'USD',
+            'visibility' => 'public',
+            'sort' => 60,
+            'archived_at' => now(),
+        ]);
+
+        $this->get('/pricing')
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $p) {
+                $props = $p->toArray()['props'];
+                $keys = array_column($props['addons'], 'key');
+
+                $this->assertContains('agency_toolkit', $keys);
+                foreach (['secret_hidden', 'secret_custom', 'secret_legacy', 'retired_toolkit'] as $forbidden) {
+                    $this->assertNotContains($forbidden, $keys, "'{$forbidden}' must never reach a public page");
+                }
+
+                // A price list, not an access-control document.
+                foreach ($props['addons'] as $addon) {
+                    $this->assertArrayNotHasKey('entitlements', $addon);
+                }
+            });
     }
 
     public function test_the_pricing_page_does_not_promise_card_checkout(): void

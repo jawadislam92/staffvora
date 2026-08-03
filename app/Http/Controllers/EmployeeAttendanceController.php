@@ -66,6 +66,14 @@ class EmployeeAttendanceController extends Controller
             'canEditClockTimes' => $this->canEditClockTimes(request()->user()),
             'canSendAttendanceSlack' => request()->user()?->hasPermission('reports.send_slack') ?? false,
             'slackConfigured' => app(AttendanceSlackReportService::class)->configured(),
+            // FIRST-RUN vs FILTERED-OUT. The tabs below load by AJAX and can
+            // only see one day/month at a time, so without this they cannot tell
+            // "this workspace has never clocked in" from "nobody worked last
+            // Sunday" — and both were being reported to the customer as a filter
+            // mistake. Same shape and same cost as the report screen's
+            // `hasAnyEntries`: ONE EXISTS, served by the leading organization_id
+            // of the composite index, never a COUNT over the punch table.
+            'hasAnyAttendance' => TimeEntry::query()->exists(),
         ]);
     }
 

@@ -39,13 +39,49 @@ function money(usd, currency, rate, pkr) {
 }
 
 /**
- * The Agency toolkit add-on card. Authored in the page content rather than read
- * from the addons table, because block props are fixed by BlockRenderer — keep
- * `data.addon` in step with the `agency_toolkit` row when its price changes.
+ * Resolve the add-on's price from the LIVE catalogue, falling back to the
+ * owner-approved figures authored into the block.
+ *
+ * The price used to come from page content alone, so an operator changing
+ * `agency_toolkit` in the panel left this page quoting the old number — a price
+ * a customer could reasonably hold us to. The catalogue now wins whenever it has
+ * something to say (matched on the block's `key`, defaulting to agency_toolkit),
+ * and the authored figures remain the fallback for a deployment whose addons
+ * table is empty, or where the row has been made non-public.
+ *
+ * The local PKR figure is an owner-approved fixed price, not a conversion, so it
+ * is only trusted while the live USD still MATCHES the USD it was set against.
+ * Once the operator moves the dollar price, holding the old rupee price would
+ * advertise two different prices at once — so it is dropped and `money()` falls
+ * back to the brand rate.
  */
-function AddonCard({ addon, annual, cur, rate }) {
-    const usd = annual && addon.price_usd_yearly ? addon.price_usd_yearly / 12 : addon.price_usd;
-    const pkr = annual && addon.price_pkr != null ? (addon.price_pkr * 10) / 12 : addon.price_pkr;
+function resolveAddonPricing(addon, catalogue) {
+    const authoredUsd = addon.price_usd;
+    const authoredYearly = addon.price_usd_yearly;
+    const live = (Array.isArray(catalogue) ? catalogue : [])
+        .find((row) => row.key === (addon.key || 'agency_toolkit'));
+
+    if (!live) {
+        return { usd: authoredUsd, yearly: authoredYearly, pkr: addon.price_pkr, name: addon.name };
+    }
+
+    const usd = live.price_cents / 100;
+    const yearly = live.price_cents_yearly == null ? null : live.price_cents_yearly / 100;
+
+    return {
+        usd,
+        yearly,
+        pkr: usd === authoredUsd ? addon.price_pkr : null,
+        // The catalogue is also the authority on what the thing is CALLED.
+        name: live.name || addon.name,
+    };
+}
+
+/** The Agency toolkit add-on card. */
+function AddonCard({ addon, catalogue, annual, cur, rate }) {
+    const price = resolveAddonPricing(addon, catalogue);
+    const usd = annual && price.yearly ? price.yearly / 12 : price.usd;
+    const pkr = annual && price.pkr != null ? (price.pkr * 10) / 12 : price.pkr;
     const bullets = addon.bullets || [];
 
     return (
@@ -55,7 +91,7 @@ function AddonCard({ addon, annual, cur, rate }) {
                     <span className="inline-flex rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' }}>
                         {addon.eyebrow || 'Add-on'}
                     </span>
-                    <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-[var(--brand)]">{addon.name}</h3>
+                    <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-[var(--brand)]">{price.name}</h3>
                     {addon.text && <p className="mt-3 text-[15px] leading-relaxed text-[var(--muted)]">{addon.text}</p>}
                     {bullets.length > 0 && (
                         <ul className="mt-5 grid gap-2.5 sm:grid-cols-2">
@@ -82,7 +118,7 @@ function AddonCard({ addon, annual, cur, rate }) {
     );
 }
 
-export default function PricingTable({ data, brand, plans = [] }) {
+export default function PricingTable({ data, brand, plans = [], addons = [] }) {
     const [annual, setAnnual] = useState(true);
     const [cur, setCur] = useState('USD');
     const rate = brand?.pkr_rate || 280;
@@ -160,7 +196,7 @@ export default function PricingTable({ data, brand, plans = [] }) {
                     })}
                 </div>
 
-                {data.addon && <AddonCard addon={data.addon} annual={annual} cur={cur} rate={rate} />}
+                {data.addon && <AddonCard addon={data.addon} catalogue={addons} annual={annual} cur={cur} rate={rate} />}
 
                 <p className="mt-8 text-center text-sm text-[var(--subtle)]">
                     {data.note || 'No card required · 14-day Growth trial · Cancel anytime'}

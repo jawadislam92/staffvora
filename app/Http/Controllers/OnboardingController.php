@@ -53,7 +53,8 @@ class OnboardingController extends Controller
             'workTypes' => Client::getWorkTypes($org),
             'progress' => $this->progress($user),
             'seats' => [
-                'used' => User::count(),
+                // Real people only — a loaded demo must not read as seats spent.
+                'used' => User::seatUsage(),
                 'limit' => $org?->seatLimit(),
             ],
             'downloads' => $this->desktopDownloads(),
@@ -87,12 +88,19 @@ class OnboardingController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'not_regex:/[\r\n]/', 'email', 'max:255', 'unique:users,email'],
+            // The sample-data namespace is refused: an invited "teammate" in it
+            // would not count against the plan's seats. User::booted() is the
+            // floor; this makes the form say so rather than throw.
+            'email' => ['required', 'not_regex:/[\r\n]/', 'email', 'max:255', 'unique:users,email', User::reservedEmailRule()],
         ]);
 
-        // Respect the plan's seat limit (null = unlimited).
+        // Respect the plan's seat limit (null = unlimited). Sample-data
+        // teammates are excluded from the count (see User::seatUsage) so a
+        // loaded demo can never block a real invite; the reserved demo e-mail
+        // namespace is refused at the model layer, so the validated address
+        // above cannot imitate one to win a free seat.
         $seatLimit = $this->organization()?->seatLimit();
-        if ($seatLimit !== null && User::count() >= $seatLimit) {
+        if ($seatLimit !== null && User::seatUsage() >= $seatLimit) {
             throw ValidationException::withMessages([
                 'email' => "Your plan includes up to {$seatLimit} users. Upgrade to add more.",
             ]);
@@ -200,47 +208,35 @@ class OnboardingController extends Controller
     private function progress(User $user): array
     {
         return [
-            'has_team' => User::where('id', '!=', $user->id)->exists(),
+            // Sample teammates don't count as having invited anyone — ticking
+            // that step off because a demo is loaded would tell the owner a job
+            // is done that isn't.
+            'has_team' => User::query()
+                ->excludingDemoIdentities()
+                ->where('id', '!=', $user->id)
+                ->exists(),
             'has_client' => Client::exists(),
         ];
     }
 
-    /** Which desktop installers are actually present (mirrors DesktopDownloadController). */
+    /**
+     * Which desktop installers are actually present.
+     *
+     * This used to keep its own hardcoded list of installer filenames, pinned
+     * at 0.3.4, alongside a comment claiming it mirrored DesktopDownloadController
+     * — which it had stopped doing. The effect was that the wizard's Download
+     * buttons vanished for any build whose filename it had never heard of, i.e.
+     * every future release. There is now exactly one place that decides what is
+     * published, and this asks it.
+     */
     private function desktopDownloads(): array
     {
         return [
-            'windows' => $this->installerExists([
-                'Staffvora Desktop Setup 0.3.4.exe',
-                'SA Track Setup 0.3.4.exe',
-            ])
+            'windows' => DesktopDownloadController::windowsRelease()
                 ? route('desktop-downloads.windows') : null,
-            'mac' => $this->installerExists([
-                'Staffvora Desktop-0.3.4-arm64.dmg',
-                'Staffvora Desktop-0.3.4-arm64-mac.zip',
-                'SA Track-0.3.3-arm64.dmg',
-                'SA Track-0.3.2-arm64.dmg',
-                'SA Track-0.3.2-universal.dmg',
-            ]) ? route('desktop-downloads.mac') : null,
+            'mac' => DesktopDownloadController::macRelease()
+                ? route('desktop-downloads.mac') : null,
             'page' => route('desktop-downloads.index'),
         ];
-    }
-
-    private function installerExists(array $filenames): bool
-    {
-        $dirs = array_filter([
-            config('desktop.installers_path'),
-            storage_path('app/desktop-installers'),
-            base_path('desktop/dist-app'),
-        ]);
-
-        foreach ($dirs as $dir) {
-            foreach ($filenames as $name) {
-                if (is_file(rtrim($dir, '/').'/'.$name)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Http\Controllers\DashboardController;
 use App\Models\Client;
 use App\Models\TimeEntry;
 use App\Models\Timesheet;
@@ -56,19 +57,27 @@ use Illuminate\Support\Str;
  * ─────────────────────────────────────────────────────────────────────────────
  * SEATS
  * ─────────────────────────────────────────────────────────────────────────────
- * Demo teammates are real user rows, so they occupy plan seats while loaded
- * (User::count() is what UserController and the invite step both check). This
- * service therefore only ever creates people INSIDE the remaining headroom, and
- * refuses outright when there is none — it must never be possible for demo data
- * to block a real hire. The UI states the trade and offers one-click removal.
+ * Demo teammates are real user rows, but they DO NOT consume plan seats: every
+ * seat check goes through {@see User::seatUsage()}, which excludes the demo
+ * namespace. Loading the sample can therefore never block a real hire, and on a
+ * 2-seat Free workspace the customer still gets the full three-person cast.
+ *
+ * That exclusion is a plan-limit bypass, so the marker it keys on is closed at
+ * the MODEL layer — `User::booted()` refuses to create or rename any user into
+ * `@demo.staffvora.invalid` unless the write is wrapped in
+ * {@see User::asDemoIdentityWriter()}, which only this file calls and which no
+ * request can reach. A customer cannot mint free seats by imitating it.
  */
 class DemoDataService
 {
     /**
      * RFC 2606 reserved TLD: no mail can ever be delivered here and no real
-     * signup can ever claim it, which is what makes this a SAFE marker.
+     * signup can ever claim it, which is what makes this a SAFE marker. The
+     * canonical definition — and the model-layer guard that makes it
+     * UNFORGEABLE — lives on {@see User}; this alias is kept so existing
+     * callers and tests keep reading the same constant.
      */
-    public const EMAIL_DOMAIN = 'demo.staffvora.invalid';
+    public const EMAIL_DOMAIN = User::DEMO_EMAIL_DOMAIN;
 
     /** Prefix on every demo person and the demo project. Visible everywhere. */
     public const NAME_PREFIX = 'Demo · ';
@@ -132,18 +141,15 @@ class DemoDataService
     }
 
     /**
-     * How many demo teammates this plan can spare right now. Null seat limit =
-     * unlimited, which still caps at the size of the sample cast.
+     * How many demo teammates the workspace can take right now — always the
+     * whole sample cast, because demo people do not consume plan seats
+     * ({@see User::seatUsage()} excludes them). Kept as a method, and still
+     * asked before loading, so the "no room" path stays exercised if the seat
+     * model ever changes again.
      */
     public function seatHeadroom(): int
     {
-        $limit = $this->organization()?->seatLimit();
-
-        if ($limit === null) {
-            return count(self::PEOPLE);
-        }
-
-        return max(0, min(count(self::PEOPLE), $limit - User::count()));
+        return count(self::PEOPLE);
     }
 
     // ── Load ────────────────────────────────────────────────────────────────
@@ -160,17 +166,13 @@ class DemoDataService
             return ['ok' => false, 'message' => 'Demo data is already loaded. Remove it first to load a fresh copy.'];
         }
 
+        // Guarded, not decorative: array_slice(..., 0, 0) would silently create
+        // nobody and still report success, so a headroom of zero must be an
+        // explicit refusal even while it is unreachable today.
         $headroom = $this->seatHeadroom();
 
         if ($headroom < 1) {
-            $limit = $this->organization()?->seatLimit();
-
-            return [
-                'ok' => false,
-                'message' => $limit === null
-                    ? 'There is no room to add demo teammates right now.'
-                    : "Demo teammates take up seats while they're loaded, and your plan's {$limit} seats are all in use. Free a seat or upgrade, then try again.",
-            ];
+            return ['ok' => false, 'message' => 'There is no room to add demo teammates right now.'];
         }
 
         $orgId = $this->current->id();
@@ -188,22 +190,38 @@ class DemoDataService
                 'tags' => [self::CLIENT_TAG],
             ]);
 
-            $users = [];
-            foreach ($cast as $i => $person) {
-                $users[] = User::create([
-                    'name' => self::NAME_PREFIX.$person['name'],
-                    'email' => $this->emailFor($orgId, $i + 1),
-                    // Never surfaced anywhere: a demo person cannot sign in, so
-                    // demo mode cannot become an access path into the workspace.
-                    'password' => Hash::make(Str::random(48)),
-                    'role' => 'member',
-                    'permissions' => [],
-                    'designation' => $person['designation'],
-                    'include_in_slack_reports' => false,
-                ]);
-            }
+            // The ONLY place in the codebase allowed to write the reserved demo
+            // e-mail namespace. Every other write path — admin create, invite,
+            // self-registration, profile e-mail change — is refused by
+            // User::booted(), which is what makes excluding these rows from the
+            // seat count safe rather than a free-seat exploit.
+            $users = User::asDemoIdentityWriter(function () use ($cast, $orgId) {
+                $created = [];
+
+                foreach ($cast as $i => $person) {
+                    $created[] = User::create([
+                        'name' => self::NAME_PREFIX.$person['name'],
+                        'email' => $this->emailFor($orgId, $i + 1),
+                        // Never surfaced anywhere: a demo person cannot sign in, so
+                        // demo mode cannot become an access path into the workspace.
+                        'password' => Hash::make(Str::random(48)),
+                        'role' => 'member',
+                        'permissions' => [],
+                        'designation' => $person['designation'],
+                        'include_in_slack_reports' => false,
+                    ]);
+                }
+
+                return $created;
+            });
 
             $entries = $this->seedHistory($users, $client, $orgId);
+
+            // The dashboard's project ranking is cached, so without this the
+            // customer lands on a "you're looking at demo data" banner sitting
+            // directly above a card insisting there are no project hours. Seen
+            // live before this call existed.
+            DashboardController::forgetTopProjects($orgId, array_map(fn ($u) => $u->id, $users));
 
             return [
                 'ok' => true,
@@ -392,6 +410,10 @@ class DemoDataService
             return $counts;
         });
 
+        // Symmetrical to load(): the ranking must not keep advertising demo
+        // projects after the customer has removed them.
+        DashboardController::forgetTopProjects($this->current->id(), $ids);
+
         return [
             'ok' => true,
             'message' => array_sum($removed) === 0
@@ -457,12 +479,5 @@ class DemoDataService
     private function emailFor(int $orgId, int $n): string
     {
         return "demo-{$orgId}-{$n}@".self::EMAIL_DOMAIN;
-    }
-
-    private function organization(): ?\App\Models\Organization
-    {
-        $id = $this->current->id();
-
-        return $id ? \App\Models\Organization::find($id) : null;
     }
 }

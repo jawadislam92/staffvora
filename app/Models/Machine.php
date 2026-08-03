@@ -91,12 +91,25 @@ class Machine extends Model
         return $this->hasMany(MachineFlag::class);
     }
 
-    /** The minimum agent version, overridable per install without a code edit. */
+    /**
+     * The minimum agent version, overridable per install without a code edit.
+     *
+     * The override (DESKTOP_MIN_AGENT_VERSION, see config/desktop.php) exists
+     * for a fleet that has not finished auto-updating after a release. A
+     * malformed value is IGNORED rather than obeyed: version_compare() will
+     * happily compare against garbage and quietly mark either every machine or
+     * no machine as stale, and a typo in .env must not silently switch off a
+     * compliance warning.
+     */
     public static function minAgentVersion(): string
     {
         $configured = config('desktop.min_agent_version');
 
-        return is_string($configured) && $configured !== '' ? $configured : self::MIN_AGENT_VERSION;
+        if (is_string($configured) && preg_match('/^\d+\.\d+\.\d+$/', trim($configured)) === 1) {
+            return trim($configured);
+        }
+
+        return self::MIN_AGENT_VERSION;
     }
 
     /**

@@ -138,6 +138,156 @@ class FirstRunExperienceTest extends TestCase
             ->assertInertia(fn (AssertableInertia $p) => $p->where('hasAnyEntries', true));
     }
 
+    /**
+     * Attendance is loaded a day (or a month) at a time by AJAX, so the page
+     * cannot work out for itself whether an empty tab means "this workspace has
+     * never clocked in" or "nobody worked last Sunday". Without the server
+     * signal it blamed the customer's filters for both.
+     */
+    public function test_the_attendance_page_distinguishes_a_new_workspace_from_a_quiet_day(): void
+    {
+        $owner = $this->makeOwner();
+
+        $this->actingAs($owner)
+            ->get(route('employee-attendance.index'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $p) => $p
+                ->component('EmployeeAttendance')
+                ->where('hasAnyAttendance', false));
+
+        TimeEntry::create([
+            'user_id' => $owner->id,
+            'action_type' => 'clock_in',
+            'action_timestamp' => now()->subDays(30),
+            'action_date' => now()->subDays(30)->toDateString(),
+            'action_time' => '09:00:00',
+        ]);
+
+        // A punch a month ago still means the workspace HAS attendance — every
+        // empty day from here on is a quiet day, not a broken product.
+        $this->actingAs($owner)
+            ->get(route('employee-attendance.index'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('hasAnyAttendance', true));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 1b — Top projects: the card that could never fill
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The dashboard's Top projects card had NO data source: it rendered a
+     * permanent empty state for every real user. It now ranks live client hours,
+     * aggregated in SQL over a bounded window.
+     */
+    public function test_top_projects_ranks_live_client_hours_over_a_bounded_window(): void
+    {
+        $owner = $this->makeOwner();
+
+        $atlas = Client::create(['name' => 'Atlas', 'work_type' => 'tracker_manual']);
+        $orbit = Client::create(['name' => 'Orbit', 'work_type' => 'tracker_manual']);
+        $stale = Client::create(['name' => 'Ancient', 'work_type' => 'tracker_manual']);
+
+        $log = function (Client $client, float $hours, int $daysAgo) use ($owner) {
+            WorkHour::create([
+                'user_id' => $owner->id,
+                'client_id' => $client->id,
+                'date' => now()->subDays($daysAgo)->toDateString(),
+                'hours' => $hours,
+                'description' => 'Work',
+                'work_type' => 'manual',
+                'source' => 'manual',
+            ]);
+        };
+
+        $log($atlas, 6, 1);
+        $log($atlas, 2, 2);
+        $log($orbit, 4, 3);
+        // Outside the seven-day window: it must not appear, or the card would be
+        // quietly summing the whole table.
+        $log($stale, 99, 40);
+        // No client at all — counts towards the denominator, never as a row.
+        WorkHour::create([
+            'user_id' => $owner->id,
+            'date' => now()->toDateString(),
+            'hours' => 2,
+            'description' => 'Admin',
+            'work_type' => 'manual',
+            'source' => 'manual',
+        ]);
+
+        $this->actingAs($owner)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $p) {
+                $top = $p->toArray()['props']['topProjects'];
+
+                $this->assertSame('team', $top['scope']);
+                $this->assertSame(7, $top['days']);
+                $this->assertCount(2, $top['items'], 'the 40-day-old project must be outside the window');
+
+                $this->assertSame('Atlas', $top['items'][0]['label']);
+                $this->assertEqualsWithDelta(8.0, $top['items'][0]['hours'], 0.001);
+                $this->assertSame(100, $top['items'][0]['pct']);
+                // 8 of the 14 hours logged in the window.
+                $this->assertSame(57, $top['items'][0]['share']);
+
+                $this->assertSame('Orbit', $top['items'][1]['label']);
+                $this->assertSame(50, $top['items'][1]['pct']);
+            });
+    }
+
+    /**
+     * SCOPE FOLLOWS PERMISSION. A member with no reporting rights must never be
+     * shown a colleague's hours through a dashboard card — they get their own.
+     */
+    public function test_top_projects_shows_a_member_only_their_own_hours(): void
+    {
+        $owner = $this->makeOwner();
+        $member = User::create([
+            'name' => 'Member', 'email' => 'member@acme.test',
+            'password' => bcrypt('super-secret-pw'), 'role' => 'member',
+        ]);
+
+        $secret = Client::create(['name' => 'Owner Only', 'work_type' => 'tracker_manual']);
+        $mine = Client::create(['name' => 'Mine', 'work_type' => 'tracker_manual']);
+
+        foreach ([[$owner, $secret, 9.0], [$member, $mine, 1.0]] as [$user, $client, $hours]) {
+            WorkHour::create([
+                'user_id' => $user->id,
+                'client_id' => $client->id,
+                'date' => now()->toDateString(),
+                'hours' => $hours,
+                'description' => 'Work',
+                'work_type' => 'manual',
+                'source' => 'manual',
+            ]);
+        }
+
+        $this->actingAs($member)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(function (AssertableInertia $p) {
+                $top = $p->toArray()['props']['topProjects'];
+
+                $this->assertSame('self', $top['scope']);
+                $this->assertSame(['Mine'], array_column($top['items'], 'label'));
+            });
+    }
+
+    /** A brand-new workspace gets an honest empty card, not a broken one. */
+    public function test_top_projects_is_empty_on_a_new_workspace(): void
+    {
+        $owner = $this->makeOwner();
+
+        $this->actingAs($owner)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $p) => $p
+                ->component('Dashboard')
+                ->where('topProjects.items', []));
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // 2 — the checklist
     // ─────────────────────────────────────────────────────────────────────────
@@ -492,8 +642,13 @@ class FirstRunExperienceTest extends TestCase
         $this->assertSame(3, WorkHour::where('user_id', $real->id)->count());
     }
 
-    /** Demo teammates occupy seats, so the sample can never squeeze out a hire. */
-    public function test_demo_data_refuses_to_load_when_there_are_no_spare_seats(): void
+    /**
+     * Demo teammates DO NOT consume plan seats. On Free (2 seats, the owner
+     * using one) the sample used to be trimmed to a single person — a demo so
+     * thin it taught the customer nothing. The whole cast now loads even on a
+     * one-seat plan, because seat checks count real people only.
+     */
+    public function test_demo_data_loads_in_full_even_when_every_plan_seat_is_taken(): void
     {
         $owner = $this->makeOwner();
         $owner->organization->update(['entitlement_overrides' => ['max_users' => 1]]);
@@ -502,24 +657,132 @@ class FirstRunExperienceTest extends TestCase
         $demo = app(DemoDataService::class);
         $result = $demo->load();
 
-        $this->assertFalse($result['ok']);
-        $this->assertStringContainsString('seat', strtolower($result['message']));
-        $this->assertFalse($demo->isLoaded());
-        $this->assertSame(1, User::count());
+        $this->assertTrue($result['ok'], $result['message']);
+        $this->assertSame(3, $result['people']);
+        $this->assertTrue($demo->isLoaded());
+
+        // Four rows exist, but only the owner counts against the plan.
+        $this->assertSame(4, User::count());
+        $this->assertSame(1, User::seatUsage());
     }
 
-    /** And it trims the cast to the seats that ARE free rather than refusing. */
-    public function test_demo_data_fits_itself_into_the_seats_that_are_free(): void
+    /**
+     * The point of the exclusion: a loaded demo must never stand between a
+     * customer and a real hire — and must never BUY them one either.
+     */
+    public function test_a_loaded_demo_neither_blocks_nor_grants_a_real_hire(): void
     {
         $owner = $this->makeOwner();
-        $owner->organization->update(['entitlement_overrides' => ['max_users' => 3]]);
+        $owner->organization->update(['entitlement_overrides' => ['max_users' => 2]]);
         $owner->organization->forgetResolvedEntitlements();
 
-        $result = app(DemoDataService::class)->load();
+        app(DemoDataService::class)->load();
 
-        $this->assertTrue($result['ok'], $result['message']);
-        $this->assertSame(2, $result['people']);
-        $this->assertSame(3, User::count());
+        // Seat 2 of 2 — allowed, despite three demo people also sitting there.
+        $this->actingAs($owner)->post(route('users.store'), [
+            'name' => 'Real Hire',
+            'email' => 'real@acme.test',
+            'password' => 'a-very-long-password',
+        ])->assertRedirect(route('users.index'));
+
+        $this->assertSame(2, User::seatUsage());
+
+        // Seat 3 of 2 — refused. The demo did not buy an extra seat.
+        $this->actingAs($owner)->post(route('users.store'), [
+            'name' => 'One Too Many',
+            'email' => 'nope@acme.test',
+            'password' => 'a-very-long-password',
+        ])->assertSessionHasErrors('email');
+
+        $this->assertSame(2, User::seatUsage());
+    }
+
+    /**
+     * THE ABUSE SURFACE. Excluding demo people from the seat count is a
+     * plan-limit bypass, so the marker it keys on must be unforgeable. Every
+     * request-reachable path that can set an e-mail address is tried here: if
+     * any of them let a customer mint a `@demo.staffvora.invalid` address, they
+     * would mint themselves unlimited free seats.
+     */
+    public function test_a_customer_cannot_mint_free_seats_by_imitating_the_demo_marker(): void
+    {
+        $owner = $this->makeOwner();
+        $owner->organization->update(['entitlement_overrides' => ['max_users' => 2]]);
+        $owner->organization->forgetResolvedEntitlements();
+
+        $orgId = app(CurrentOrganization::class)->id();
+        $forged = "demo-{$orgId}-9@".DemoDataService::EMAIL_DOMAIN;
+
+        // 1. The admin "create user" form.
+        $this->actingAs($owner)->post(route('users.store'), [
+            'name' => 'Fake Demo',
+            'email' => $forged,
+            'password' => 'a-very-long-password',
+        ])->assertSessionHasErrors('email');
+
+        // 2. The onboarding invite step.
+        $this->actingAs($owner)->post(route('onboarding.team'), [
+            'name' => 'Fake Demo',
+            'email' => "demo-{$orgId}-8@".DemoDataService::EMAIL_DOMAIN,
+        ])->assertSessionHasErrors('email');
+
+        // 3. Public self-registration (a whole new tenant). This one is stopped
+        // by the model guard rather than a form rule — registration is outside
+        // this change — so it may surface as a thrown refusal. What matters is
+        // that it cannot SUCCEED; nothing legitimate ever registers on an
+        // RFC 2606 `.invalid` domain.
+        try {
+            $this->post(route('register'), [
+                'name' => 'Fake Demo',
+                'company_name' => 'Forge Co',
+                'email' => 'demo-1-1@'.DemoDataService::EMAIL_DOMAIN,
+                'password' => 'a-very-long-password',
+                'password_confirmation' => 'a-very-long-password',
+            ]);
+        } catch (\Throwable $e) {
+            $this->assertStringContainsString('reserved', $e->getMessage());
+        }
+
+        // 4. Renaming an EXISTING real user into the namespace after the fact.
+        $this->actingAs($owner);
+        $real = User::create([
+            'name' => 'Real Person',
+            'email' => 'real@acme.test',
+            'password' => 'a-very-long-password',
+            'role' => 'member',
+        ]);
+
+        try {
+            $real->update(['email' => $forged]);
+            $this->fail('renaming a real user into the demo namespace must be refused');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('reserved', $e->getMessage());
+        }
+
+        // Not one forged demo identity exists anywhere in the install, so the
+        // seat exclusion has nothing a customer can hide behind.
+        $this->assertSame(
+            0,
+            DB::table('users')->where('email', 'like', '%@'.DemoDataService::EMAIL_DOMAIN)->count()
+        );
+
+        // And the owner + the one real hire still fill the 2-seat plan.
+        $this->assertSame(2, User::seatUsage());
+    }
+
+    /** The seat count excludes demo people and nobody else. */
+    public function test_seat_usage_counts_real_people_only(): void
+    {
+        $this->makeOwner();
+
+        $this->assertSame(1, User::seatUsage());
+
+        app(DemoDataService::class)->load();
+        $this->assertSame(4, User::count());
+        $this->assertSame(1, User::seatUsage());
+
+        app(DemoDataService::class)->remove();
+        $this->assertSame(1, User::seatUsage());
     }
 
     public function test_demo_data_refuses_to_load_twice(): void

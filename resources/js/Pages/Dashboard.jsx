@@ -394,6 +394,7 @@ export default function Dashboard({
     needsOnboarding,
     gettingStarted = null,
     demoData = null,
+    topProjects = null,
     preview = false,
 }) {
     const page = usePage();
@@ -669,6 +670,27 @@ export default function Dashboard({
         const total = trend.reduce((s, p) => s + (Number(p.value) || 0), 0);
         return total > 0 ? Number((total / trend.length).toFixed(1)) : undefined;
     }, [preview, trend]);
+
+    // TOP PROJECTS — real rows from the server (DashboardController::topProjects),
+    // aggregated in SQL over a bounded window. `scope` says whether the ranking
+    // covers the workspace or only the viewer's own hours, which is decided by
+    // the viewer's permissions server-side; the wording follows it so the card
+    // never overstates what it is showing.
+    const projectScope = preview ? "team" : topProjects?.scope || "self";
+    const projectWindowDays = preview ? 7 : topProjects?.days || 7;
+    const projectRank = useMemo(() => {
+        if (preview) return DEV_SAMPLE.projects;
+
+        return (topProjects?.items || []).map((row) => ({
+            label: row.label,
+            value: formatHours(row.hours),
+            pct: row.pct,
+            meta: row.share > 0 ? `${row.share}% of logged time` : undefined,
+        }));
+    }, [preview, topProjects]);
+    const projectRankHeading = `${
+        projectScope === "team" ? "Across the team" : "Your hours"
+    } · last ${projectWindowDays} days`;
 
     const teamHeading = canViewTeam ? "Team activity" : "Your activity";
     const activeCount = employees.filter((e) => e.current_status === "Working").length;
@@ -1017,13 +1039,28 @@ export default function Dashboard({
                         )}
                     </Card>
 
-                    <Card title="Top projects" description="By tracked hours · this week">
-                        {preview ? (
-                            <RankedBars items={DEV_SAMPLE.projects} />
+                    <Card
+                        title={`Top ${projectTerm.toLowerCase()}s`}
+                        description={projectRankHeading}
+                    >
+                        {projectRank.length > 0 ? (
+                            <RankedBars items={projectRank} />
                         ) : (
                             <EmptyState
-                                title="No project data yet"
-                                description="Once time is tracked against projects, the leaders show up here."
+                                title={`No ${projectTerm.toLowerCase()} hours yet`}
+                                description={`This ranks where the ${
+                                    projectScope === "team" ? "team's" : "your"
+                                } hours went. Log time against a ${projectTerm.toLowerCase()} in the work diary — or track it with the desktop app — and the leaders appear here.`}
+                                action={
+                                    <Button
+                                        as={Link}
+                                        href={preview ? "#" : route("work-hours.index")}
+                                        variant="secondary"
+                                        size="sm"
+                                    >
+                                        Open work diary
+                                    </Button>
+                                }
                             />
                         )}
                     </Card>

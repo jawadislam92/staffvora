@@ -145,7 +145,16 @@ class Kernel extends ConsoleKernel
         // Hostinger's git auto-deploy re-clones the tree and wipes
         // bootstrap/cache, dropping the config cache (a large chunk of TTFB
         // on shared hosting). Rebuild it whenever it's found missing.
-        // NOTE: route:cache must never be added here — closure routes.
+        //
+        // This self-heals the CONFIG cache only, on purpose. `route:cache` is
+        // safe to run on a server — the only closure routes in the app are the
+        // /_ design-preview routes, and those are registered inside an
+        // `app()->environment('local')` guard, so a production route cache
+        // serializes cleanly (verified). It is deliberately not rebuilt here
+        // because unlike config, a stale route cache is not self-evident and
+        // the deploy runbook already runs `php artisan optimize`, which caches
+        // routes as part of a deliberate deploy step. See §6.5 of
+        // documents/PRODUCTION_DEPLOYMENT.md.
         $schedule->call(function () {
             if (! file_exists(base_path('bootstrap/cache/config.php'))) {
                 Artisan::call('config:cache');

@@ -1,4 +1,21 @@
-// Renders rich text authored in the builder (sanitised server-side on save).
+// Renders rich text authored in the operator's Site Builder.
+//
+// THIS USES dangerouslySetInnerHTML — read this before changing anything here or
+// upstream. The markup is allow-list sanitised SERVER-SIDE by
+// App\Support\HtmlSanitizer, in two places: on WRITE (SitePage::setAttribute,
+// which covers the builder, both seeders and any future import path) and again
+// on READ (SitePage::publicPayload), so a row stored before the sanitiser
+// existed is still cleaned before it reaches this component.
+//
+// An earlier version of this comment asserted "sanitised server-side on save"
+// when NO sanitiser existed anywhere in the codebase — the false comment was
+// part of the vulnerability, because it told the next reader not to look. Do not
+// restate the claim without checking App\Support\HtmlSanitizer is still wired
+// into both of those call sites.
+//
+// This component performs no client-side sanitisation and must never be handed
+// HTML from a source that has not been through HtmlSanitizer.
+//
 // Child-element utilities style headings/links/lists without the typography plugin.
 //
 // Colours come from the site's CSS variables, NOT fixed zinc greys: the public

@@ -49,8 +49,10 @@ the Mac build gets all of it automatically.
      shows **both screens** side by side.
 6. Publish to the download feed (deploy-proof installers folder):
    `scp -P 65002 "dist-app/SA Track-0.3.2-arm64.dmg" u406855808@31.170.164.232:~/desktop-installers/`
-   (optionally also the `.zip`). The web Downloads page already expects this
-   exact filename (`MAC_VERSION = 0.3.2`), so it will appear on
+   (optionally also the `.zip`). The web Downloads page picks it up on its own
+   (CORRECTION, 2026-08: it no longer matches an exact filename — no
+   `MAC_VERSION` constant exists; it reads latest-mac.yml or the
+   highest-versioned artifact present), so it will appear on
    https://timetracker.sparkingasia.com/desktop-downloads automatically — **no
    server code change needed.**
 7. Report back: the DMG filename + its SHA-256 (`shasum -a 256 "<file>"`), and

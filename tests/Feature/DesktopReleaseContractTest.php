@@ -49,6 +49,41 @@ class DesktopReleaseContractTest extends TestCase
         );
     }
 
+    /**
+     * Machine::minAgentVersion() reads config('desktop.min_agent_version') so the
+     * Compliance staleness threshold can be held back for a fleet that has not
+     * finished auto-updating, without a deploy. That lookup existed for a while
+     * with NO config key and no env binding behind it, so the override silently
+     * did nothing; these pin that it is really wired.
+     */
+    public function test_the_minimum_agent_version_can_be_overridden_without_a_code_edit(): void
+    {
+        $this->assertArrayHasKey(
+            'min_agent_version',
+            config('desktop'),
+            'config/desktop.php has no min_agent_version key, so Machine::minAgentVersion() reads nothing.'
+        );
+
+        config()->set('desktop.min_agent_version', '0.9.9');
+
+        $this->assertSame('0.9.9', Machine::minAgentVersion());
+    }
+
+    public function test_a_blank_or_malformed_minimum_agent_version_falls_back_to_the_code_default(): void
+    {
+        // A typo in .env must not quietly switch off a compliance warning (or
+        // mark every machine stale) via a garbage version_compare().
+        foreach ([null, '', '   ', 'latest', '0.4', 'v0.4.6', '0.4.6-beta.1', 'DROP TABLE'] as $bad) {
+            config()->set('desktop.min_agent_version', $bad);
+
+            $this->assertSame(
+                Machine::MIN_AGENT_VERSION,
+                Machine::minAgentVersion(),
+                'A malformed DESKTOP_MIN_AGENT_VERSION was obeyed instead of ignored: '.var_export($bad, true)
+            );
+        }
+    }
+
     public function test_the_update_feed_url_points_at_this_apps_own_route(): void
     {
         $publish = $this->packageJson()['build']['publish'][0] ?? [];

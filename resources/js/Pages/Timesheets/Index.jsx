@@ -166,6 +166,24 @@ export default function TimesheetsIndex({
         [board]
     );
 
+    // ── Empty workspace vs empty filter ──────────────────────────────────────
+    //
+    // These are two completely different situations and they must not share a
+    // sentence. "No one matches this filter" told a brand-new workspace it had
+    // made a mistake, when in fact it had simply never run a pay period.
+    //
+    // The discriminator needs NO server probe and therefore no query: the queue
+    // is the roster for the period, so with the status tab on "Everyone" there
+    // is no filter left to blame — an empty queue means the workspace itself is
+    // empty. Any other tab is, by definition, a filter narrowing it.
+    const filteringByStatus = activeStatus !== 'all';
+    const statusLabel = (STATUS_TABS.find((t) => t.key === activeStatus) || {}).label || '';
+    const canInvite = Boolean(user?.is_super_admin || user?.permissions?.includes('users.manage'));
+
+    // A period nobody has logged a minute against — the moment to say what this
+    // screen is actually for rather than showing four confident zeroes.
+    const ownPeriodUntouched = (own?.totals?.entries ?? 0) === 0 && own?.status === 'open';
+
     const go = (query) => {
         if (preview) return;
         router.get(URLS.index(), { period: currentPeriod.key, status: activeStatus, ...query }, {
@@ -332,6 +350,20 @@ export default function TimesheetsIndex({
                         <StatCard label="Manual" value={hrs(own?.totals?.manual)} hint="Added by hand" />
                     </div>
 
+                    {/* Four zeroes explain nothing on day one. Say what the
+                        screen is for instead — and only while it is genuinely
+                        empty, so it disappears the moment there is real data. */}
+                    {ownPeriodUntouched && (
+                        <div className="mt-4 flex items-start gap-2 rounded-lg border border-line bg-surface-2 p-3 text-sm text-muted">
+                            <CalendarRange className="mt-0.5 h-4 w-4 shrink-0 text-subtle" />
+                            <span>
+                                Nothing is logged against {currentPeriod?.label} yet. Track time with the desktop
+                                app or add it in your work diary — the totals here update as you go, and you submit
+                                the period for approval once it is complete.
+                            </span>
+                        </div>
+                    )}
+
                     {own?.status === 'approved' && (
                         <div className="mt-4 flex items-start gap-2 rounded-lg bg-success-soft p-3 text-sm text-success">
                             <Lock className="mt-0.5 h-4 w-4 shrink-0" />
@@ -389,11 +421,33 @@ export default function TimesheetsIndex({
 
                             {board.rows.length === 0 ? (
                                 <div className="p-6">
-                                    <EmptyState
-                                        icon={<ClipboardCheck className="h-5 w-5" />}
-                                        title="Nothing here"
-                                        description="No one matches this filter for the selected pay period."
-                                    />
+                                    {filteringByStatus ? (
+                                        <EmptyState
+                                            icon={<ClipboardCheck className="h-5 w-5" />}
+                                            title={`Nobody is “${statusLabel}” in this period`}
+                                            description={`The ${statusLabel.toLowerCase()} filter is on. Everyone else's timesheet for ${currentPeriod?.label} is in another state.`}
+                                            action={(
+                                                <Button
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    onClick={() => go({ status: 'all', page: 1 })}
+                                                >
+                                                    Show everyone
+                                                </Button>
+                                            )}
+                                        />
+                                    ) : (
+                                        <EmptyState
+                                            icon={<ClipboardCheck className="h-5 w-5" />}
+                                            title="No one to approve yet"
+                                            description={`A timesheet is a pay period's hours, signed off once and then frozen for payroll — so an approved period can't be quietly edited afterwards. ${currentPeriod?.label} will fill in on its own as your team tracks time; you approve it here when the period ends.`}
+                                            action={canInvite ? (
+                                                <Button as={Link} size="sm" href={safeRoute('users.create', undefined, '/users/create')}>
+                                                    Invite your team
+                                                </Button>
+                                            ) : null}
+                                        />
+                                    )}
                                 </div>
                             ) : (
                                 <div className="mt-4 overflow-x-auto">

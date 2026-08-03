@@ -135,11 +135,13 @@ php artisan tenancy:audit        # must exit 0
 
 `.env.production.example` is the annotated template for the server's `.env`.
 
-The old `deploy-production.sh` predates the runbook and should not be used.
+`deploy-production.sh` runs the runbook's deploy checklist (§7) and fails the
+deploy if `deploy:preflight` fails. The runbook stays authoritative.
 
-Before a public launch, replace every `[REPLACE]` item in the Site Builder,
-publish every marketing page, and have the Terms of Service and Privacy Policy
-reviewed by qualified counsel.
+Before a public launch, have the Terms of Service and Privacy Policy reviewed by
+qualified counsel. The marketing pages are written and published by
+`SiteContentSeeder`; `PublicSiteContentTest` fails the build if any public page
+is empty, unpublished, or still carrying scaffold copy.
 
 ## Security
 

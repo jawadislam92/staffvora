@@ -7,11 +7,14 @@ use App\Models\SiteMedia;
 use App\Models\SitePage;
 use App\Models\SiteTheme;
 use App\Support\DefaultSiteContent;
+use App\Support\HtmlSanitizer;
+use App\Support\SitePalettes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use Inertia\Response;
 
 /**
  * The no-code page builder, platform-admin only (routes are under the
@@ -21,20 +24,20 @@ use Inertia\Inertia;
  */
 class SiteBuilderController extends Controller
 {
-    public function index(): \Inertia\Response
+    public function index(): Response
     {
         DefaultSiteContent::ensure();
 
         return Inertia::render('Platform/SiteBuilder/Index', [
             'pages' => SitePage::orderBy('sort')->orderBy('id')->get(['id', 'slug', 'title', 'status', 'updated_at']),
             'theme' => SiteTheme::current(),
-            'palettes' => \App\Support\SitePalettes::options(),
-            'fonts' => \App\Support\SitePalettes::fonts(),
-            'editableColors' => \App\Support\SitePalettes::editableKeys(),
+            'palettes' => SitePalettes::options(),
+            'fonts' => SitePalettes::fonts(),
+            'editableColors' => SitePalettes::editableKeys(),
         ]);
     }
 
-    public function edit(SitePage $page): \Inertia\Response
+    public function edit(SitePage $page): Response
     {
         return Inertia::render('Platform/SiteBuilder/Editor', [
             'page' => $page->only(['id', 'slug', 'title', 'meta_title', 'meta_description', 'status', 'blocks']),
@@ -43,6 +46,24 @@ class SiteBuilderController extends Controller
         ]);
     }
 
+    /**
+     * Save the working draft.
+     *
+     * `blocks` is free-form JSON by design (the builder gains block types
+     * without a schema migration), and `rich_text` blocks end up inside
+     * `dangerouslySetInnerHTML` on the PUBLIC marketing site — including the
+     * legal pages, which are now entirely rich_text. Validation cannot express
+     * "safe HTML", so the markup goes through App\Support\HtmlSanitizer.
+     *
+     * The call here is deliberate redundancy: SitePage::setAttribute is what
+     * actually guarantees it (it covers every write path, including the
+     * seeders), but the save path is where the next person looks, and until
+     * now the comments in this area claimed a sanitiser that did not exist.
+     *
+     * Only platform admins reach this route (the `platform` middleware group).
+     * That lowers the likelihood, not the impact: the output is served to every
+     * anonymous visitor, and an operator account is a phishing target.
+     */
     public function saveDraft(Request $request, SitePage $page): RedirectResponse
     {
         $data = $request->validate([
@@ -51,6 +72,8 @@ class SiteBuilderController extends Controller
             'meta_description' => 'nullable|string|max:400',
             'blocks' => 'present|array',
         ]);
+
+        $data['blocks'] = HtmlSanitizer::sanitizeBlocks($data['blocks']);
 
         $page->update($data);
 

@@ -99,10 +99,19 @@ class GettingStartedChecklist
         ];
     }
 
-    /** Somebody other than the person asking is in the workspace. */
+    /**
+     * Somebody other than the person asking is in the workspace.
+     *
+     * Sample teammates are excluded: ticking "invite your team" because a demo
+     * was loaded would tell the owner a job is done that isn't — the same lie
+     * OnboardingController::progress() avoids.
+     */
     private function hasTeammates(User $user): bool
     {
-        return User::query()->where('id', '!=', $user->id)->exists();
+        return User::query()
+            ->excludingDemoIdentities()
+            ->where('id', '!=', $user->id)
+            ->exists();
     }
 
     /**

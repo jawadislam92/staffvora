@@ -3,7 +3,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { TraditionalPagination } from '@/Components/Pagination';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { timeFormat } from '@/helpers';
 import { exportRowsToCsv } from '@/Utils/csvExport';
 import SearchableMultiSelect from '@/Components/Filters/SearchableMultiSelect';
@@ -169,6 +169,7 @@ export default function WorkHoursList({
     filterOptions = {},
     preview = false,
 }) {
+    const page = usePage();
     const user = preview ? DEV_SAMPLE.user : auth?.user;
     const list = preview ? DEV_SAMPLE.workHours : workHours;
     const options = preview ? DEV_SAMPLE.filterOptions : filterOptions;
@@ -486,6 +487,31 @@ export default function WorkHoursList({
     const createHref = preview ? '#' : route('work-hours.create');
     const editHref = (id) => (preview ? '#' : route('work-hours.edit', id));
 
+    // ── Empty workspace vs empty filter ──────────────────────────────────────
+    //
+    // "No work hours found — start tracking to see them here" was shown to
+    // BOTH the person whose diary is genuinely empty and the person who has
+    // three hundred entries but picked a client they never worked for. The
+    // second reading is a lie, and the first had no CTA anyone could act on.
+    //
+    // The discriminator costs ZERO queries. The server applies no date filter by
+    // default (`filter` defaults to 'all'), so if not one filter is set and the
+    // first page came back empty, there is nothing to filter — the diary IS
+    // empty. Anything else is a filter narrowing real rows, and we can name it.
+    const filtersApplied = activeFilterChips.length > 0;
+    const searching = searchTerm.trim() !== '';
+    const onFirstPage = Number(list?.current_page ?? 1) <= 1;
+    const isEmptyDiary = !preview && !filtersApplied && !searching && onFirstPage
+        && (list?.data?.length ?? 0) === 0;
+
+    // A CTA nobody can follow is worse than none: adding time by hand is a
+    // permission (work_hours.manage_all) OR an org setting the admin can switch
+    // off, and work-hours.create 403s otherwise. Same gate, read from the
+    // shared props the server already sends.
+    const canAddManualTime = preview
+        || canManageAll
+        || page.props?.teamSettings?.allow_offline_time !== false;
+
     const selectableData = filteredData.filter((entry) => !isRowLocked(entry));
     const lockedCount = filteredData.length - selectableData.length;
     const allPageSelected = selectedEntries.size === selectableData.length && selectableData.length > 0;
@@ -722,16 +748,49 @@ export default function WorkHoursList({
                 {/* Table */}
                 <Card padded={false} className="overflow-hidden">
                     {filteredData.length === 0 ? (
-                        <EmptyState
-                            icon={<FileText className="h-5 w-5" />}
-                            title="No work hours found"
-                            description="Start tracking your work hours to see them here."
-                            action={
-                                <Button as={Link} href={createHref} icon={<Plus className="h-4 w-4" />}>
-                                    Add Manual Time
-                                </Button>
-                            }
-                        />
+                        isEmptyDiary ? (
+                            <EmptyState
+                                icon={<FileText className="h-5 w-5" />}
+                                title="Your work diary is empty"
+                                /* No "invoices" in this sentence: nothing in the product bills a
+                                   client from these hours. The only invoices Staffvora issues are
+                                   its own subscription invoices, which owe nothing to the diary.
+                                   This is the same false claim that was removed from the
+                                   marketing site — it must not survive inside the app. */
+                                description="This is the record of what you worked on and for how long — every hour the desktop tracker measures lands here automatically, and you can add time by hand for anything it missed. It is what your reports and timesheets are built from."
+                                action={canAddManualTime ? (
+                                    <Button as={Link} href={createHref} icon={<Plus className="h-4 w-4" />}>
+                                        Add your first entry
+                                    </Button>
+                                ) : null}
+                            />
+                        ) : (
+                            <EmptyState
+                                icon={<Search className="h-5 w-5" />}
+                                title="Nothing matches this view"
+                                description={
+                                    searching && filtersApplied
+                                        ? `No entries match “${searchTerm}” within the ${activeFilterChips.length} filter${activeFilterChips.length === 1 ? '' : 's'} you have on.`
+                                        : searching
+                                            ? `No entries on this page match “${searchTerm}”.`
+                                            : `Your diary has entries, but none inside ${activeFilterChips.length === 1 ? 'this filter' : 'these filters'}: ${activeFilterChips.map((chip) => chip.label).join(', ')}.`
+                                }
+                                action={
+                                    <div className="flex flex-wrap justify-center gap-2">
+                                        {searching && (
+                                            <Button variant="secondary" onClick={() => setSearchTerm('')}>
+                                                Clear search
+                                            </Button>
+                                        )}
+                                        {filtersApplied && (
+                                            <Button variant="secondary" onClick={clearFilters}>
+                                                Clear all filters
+                                            </Button>
+                                        )}
+                                    </div>
+                                }
+                            />
+                        )
                     ) : (
                         <>
                             <Table>

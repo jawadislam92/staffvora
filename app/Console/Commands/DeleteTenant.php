@@ -37,15 +37,56 @@ use App\Models\WorkCategory;
 use App\Models\WorkHour;
 use App\Tenancy\CurrentOrganization;
 use Illuminate\Console\Command;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 
 /**
- * GDPR "right to erasure": permanently delete a tenant and ALL of its data.
- * Each tenant model is purged bound to the org (so only that org's rows go),
- * then the organization itself. Irreversible — guarded by a confirmation.
+ * GDPR "right to erasure": permanently delete a tenant and ALL of its data —
+ * database rows AND the files it uploaded. Irreversible; guarded by a
+ * confirmation.
  *
- * Note: S3 objects are org-prefixed (org/{id}/...) and should be removed by the
- * object-store lifecycle/bucket cleanup; this command clears the database.
+ * ---------------------------------------------------------------------------
+ * STORED OBJECTS — why this is done row-by-row rather than by prefix
+ * ---------------------------------------------------------------------------
+ * This command used to carry a note claiming "S3 objects are org-prefixed
+ * (org/{id}/...) and should be removed by the object-store lifecycle". That was
+ * WRONG on both halves, and /privacy now publicly promises the opposite:
+ *
+ *   - Screenshots are written by Api\Desktop\ScreenshotController as
+ *       screenshots/{user_id}/{Y-m-d}/{session_id}/{time}_{uniqid}.{ext}
+ *     There is NO organization segment anywhere in that path. Avatars are
+ *     `avatars/{random}.{ext}` and workspace branding logos `branding/{random}`
+ *     — both flat, both with nothing tying an object to a workspace except the
+ *     database row that references it.
+ *   - There is no bucket lifecycle rule doing this either; nothing else was
+ *     ever going to delete these objects.
+ *
+ * So a prefix/directory delete CANNOT be used: there is no per-org prefix to
+ * delete, and inventing one from `user_id` would be guessing at the layout with
+ * a permanent-deletion tool. The authoritative record of "which object belongs
+ * to which workspace" is the row, so the row is what we enumerate. That is
+ * exact, and it is also the only thing that stays correct if the path scheme
+ * changes again.
+ *
+ * Consequences that shaped the implementation:
+ *   - MEMORY: the rows are walked in bounded batches (never a full pluck of a
+ *     workspace with hundreds of thousands of screenshots), and each batch is
+ *     deleted as it is processed so the loop always makes progress without an
+ *     offset scan.
+ *   - RESUMABILITY: within a batch the FILES go first and the ROWS only after
+ *     they are gone. If storage fails the command aborts BEFORE the row purge
+ *     and before the organization row is removed, so nothing is orphaned and
+ *     re-running the command resumes exactly where it stopped. Deleting rows
+ *     first is what created the original defect: once the rows are gone neither
+ *     this command nor `monitoring:prune-screenshots` (which also works from
+ *     rows) can ever find the files again.
+ *   - COST: one delete call per object, which is the same per-object cost the
+ *     retention job already pays. If the screenshot layout is ever moved under
+ *     an `org/{id}/` prefix, this becomes a single deleteDirectory per disk and
+ *     purgeStoredObjects() is the one place to change.
  */
 class DeleteTenant extends Command
 {
@@ -160,6 +201,17 @@ class DeleteTenant extends Command
 
         $orgId = $org->id;
 
+        // FILES BEFORE ROWS. This runs first and, on failure, aborts the whole
+        // erasure with the database untouched — see the class docblock.
+        try {
+            $current->runFor($org, fn () => $this->purgeStoredObjects($orgId));
+        } catch (RuntimeException $e) {
+            $this->error($e->getMessage());
+            $this->error("Nothing further was deleted for '{$org->name}' (#{$orgId}). Fix the storage problem and run this command again — it resumes from where it stopped.");
+
+            return self::FAILURE;
+        }
+
         $current->runFor($org, function () use ($orgId) {
             foreach (self::$models as $model) {
                 if (! class_exists($model)) {
@@ -196,5 +248,184 @@ class DeleteTenant extends Command
         $this->info("Deleted tenant '{$name}' and all of its data.");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Rows (and, for screenshots, their files) handled per batch. Small enough
+     * that a workspace with 500k screenshots never holds more than this many
+     * hydrated rows at once.
+     */
+    private const OBJECT_CHUNK = 500;
+
+    /**
+     * Delete every stored object this workspace owns, on whichever driver the
+     * disks are configured with (local in dev, s3 in production —
+     * Storage::disk() hides the difference and Storage::fake() in tests
+     * exercises the same code path).
+     *
+     * Throws RuntimeException on the first storage failure, having deleted no
+     * rows for the failing batch. The caller turns that into a non-zero exit
+     * with the database still consistent and the erasure re-runnable.
+     */
+    private function purgeStoredObjects(int $orgId): void
+    {
+        [$shotFiles, $shotRows] = $this->purgeScreenshotObjects($orgId);
+        $avatars = $this->purgeAvatarObjects($orgId);
+        $logos = $this->purgeBrandingObjects($orgId);
+
+        $this->info("Erased {$shotFiles} screenshot file(s) across {$shotRows} row(s), {$avatars} avatar(s) and {$logos} branding logo(s) from storage.");
+    }
+
+    /**
+     * Screenshots: the big one. Batches are taken in id order, the files for a
+     * batch are deleted, and only then are that batch's rows force-deleted —
+     * which also shrinks the query for the next iteration, so the loop is
+     * O(rows) with no growing offset.
+     *
+     * `withTrashed()` matters: a soft-deleted screenshot still has its file on
+     * disk, and "deleted in the UI" is not "erased".
+     *
+     * @return array{0:int,1:int} [files deleted, rows deleted]
+     */
+    private function purgeScreenshotObjects(int $orgId): array
+    {
+        if (! Schema::hasTable('tracking_screenshots')) {
+            return [0, 0];
+        }
+
+        $disk = Storage::disk('screenshots');
+        $files = 0;
+        $rows = 0;
+
+        while (true) {
+            $batch = TrackingScreenshot::withoutOrganizationScope()
+                ->withTrashed()
+                ->where('organization_id', $orgId)
+                ->orderBy('id')
+                ->limit(self::OBJECT_CHUNK)
+                ->get(['id', 'image_path', 'thumbnail_path']);
+
+            if ($batch->isEmpty()) {
+                break;
+            }
+
+            $paths = [];
+
+            foreach ($batch as $screenshot) {
+                foreach ([$screenshot->image_path, $screenshot->thumbnail_path] as $path) {
+                    if (is_string($path) && $path !== '') {
+                        $paths[] = $path;
+                    }
+                }
+            }
+
+            $this->deleteObjects($disk, $paths, 'screenshots');
+            $files += count($paths);
+
+            // Explicit organization predicate: forceDelete() runs on the BASE
+            // query builder, so no global scope — not SoftDeletingScope, not
+            // OrganizationScope — is applied to it. whereKey() alone would be
+            // enough here, but the org predicate is what makes that true by
+            // construction rather than by inspection of the batch above.
+            $rows += (int) TrackingScreenshot::withoutOrganizationScope()
+                ->withTrashed()
+                ->where('organization_id', $orgId)
+                ->whereKey($batch->modelKeys())
+                ->forceDelete();
+        }
+
+        return [$files, $rows];
+    }
+
+    /**
+     * User avatars. The rows themselves are removed by the model purge; only
+     * the objects need handling here, and they are read in bounded pages
+     * because a workspace can have hundreds of users.
+     */
+    private function purgeAvatarObjects(int $orgId): int
+    {
+        if (! Schema::hasTable('users') || ! Schema::hasColumn('users', 'avatar')) {
+            return 0;
+        }
+
+        $disk = Storage::disk('avatars');
+        $deleted = 0;
+        $lastId = 0;
+
+        while (true) {
+            $rows = User::withoutOrganizationScope()
+                ->where('organization_id', $orgId)
+                ->whereNotNull('avatar')
+                ->where('avatar', '!=', '')
+                ->where('id', '>', $lastId)
+                ->orderBy('id')
+                ->limit(self::OBJECT_CHUNK)
+                ->get(['id', 'avatar']);
+
+            if ($rows->isEmpty()) {
+                break;
+            }
+
+            // Keyset pagination, not offset: the rows are still present when
+            // this runs (the model purge deletes them later), so an offset walk
+            // would be O(n^2) on a big workspace.
+            $lastId = (int) $rows->last()->id;
+
+            $this->deleteObjects($disk, $rows->pluck('avatar')->all(), 'avatars');
+            $deleted += $rows->count();
+        }
+
+        return $deleted;
+    }
+
+    /**
+     * The workspace's white-label branding logo (monitoring_settings). One row
+     * per workspace, but the guard and the shared helper keep it uniform.
+     */
+    private function purgeBrandingObjects(int $orgId): int
+    {
+        if (! Schema::hasTable('monitoring_settings') || ! Schema::hasColumn('monitoring_settings', 'branding_logo_path')) {
+            return 0;
+        }
+
+        $paths = MonitoringSetting::withoutOrganizationScope()
+            ->where('organization_id', $orgId)
+            ->whereNotNull('branding_logo_path')
+            ->where('branding_logo_path', '!=', '')
+            ->limit(self::OBJECT_CHUNK)
+            ->pluck('branding_logo_path')
+            ->all();
+
+        $this->deleteObjects(Storage::disk('avatars'), $paths, 'avatars');
+
+        return count($paths);
+    }
+
+    /**
+     * Delete a batch of objects, failing loudly.
+     *
+     * Both disks are configured with `'throw' => false`, so a storage error
+     * comes back as a `false` return rather than an exception — which is
+     * exactly the failure mode that would otherwise let an erasure report
+     * success while leaving every file in place. Deleting an object that is
+     * already gone is a no-op success on both the local and the S3 driver, so
+     * `false` here means a real failure.
+     *
+     * @param  list<string>  $paths
+     */
+    private function deleteObjects(Filesystem $disk, array $paths, string $label): void
+    {
+        if ($paths === []) {
+            return;
+        }
+
+        $ok = rescue(fn () => $disk->delete($paths), false, false);
+
+        if ($ok !== true) {
+            throw new RuntimeException(
+                'Storage erasure failed: could not delete '.count($paths)." object(s) from the '{$label}' disk. "
+                .'The database has NOT been purged, so no file has been orphaned.'
+            );
+        }
     }
 }

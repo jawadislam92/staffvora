@@ -471,9 +471,16 @@ php artisan optimize
 php artisan deploy:preflight
 ```
 
-> **Do not use `deploy-production.sh`.** It is an old script from before this
-> runbook, it still prints the previous product name, and it builds assets on
-> the server. Use the block above.
+> `deploy-production.sh` in the repo root now runs **exactly** steps 1–4 above
+> and nothing else — it refuses to start if `public/build` was never uploaded,
+> and it fails the deploy if `deploy:preflight` fails. Running
+> `./deploy-production.sh` from the app folder is equivalent to copy-pasting the
+> block. It does not pull code, build assets, or take the backup; you still do
+> those. If the script and this section ever disagree, **this section is right
+> and the script is the bug.**
+>
+> (It used to be an older script that printed the previous product name and
+> built assets on the server. That version is gone.)
 
 If `deploy:preflight` reports any **[ FAIL ]**, fix it before telling anyone the
 site is updated.
@@ -496,6 +503,15 @@ php artisan config:cache
 Upload the built installer, its `.blockmap`, and `latest.yml` into that folder.
 Full instructions are in **`documents/DESKTOP_RELEASE_CHECKLIST.md`** — read that
 before building anything.
+
+**No version number is configured anywhere.** The `/desktop-downloads` page reads
+`latest.yml` in that folder and reports whatever version and filename it names —
+so publishing a new build is an upload, never a code change. If there is no
+`latest.yml`, the page falls back to the highest-versioned installer it can see
+in the folder; if the folder is empty, the page honestly says the app is not
+available rather than offering a link that 404s. Discovery is cached for **60
+seconds**, so a freshly uploaded installer can take up to a minute to appear —
+`php artisan cache:clear` if you need it immediately.
 
 ---
 

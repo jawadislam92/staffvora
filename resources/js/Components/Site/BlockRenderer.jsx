@@ -39,7 +39,12 @@ const SECTION_BG = {
     accent: 'sec-accent',
 };
 
-export default function BlockRenderer({ blocks = [], theme, brand, plans }) {
+// Catalogues forwarded to every block. `plans` and `addons` are both LIVE
+// pricing read from the database by Site\PageController — a block must never
+// hardcode a price in its authored content, because the operator can change one
+// in the panel and the public page would then advertise a figure we could be
+// held to. Blocks that do not price anything simply ignore them.
+export default function BlockRenderer({ blocks = [], theme, brand, plans, addons }) {
     return (
         <>
             {blocks.map((block) => {
@@ -48,7 +53,7 @@ export default function BlockRenderer({ blocks = [], theme, brand, plans }) {
                 const bg = SECTION_BG[block.data?._bg];
                 return (
                     <div key={block.id} className={bg || undefined}>
-                        <Cmp data={block.data || {}} theme={theme} brand={brand} plans={plans} />
+                        <Cmp data={block.data || {}} theme={theme} brand={brand} plans={plans} addons={addons} />
                     </div>
                 );
             })}

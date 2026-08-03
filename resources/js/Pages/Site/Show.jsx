@@ -6,11 +6,11 @@ import BlockRenderer from '@/Components/Site/BlockRenderer';
  * day/night switcher, header, footer and SEO; this just renders the page's
  * blocks inside it (with the builder-effective brand so contact overrides apply).
  */
-export default function Show({ page, theme, brand, nav, plans, jsonLd, isAuthed }) {
+export default function Show({ page, theme, brand, nav, plans, addons, jsonLd, isAuthed }) {
     const eb = siteEffectiveBrand(brand, theme);
     return (
         <SiteShell brand={brand} theme={theme} nav={nav} jsonLd={jsonLd} isAuthed={isAuthed} meta={page?.meta || {}}>
-            <BlockRenderer blocks={page?.blocks || []} theme={theme} brand={eb} plans={plans} />
+            <BlockRenderer blocks={page?.blocks || []} theme={theme} brand={eb} plans={plans} addons={addons} />
         </SiteShell>
     );
 }

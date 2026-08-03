@@ -306,15 +306,32 @@ Also upload the macOS `.dmg` (and `.zip`) into the same folder if you built one.
 - [ ] macOS auto-update **will not work at all** until the app is signed and
       notarized (§5.2). Mac is manual-download-only until then.
 
-**A known mismatch to fix before the download page works** — this is in a file
-outside this task's scope, so it is listed here rather than changed:
-`app/Http/Controllers/DesktopDownloadController.php` hardcodes the installer
-filenames it will offer on the `/download` page, and they still say **0.3.4**
-(Windows) and **0.3.2/0.3.4** (macOS). A freshly built `Staffvora Desktop Setup
-0.4.6.exe` will **not** be found and the download page will show "unavailable" —
-even though auto-update, which asks for filenames by name, works fine. Someone
-must add the 0.4.6 filenames to `WINDOWS_INSTALLERS` / `MAC_INSTALLERS` and bump
-`WINDOWS_VERSION` / `MAC_VERSION`.
+**The download page needs no code change for a new release — FIXED.** It used to
+hardcode the installer filenames and version (they said 0.3.4 / 0.3.2), so a
+freshly built `Staffvora Desktop Setup 0.4.6.exe` matched nothing and the page
+reported the app as "unavailable" even though auto-update — which asks for
+filenames by name — worked fine.
+
+`DesktopDownloadController` now discovers the published release instead:
+
+1. It reads `latest.yml` (Windows) / `latest-mac.yml` (macOS) from the installer
+   folder and offers the exact file and version those manifests name. That is the
+   same file `desktop:set-active-version` writes and installed clients read, so
+   the page and the updater can never disagree about the current build.
+2. If there is no manifest, it falls back to the highest-versioned `.exe` (or
+   `.dmg`, then `-mac.zip`) actually present in the folder.
+3. If the folder is empty, it says the app is not available. It never offers a
+   link that 404s.
+
+Consequences for you:
+- **Publishing a release is an upload plus `desktop:set-active-version`. Never a
+  code edit.** No version number lives in the PHP any more.
+- Discovery is cached for 60 seconds, so a just-uploaded installer can take up to
+  a minute to show on the page. `php artisan cache:clear` skips the wait.
+- Filenames coming out of a manifest are validated exactly like the public
+  `/desktop-updates/{file}` route validates its parameter: single path segment,
+  character allow-list, extension allow-list. A manifest cannot point the
+  download button at a file outside the installer folder.
 
 **Prove the feed works, from any machine:**
 
@@ -368,8 +385,9 @@ Do not tell anyone the desktop app is available until every box is ticked.
 - [ ] `php artisan desktop:set-active-version <version>` run
 - [ ] `curl -I https://staffvora.com/desktop-updates/latest.yml` returns 200
 - [ ] `php artisan deploy:preflight` shows "Desktop app downloads" as OK
-- [ ] `DesktopDownloadController` filename list updated so `/download` offers the
-      new build (see §7)
+- [ ] Open `/desktop-downloads` signed in: it shows the **new** version number and
+      filename, and the download button works. No code change is needed for this
+      (see §7) — if it still shows the old build, wait 60s or `cache:clear`.
 
 **End-to-end on a clean PC**
 - [ ] Installs and launches; tray and window say **Staffvora Desktop**

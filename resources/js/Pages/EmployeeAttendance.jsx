@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import {
     Activity,
     CalendarDays,
@@ -389,6 +389,7 @@ export default function EmployeeAttendance({
     canEditClockTimes = false,
     canSendAttendanceSlack = false,
     slackConfigured = false,
+    hasAnyAttendance = true,
     preview = false,
 }) {
     const colorScheme = useColorScheme();
@@ -879,6 +880,84 @@ export default function EmployeeAttendance({
     const filteredTimelines = timelineData.filter(matchesSearch);
     const filteredMonthlyEmployees = monthlyGridData.employees.filter(matchesSearch);
 
+    // ── Empty workspace vs empty filter ──────────────────────────────────────
+    //
+    // Every tab used to say some version of "no records — nobody matches the
+    // selected month and search", which reads as an accusation on a workspace
+    // that has simply never clocked in. Three genuinely different situations
+    // hide behind one empty list, and each gets its own answer:
+    //
+    //   1. the workspace has never recorded a punch  (`hasAnyAttendance`, one
+    //      server-side EXISTS — the AJAX tabs only ever see one day/month, so
+    //      they cannot work this out for themselves);
+    //   2. it has punches, just not on the day/month in view;
+    //   3. it has rows in view and the SEARCH/STATUS box hid them — the only
+    //      case where the customer really did filter something out.
+    //
+    // Case 3 is decided purely on what is already in memory (raw rows present,
+    // filtered rows absent), so it costs nothing.
+    const workspaceHasAttendance = preview ? true : hasAnyAttendance;
+    const searchActive = normalizedSearch !== '';
+    const statusActive = filterStatus !== 'all';
+
+    const clearViewFilters = () => {
+        setSearchQuery('');
+        setFilterStatus('all');
+    };
+
+    const filterNames = [
+        searchActive ? `“${searchQuery.trim()}”` : null,
+        statusActive ? `status “${filterStatus}”` : null,
+    ].filter(Boolean).join(' and ');
+
+    /**
+     * One empty state for all four tabs.
+     *
+     * @param rawCount   rows the server returned before the in-page filters
+     * @param filtersOn  whether a search/status filter is currently narrowing them
+     * @param icon       tab icon
+     * @param firstRun   {title, description} for a workspace with no attendance at all
+     * @param quiet      {title, description} for a day/month that simply has none
+     */
+    const renderAttendanceEmpty = ({ rawCount, filtersOn, icon, firstRun, quiet }) => {
+        if (rawCount > 0 && filtersOn) {
+            return (
+                <EmptyState
+                    icon={icon}
+                    title="Nothing matches your search"
+                    description={`${rawCount} ${rawCount === 1 ? 'person is' : 'people are'} recorded here, but none match ${filterNames}.`}
+                    action={(
+                        <Button variant="secondary" size="sm" onClick={clearViewFilters}>
+                            Clear search
+                        </Button>
+                    )}
+                />
+            );
+        }
+
+        if (!workspaceHasAttendance) {
+            return (
+                <EmptyState
+                    icon={icon}
+                    title={firstRun.title}
+                    description={firstRun.description}
+                    action={(
+                        <Button
+                            as={Link}
+                            variant="secondary"
+                            size="sm"
+                            href={preview ? '#' : route('desktop-downloads.index')}
+                        >
+                            Get the desktop app
+                        </Button>
+                    )}
+                />
+            );
+        }
+
+        return <EmptyState icon={icon} title={quiet.title} description={quiet.description} />;
+    };
+
     const summaryMetrics = useMemo(() => {
         if (activeTab === 'monthly') {
             const totals = monthlyGridData.employees.reduce((carry, employee) => {
@@ -1049,13 +1128,19 @@ export default function EmployeeAttendance({
                         <>
                             {activeTab === 'monthly' && (
                                 filteredMonthlyEmployees.length === 0
-                                    ? (
-                                        <EmptyState
-                                            icon={<Users className="h-5 w-5" />}
-                                            title="No attendance records for this period"
-                                            description="No employees match the selected month and search."
-                                        />
-                                    )
+                                    ? renderAttendanceEmpty({
+                                        rawCount: monthlyGridData.employees.length,
+                                        filtersOn: searchActive,
+                                        icon: <Users className="h-5 w-5" />,
+                                        firstRun: {
+                                            title: 'No attendance recorded yet',
+                                            description: 'This grid gives you a month at a glance — one row per person, one column per day, present / absent / leave marked automatically from their clock-ins. It fills as your team starts using the tracker.',
+                                        },
+                                        quiet: {
+                                            title: `Nobody has attendance in ${selectedMonth}`,
+                                            description: 'Your team has attendance on record, just not in this month. Pick another month above.',
+                                        },
+                                    })
                                     : (
                                         <MonthlyAttendanceGrid
                                             days={monthlyGridData.days}
@@ -1072,13 +1157,19 @@ export default function EmployeeAttendance({
 
                             {activeTab === 'summary' && (
                                 filteredEmployees.length === 0
-                                    ? (
-                                        <EmptyState
-                                            icon={<Users className="h-5 w-5" />}
-                                            title="No attendance records for this period"
-                                            description="No employees match the selected date and filters."
-                                        />
-                                    )
+                                    ? renderAttendanceEmpty({
+                                        rawCount: employeesData.length,
+                                        filtersOn: searchActive || statusActive,
+                                        icon: <Users className="h-5 w-5" />,
+                                        firstRun: {
+                                            title: 'Nobody has clocked in yet',
+                                            description: "This is today's roll call — who is working, who is on break, hours in the office versus hours actually tracked. The first clock-in is what switches it on.",
+                                        },
+                                        quiet: {
+                                            title: `Nobody clocked in on ${selectedDate}`,
+                                            description: 'Your team has attendance on record, just none for this day — a weekend, a holiday, or a date before they started. Choose another date above.',
+                                        },
+                                    })
                                     : (
                                         <Table>
                                             <THead>
@@ -1130,13 +1221,19 @@ export default function EmployeeAttendance({
 
                             {activeTab === 'detailed' && (
                                 filteredActivities.length === 0
-                                    ? (
-                                        <EmptyState
-                                            icon={<List className="h-5 w-5" />}
-                                            title="No activity records for this period"
-                                            description="No activity matches the selected date and search."
-                                        />
-                                    )
+                                    ? renderAttendanceEmpty({
+                                        rawCount: detailedActivityData.length,
+                                        filtersOn: searchActive,
+                                        icon: <List className="h-5 w-5" />,
+                                        firstRun: {
+                                            title: 'No punches recorded yet',
+                                            description: 'This tab lists every clock-in, break and clock-out as it happened, in order — the detail behind the summary, and what you check when a day looks wrong.',
+                                        },
+                                        quiet: {
+                                            title: `No punches on ${selectedDate}`,
+                                            description: 'There are punches on other days, just none on this one. Choose another date above.',
+                                        },
+                                    })
                                     : (
                                         <AccordionList
                                             items={filteredActivities}
@@ -1169,13 +1266,19 @@ export default function EmployeeAttendance({
 
                             {activeTab === 'timeline' && (
                                 filteredTimelines.length === 0
-                                    ? (
-                                        <EmptyState
-                                            icon={<Timer className="h-5 w-5" />}
-                                            title="No timeline records for this period"
-                                            description="No sessions match the selected date and search."
-                                        />
-                                    )
+                                    ? renderAttendanceEmpty({
+                                        rawCount: timelineData.length,
+                                        filtersOn: searchActive,
+                                        icon: <Timer className="h-5 w-5" />,
+                                        firstRun: {
+                                            title: 'No work sessions yet',
+                                            description: 'This tab replays a day as blocks of work and break, so you can see how someone actually spent it rather than just the total. It draws itself from the first clock-in onwards.',
+                                        },
+                                        quiet: {
+                                            title: `No sessions on ${selectedDate}`,
+                                            description: 'There are sessions on other days, just none on this one. Choose another date above.',
+                                        },
+                                    })
                                     : (
                                         <AccordionList
                                             items={filteredTimelines}

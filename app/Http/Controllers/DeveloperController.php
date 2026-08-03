@@ -552,11 +552,20 @@ class DeveloperController extends Controller
     /** @return array{0: string, 1: string} */
     private function runOptimize(): array
     {
-        // IMPORTANT: do NOT run `optimize` / `route:cache` here. This app has
-        // closure-based routes (the welcome page and avatar streamer) that
-        // cannot be route-cached — a cached route file 500s the whole site.
-        // Cache only config + views + events, which are safe and give the
-        // real boot-time win.
+        // Route caching is skipped here, but NOT for the reason this comment
+        // used to give. The old claim — "the welcome page and avatar streamer
+        // are closures that cannot be route-cached" — is no longer true: those
+        // routes are gone, `php artisan route:cache` succeeds against the
+        // current tree, and the deploy runbook now recommends
+        // `php artisan optimize` in production on that evidence.
+        //
+        // What IS still true is local-specific, which is all this console ever
+        // runs on: routes/web.php registers the `/_*` design previews as
+        // closures inside an app()->environment('local') guard. Locally those
+        // closures are registered and would fail to serialise; in production
+        // they are never registered at all. Config + views + events are safe
+        // in both and carry the real boot-time win.
+        //
         // Never bake caches from inside the test environment — leftover
         // bootstrap/cache files poison later test runs.
         if (app()->runningUnitTests()) {
@@ -570,7 +579,7 @@ class DeveloperController extends Controller
         }
 
         return [
-            'Caches built (config, views, events). Route cache is intentionally skipped — this app uses closure routes that cannot be route-cached. Run "Clear caches" before php artisan test.',
+            'Caches built (config, views, events). Route cache is skipped because the local-only /_* design previews are closures; on the server the deploy runbook runs php artisan optimize, which does cache routes. Run "Clear caches" before php artisan test.',
             implode("\n", array_filter($out)),
         ];
     }

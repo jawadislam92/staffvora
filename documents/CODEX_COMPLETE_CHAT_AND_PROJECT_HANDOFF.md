@@ -247,6 +247,16 @@ display timezone (default Asia/Karachi = PKT) and 12/24-hour format:
 
 ## CRITICAL OPS RULE: never route:cache / optimize this app (2026-06-11)
 
+> **SUPERSEDED 2026-08 — do not follow this rule.** The two closure routes it is
+> about are gone: `/` is served by the marketing site controller and avatars by a
+> controller action. The only closures left in `routes/web.php` are the `/_*`
+> design-preview routes, and they are registered inside an
+> `app()->environment('local')` guard, so they do not exist in a production route
+> cache at all. `APP_ENV=production php artisan route:cache` was re-run against
+> the current tree and succeeded. **`php artisan optimize` is now the documented
+> deploy step** — see §6.5 and §7 of `documents/PRODUCTION_DEPLOYMENT.md`. The
+> incident below was real; the code that caused it is not. Kept for the record.
+
 `routes/web.php` contains CLOSURE routes (the `/` welcome page and the
 `/storage/avatars/{filename}` streamer). `php artisan route:cache` serializes
 these and the cached route file then 500s the ENTIRE site. Confirmed in
@@ -462,8 +472,10 @@ Steps:
    u406855808@31.170.164.232:desktop-installers/`
    (password auth; Jawad has it. Or use hPanel File Manager -> upload into the
    `desktop-installers` folder in the account home.)
-   The web /desktop-downloads page detects the file automatically — the
-   accepted filenames are listed in DesktopDownloadController::MAC_INSTALLERS.
+   The web /desktop-downloads page detects the file automatically.
+   (CORRECTION, 2026-08: there is no longer a MAC_INSTALLERS list. The page
+   reads latest-mac.yml, or failing that the highest-versioned .dmg/.zip in the
+   folder — any correctly named build is picked up with no code change.)
 9. Verify the macOS card on https://timetracker.sparkingasia.com/desktop-downloads
    shows the download and the sha256.
 

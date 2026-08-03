@@ -119,6 +119,170 @@ class User extends Authenticatable
         'member' => 'Member',
     ];
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // DEMO IDENTITIES — the sample-data marker, and why it is UNFORGEABLE
+    // ─────────────────────────────────────────────────────────────────────────
+    //
+    // Sample-data teammates ({@see \App\Services\DemoDataService}) are real
+    // `users` rows, so without help they occupy plan seats and a loaded demo
+    // could block a real hire. Seat checks therefore EXCLUDE them
+    // ({@see seatUsage()}).
+    //
+    // That exclusion is a plan-limit bypass, i.e. an abuse surface: if a
+    // customer could mint a user whose address matches the marker, they would
+    // mint themselves unlimited free seats. So the marker is closed at the
+    // MODEL layer, not at any one controller — every write path (admin create,
+    // onboarding invite, self-registration, profile e-mail change, console
+    // command, factory, mass assignment) goes through Eloquent's creating /
+    // updating events, and all of them are refused here. The ONLY way to write
+    // one is {@see asDemoIdentityWriter()}, which is server-side code with no
+    // request-reachable entry point.
+    //
+    // The address shape is `demo-<orgId>-<n>@demo.staffvora.invalid`. `.invalid`
+    // is reserved by RFC 2606 and can never be delivered to or registered, so
+    // refusing it costs no real customer anything.
+
+    /** RFC 2606 reserved domain. Canonical home of the marker. */
+    public const DEMO_EMAIL_DOMAIN = 'demo.staffvora.invalid';
+
+    /** Left-anchored prefix, so the marker query can use the e-mail index. */
+    public const DEMO_EMAIL_PREFIX = 'demo-';
+
+    /**
+     * True only while DemoDataService is writing its own rows. Never set from a
+     * request path; always restored in a finally block.
+     */
+    private static bool $demoIdentityWrites = false;
+
+    /**
+     * Run $callback with permission to write demo-identity e-mails. The ONLY
+     * legitimate caller is DemoDataService. Restores the guard even if the
+     * callback throws, so one failed load cannot leave the door open for the
+     * rest of the process (queue workers are long-lived).
+     *
+     * @template TReturn
+     *
+     * @param  callable(): TReturn  $callback
+     * @return TReturn
+     */
+    public static function asDemoIdentityWriter(callable $callback)
+    {
+        $previous = self::$demoIdentityWrites;
+        self::$demoIdentityWrites = true;
+
+        try {
+            return $callback();
+        } finally {
+            self::$demoIdentityWrites = $previous;
+        }
+    }
+
+    /**
+     * Does this address claim to be sample data? Matched on the exact shape the
+     * service mints, because this is the predicate the SEAT EXCLUSION keys on —
+     * it must describe precisely the rows that are excluded, no more.
+     */
+    public static function isDemoIdentityEmail(?string $email): bool
+    {
+        if (! is_string($email) || $email === '') {
+            return false;
+        }
+
+        return (bool) preg_match(
+            '/^'.preg_quote(self::DEMO_EMAIL_PREFIX, '/').'\d+-\d+@'.preg_quote(self::DEMO_EMAIL_DOMAIN, '/').'$/i',
+            trim($email)
+        );
+    }
+
+    /**
+     * Is this anywhere in the reserved domain? Deliberately BROADER than
+     * {@see isDemoIdentityEmail}: what gets refused is the whole namespace, so
+     * there is no near-miss address a customer can probe with, and no way to
+     * squat on one the service might mint later. RFC 2606 guarantees no real
+     * person can be reached at `.invalid`, so nothing legitimate is lost.
+     */
+    public static function isReservedDemoEmail(?string $email): bool
+    {
+        if (! is_string($email) || $email === '') {
+            return false;
+        }
+
+        return str_ends_with(strtolower(trim($email)), '@'.self::DEMO_EMAIL_DOMAIN);
+    }
+
+    /**
+     * Validation rule for any customer-supplied e-mail address. The model guard
+     * below is the floor that cannot be bypassed; this exists so the common
+     * paths answer with a readable form error instead of an exception.
+     */
+    public static function reservedEmailRule(): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail): void {
+            if (self::isReservedDemoEmail(is_string($value) ? $value : null)) {
+                $fail('That domain is reserved for Staffvora sample data. Please use a real email address.');
+            }
+        };
+    }
+
+    /**
+     * Refuse any attempt to create or rename a user into the reserved demo
+     * namespace. This is what makes the seat exclusion safe to rely on.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (self $user): void {
+            $user->guardDemoIdentity();
+        });
+
+        static::updating(function (self $user): void {
+            if ($user->isDirty('email')) {
+                $user->guardDemoIdentity();
+            }
+        });
+    }
+
+    private function guardDemoIdentity(): void
+    {
+        if (self::$demoIdentityWrites || ! self::isReservedDemoEmail($this->email)) {
+            return;
+        }
+
+        throw new \RuntimeException(
+            'The '.self::DEMO_EMAIL_DOMAIN.' address space is reserved for sample data and cannot be assigned.'
+        );
+    }
+
+    /** Sample-data teammates in the current organization. */
+    public function scopeDemoIdentities($query)
+    {
+        return $query
+            ->where('email', 'like', self::DEMO_EMAIL_PREFIX.'%')
+            ->where('email', 'like', '%@'.self::DEMO_EMAIL_DOMAIN);
+    }
+
+    /** Everyone except sample-data teammates. */
+    public function scopeExcludingDemoIdentities($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('email', 'not like', self::DEMO_EMAIL_PREFIX.'%')
+                ->orWhere('email', 'not like', '%@'.self::DEMO_EMAIL_DOMAIN);
+        });
+    }
+
+    /**
+     * Seats consumed in the current organization — the ONE number every plan
+     * seat check must use. Sample-data teammates are excluded so loading a demo
+     * can never block a real hire; see the note above for why that exclusion
+     * cannot be forged.
+     *
+     * Org-scoped by OrganizationScope, so the `not like` runs over one tenant's
+     * roster (~100 rows), never the whole users table.
+     */
+    public static function seatUsage(): int
+    {
+        return static::query()->excludingDemoIdentities()->count();
+    }
+
     public function isSuperAdmin(): bool
     {
         return $this->role === 'super_admin';
