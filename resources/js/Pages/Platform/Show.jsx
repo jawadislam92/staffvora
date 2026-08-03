@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { ArrowLeft, Clock, Info, Layers, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, CalendarClock, CircleDollarSign, Clock, Info, Layers, Plus, ShieldCheck, Trash2, Users } from 'lucide-react';
 import PlatformLayout, { PlatformPageHeader } from '@/Layouts/PlatformLayout';
 import {
-    Button, Card, StatCard, Badge, Table, THead, TBody, Tr, Th, Td,
+    Button, Card, KpiCard, Badge, Table, THead, TBody, Tr, Th, Td,
     Field, Input, Select, Tabs, EmptyState,
 } from '@/Components/ui';
 import Modal from '@/Components/Modal';
@@ -191,18 +191,27 @@ export default function PlatformShow({ organization, subscription, plans, paymen
                     <ArrowLeft className="h-4 w-4" /> All tenants
                 </Link>
 
+                {/* Headline KPI row — value-only KpiCards (same data as before,
+                    no fabricated deltas/series). Contract accents: people → 3,
+                    money → 5, trial/pending → 4. The Status tile keeps the
+                    tenant-state as a status Badge (state stays a status token,
+                    never a viz slot); its card wears the org-identity blue. */}
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                    <StatCard label="Users" value={org.users} hint={sub ? sub.plan_name + ' plan' : 'No plan'} />
-                    <StatCard
+                    <KpiCard accent={3} icon={<Users size={18} />} label="Users" value={org.users} sub={sub ? sub.plan_name + ' plan' : 'No plan'} />
+                    <KpiCard
+                        accent={5}
+                        icon={<CircleDollarSign size={18} />}
                         label="You charge"
                         value={org.effective_price_cents != null ? money(org.effective_price_cents, org.currency) : '—'}
-                        hint={org.discount_percent ? `${org.discount_percent}% off list` : 'per month'}
+                        sub={org.discount_percent ? `${org.discount_percent}% off list` : 'per month'}
                     />
-                    <StatCard
+                    <KpiCard
+                        accent={3}
+                        icon={<ShieldCheck size={18} />}
                         label="Status"
                         value={<Badge tone={STATUS_TONE[org.status] || 'neutral'} size="md" dot>{STATUS_LABEL[org.status] || org.status}</Badge>}
                     />
-                    <StatCard label="Trial ends" value={org.trial_ends_at || '—'} />
+                    <KpiCard accent={4} icon={<CalendarClock size={18} />} label="Trial ends" value={org.trial_ends_at || '—'} />
                 </div>
 
                 <Tabs tabs={tabs} value={tab} onChange={setTab} />

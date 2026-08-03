@@ -7,6 +7,7 @@ import {
     Card,
     Badge,
     StatCard,
+    KpiCard,
     Table,
     THead,
     TBody,
@@ -317,11 +318,17 @@ export default function Index({ auth, profiles, status = 'all', preview = false 
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <StatCard
+                    {/* Profiles are a people-shaped count → slot 3 (blue) per the
+                        cross-page contract. Active / Archived are TRUE lifecycle
+                        state (the same success / neutral the row badges wear), so
+                        they stay on the status-neutral StatCard rather than
+                        borrowing a decorative viz hue. */}
+                    <KpiCard
+                        accent={3}
                         label="Profiles"
                         value={list.length}
-                        icon={<Users className="h-5 w-5" />}
-                        hint="Total profiles in your workspace"
+                        icon={<Users className="h-[18px] w-[18px]" />}
+                        sub="Total profiles in your workspace"
                     />
                     <StatCard
                         label="Active"

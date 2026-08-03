@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { CalendarClock, Clock, Info, Trash2 } from 'lucide-react';
+import { CalendarClock, Clock, Hourglass, Info, Timer, Trash2 } from 'lucide-react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import {
     Badge,
@@ -10,7 +10,7 @@ import {
     EmptyState,
     Field,
     Input,
-    StatCard,
+    KpiCard,
 } from '@/Components/ui';
 
 // "08:00" -> "8:00 AM"
@@ -137,19 +137,32 @@ export default function MySchedule({
                     </div>
                 )}
 
-                {/* Standing shift */}
+                {/* Standing shift — contract accents: time/duration=1 (violet),
+                    grace=leniency window → 4 (amber), named shift=special → 5 (pink) */}
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <StatCard
+                    <KpiCard
+                        accent={1}
                         label="Standing start"
                         value={standingStart || 'Not set'}
-                        icon={<Clock className="h-5 w-5" />}
+                        icon={<Clock className="h-[18px] w-[18px]" />}
                     />
-                    <StatCard label="Shift length" value={standingLength || '—'} />
-                    <StatCard label="Grace period" value={`${standingShift.grace_minutes ?? 0} min`} />
-                    <StatCard
+                    <KpiCard
+                        accent={1}
+                        label="Shift length"
+                        value={standingLength || '—'}
+                        icon={<Timer className="h-[18px] w-[18px]" />}
+                    />
+                    <KpiCard
+                        accent={4}
+                        label="Grace period"
+                        value={`${standingShift.grace_minutes ?? 0} min`}
+                        icon={<Hourglass className="h-[18px] w-[18px]" />}
+                    />
+                    <KpiCard
+                        accent={5}
                         label="Named shift"
                         value={standingShift.name || 'None'}
-                        icon={<CalendarClock className="h-5 w-5" />}
+                        icon={<CalendarClock className="h-[18px] w-[18px]" />}
                     />
                 </div>
 

@@ -6,7 +6,7 @@ import {
     Button,
     Card,
     Badge,
-    StatCard,
+    KpiCard,
     Field,
     Input,
     EmptyState,
@@ -250,18 +250,21 @@ export default function TeamsIndex({ auth, teams, canManage, preview = false }) 
                     )}
                 </div>
 
+                {/* Both tiles are people/groups → slot 3 (blue), per the contract. */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <StatCard
+                    <KpiCard
+                        accent={3}
                         label="Teams"
                         value={list.length}
-                        icon={<UsersRound className="h-5 w-5" />}
-                        hint="Active groups in your organization"
+                        icon={<UsersRound className="h-[18px] w-[18px]" />}
+                        sub="Active groups in your organization"
                     />
-                    <StatCard
+                    <KpiCard
+                        accent={3}
                         label="Assigned members"
                         value={totalMembers}
-                        icon={<Users className="h-5 w-5" />}
-                        hint="People across all teams"
+                        icon={<Users className="h-[18px] w-[18px]" />}
+                        sub="People across all teams"
                     />
                 </div>
 

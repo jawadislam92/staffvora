@@ -7,7 +7,7 @@ import {
     Card,
     CardHeader,
     Badge,
-    StatCard,
+    KpiCard,
     Table,
     THead,
     TBody,
@@ -21,7 +21,7 @@ import {
     Skeleton,
     Tabs,
 } from '@/Components/ui';
-import { TrendChart, ActivityStrip, RankedBars, Gauge } from '@/Components/charts';
+import { TrendChart, ActivityStrip, Gauge, GradientBar } from '@/Components/charts';
 import {
     Activity,
     Clock,
@@ -37,6 +37,13 @@ import {
 } from 'lucide-react';
 
 const cx = (...a) => a.filter(Boolean).join(' ');
+
+// Same concept, same colour, on every page: the dashboard's time-breakdown
+// donut wears tracked=green (2), manual=blue (3), idle=amber (4), and this
+// ribbon shows the same concepts, so it must agree. "Unfilled vs target"
+// deliberately gets no accent — it is an absence, not an entity, and stays on
+// the neutral tone class.
+const RIBBON_ACCENTS = { tracked: 2, manual: 3, idle: 4 };
 
 /**
  * INSIGHTS v1 — the management read of tracked time.
@@ -413,6 +420,21 @@ export default function InsightsIndex({
         [categories]
     );
 
+    // GradientBar slot per category — color follows the ENTITY, not its rank:
+    // slots are assigned in fixed (alphabetical) order over the displayed set
+    // (the Dashboard's top-projects precedent), so two categories swapping rank
+    // between ranges keep their colors. Slots are never cycled past 5 — any
+    // extra categories (list is capped at 8) wear the neutral subtle token.
+    const categorySlots = useMemo(() => {
+        const names = categoryBars
+            .map((c) => c.label)
+            .slice()
+            .sort((a, b) => String(a).localeCompare(String(b)));
+        const map = new Map();
+        names.forEach((name, i) => map.set(name, i < 5 ? i + 1 : null));
+        return map;
+    }, [categoryBars]);
+
     const billableSplit = useMemo(() => {
         const billable = Number(totals?.billable_hours) || 0;
         const nonBillable = Number(totals?.non_billable_hours) || 0;
@@ -544,39 +566,49 @@ export default function InsightsIndex({
                     </Card>
                 ) : (
                     <>
-                        {/* ── Headline numbers ─────────────────────────────── */}
+                        {/* ── Headline numbers ─────────────────────────────────
+                            KpiCards on the cross-page color contract:
+                            worked hours → slot 1 (time), utilization vs target
+                            → slot 3 (people against their own shift), activity
+                            → slot 2 (activity/rates), billable → slot 5 (money).
+                            Value-only: the props carry no per-KPI series or
+                            deltas, and we never invent one client-side. */}
                         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                            <StatCard
+                            <KpiCard
+                                accent={1}
                                 label="Worked"
                                 value={fmtHours(totals.worked_hours)}
                                 icon={<Clock size={18} />}
-                                hint={`${fmtHours(totals.tracked_hours)} tracked · ${fmtHours(totals.manual_hours)} manual`}
+                                sub={`${fmtHours(totals.tracked_hours)} tracked · ${fmtHours(totals.manual_hours)} manual`}
                             />
-                            <StatCard
+                            <KpiCard
+                                accent={3}
                                 label="Utilization vs target"
                                 value={totals.utilization === null ? 'No target set' : fmtPct(totals.utilization, 1)}
                                 icon={<Target size={18} />}
-                                hint={
+                                sub={
                                     totals.utilization === null
                                         ? 'Set shift hours to measure this'
                                         : `${fmtHours(totals.target_hours)} target across ${totals.people_with_target} ${totals.people_with_target === 1 ? 'person' : 'people'}`
                                 }
                             />
-                            <StatCard
+                            <KpiCard
+                                accent={2}
                                 label="Activity"
                                 value={totals.activity_percent === null ? 'Not tracked' : fmtPct(totals.activity_percent)}
                                 icon={<Activity size={18} />}
-                                hint={
+                                sub={
                                     totals.activity_percent === null
                                         ? 'No desktop tracker sessions in range'
                                         : `Across ${fmtHours(totals.tracked_hours)} of tracked time`
                                 }
                             />
-                            <StatCard
+                            <KpiCard
+                                accent={5}
                                 label="Billable share"
                                 value={fmtPct(totals.billable_ratio, 1)}
                                 icon={<Wallet size={18} />}
-                                hint={`${fmtHours(totals.billable_hours)} billable · ${fmtHours(totals.non_billable_hours)} not`}
+                                sub={`${fmtHours(totals.billable_hours)} billable · ${fmtHours(totals.non_billable_hours)} not`}
                             />
                         </div>
 
@@ -615,7 +647,7 @@ export default function InsightsIndex({
                                 description={`Daily total across the range${trendAvg ? ` · ${fmtHours(trendAvg)} average on days with work` : ''}`}
                                 actions={<TrendingUp size={16} className="text-muted" />}
                             >
-                                <TrendChart data={trendPoints} avg={trendAvg} height={260} />
+                                <TrendChart data={trendPoints} avg={trendAvg} height={260} gradientFill glow />
                             </Card>
                         </div>
 
@@ -628,7 +660,14 @@ export default function InsightsIndex({
                             >
                                 {ribbon.length > 0 ? (
                                     <>
-                                        <ActivityStrip segments={ribbon} hours={false} />
+                                        <ActivityStrip
+                                            segments={ribbon.map((s) => ({
+                                                ...s,
+                                                accent: RIBBON_ACCENTS[s.tone] ?? null,
+                                            }))}
+                                            hours={false}
+                                            glow
+                                        />
                                         <p className="mt-4 text-xs text-muted">
                                             Active and low-input split tracked hours by their measured activity score.
                                             Manual hours are shown separately because they carry no activity signal at
@@ -705,7 +744,52 @@ export default function InsightsIndex({
                                 description="What the time was actually spent on"
                             >
                                 {categoryBars.length > 0 ? (
-                                    <RankedBars items={categoryBars} />
+                                    <div className="space-y-4">
+                                        {categoryBars.map((bar) => {
+                                            const slot = categorySlots.get(bar.label);
+                                            return (
+                                                <div key={bar.label}>
+                                                    {slot ? (
+                                                        <GradientBar
+                                                            accent={slot}
+                                                            label={bar.label}
+                                                            pct={bar.pct}
+                                                            count={bar.value}
+                                                        />
+                                                    ) : (
+                                                        /* Past the 5 categorical slots: same bar anatomy,
+                                                           neutral subtle fill — slots are never cycled. */
+                                                        <div className="flex flex-col gap-1.5">
+                                                            <div className="flex items-baseline justify-between gap-3 text-xs">
+                                                                <span className="text-body truncate">{bar.label}</span>
+                                                                <span className="text-muted tabular-nums shrink-0">
+                                                                    {`${Math.round(bar.pct * 10) / 10}% (${bar.value})`}
+                                                                </span>
+                                                            </div>
+                                                            <div
+                                                                className="h-[10px] w-full rounded-full bg-surface-2 overflow-hidden"
+                                                                role="progressbar"
+                                                                aria-valuenow={Math.round(bar.pct * 10) / 10}
+                                                                aria-valuemin={0}
+                                                                aria-valuemax={100}
+                                                            >
+                                                                <div
+                                                                    className="h-full rounded-full"
+                                                                    style={{
+                                                                        width: `${Math.min(100, Math.max(0, bar.pct))}%`,
+                                                                        backgroundColor: 'var(--text-subtle)',
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    {bar.meta ? (
+                                                        <div className="mt-1.5 text-[11px] text-subtle">{bar.meta}</div>
+                                                    ) : null}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 ) : (
                                     <EmptyState
                                         title="No categories yet"

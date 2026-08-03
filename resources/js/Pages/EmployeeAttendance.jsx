@@ -37,7 +37,7 @@ import {
     Input,
     Select,
     Skeleton,
-    StatCard,
+    KpiCard,
     Table,
     TBody,
     Td,
@@ -968,11 +968,16 @@ export default function EmployeeAttendance({
                 return carry;
             }, { present: 0, absent: 0, leave: 0, hours: 0 });
 
+            // Contract accents: attendance-present = people → 3 (blue),
+            // hours → 1 (violet). Absent/Leave are TRUE STATUS concepts, so
+            // their chips stay a neutral amber (4) — never a viz identity hue —
+            // and the values stay text-body; the real status colors live in the
+            // grid chips + legend below.
             return [
-                { label: 'Present Days', value: totals.present, icon: PlayCircle },
-                { label: 'Absent Days', value: totals.absent, icon: Square },
-                { label: 'Leave Days', value: totals.leave, icon: Coffee },
-                { label: 'Month Hours', value: formatHours(totals.hours), icon: Timer },
+                { label: 'Present Days', value: totals.present, icon: PlayCircle, accent: 3 },
+                { label: 'Absent Days', value: totals.absent, icon: Square, accent: 4 },
+                { label: 'Leave Days', value: totals.leave, icon: Coffee, accent: 4 },
+                { label: 'Month Hours', value: formatHours(totals.hours), icon: Timer, accent: 1 },
             ];
         }
 
@@ -980,11 +985,14 @@ export default function EmployeeAttendance({
         const onBreak = employeesData.filter((employee) => employee.current_status === 'On Break').length;
         const clockedOut = employeesData.filter((employee) => employee.current_status === 'Clocked Out').length;
         const workHours = employeesData.reduce((sum, employee) => sum + Number(employee.total_work_hours || 0), 0);
+        // Active = people working now → 3 (blue), breaks → 4 (amber),
+        // hours → 1 (violet). Clocked Out is a state count — amber-neutral
+        // chip, the per-person status Badge below carries the true tone.
         return [
-            { label: 'Active', value: working, icon: PlayCircle },
-            { label: 'On Break', value: onBreak, icon: Coffee },
-            { label: 'Clocked Out', value: clockedOut, icon: Square },
-            { label: 'Team Hours', value: formatHours(workHours), icon: Timer },
+            { label: 'Active', value: working, icon: PlayCircle, accent: 3 },
+            { label: 'On Break', value: onBreak, icon: Coffee, accent: 4 },
+            { label: 'Clocked Out', value: clockedOut, icon: Square, accent: 4 },
+            { label: 'Team Hours', value: formatHours(workHours), icon: Timer, accent: 1 },
         ];
     }, [activeTab, employeesData, monthlyGridData.employees]);
 
@@ -1069,11 +1077,12 @@ export default function EmployeeAttendance({
                     {summaryMetrics.map((metric) => {
                         const Icon = metric.icon;
                         return (
-                            <StatCard
+                            <KpiCard
                                 key={metric.label}
+                                accent={metric.accent}
                                 label={metric.label}
                                 value={metric.value}
-                                icon={<Icon className="h-5 w-5" />}
+                                icon={<Icon className="h-[18px] w-[18px]" />}
                             />
                         );
                     })}

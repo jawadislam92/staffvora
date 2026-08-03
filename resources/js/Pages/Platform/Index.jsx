@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 import PlatformLayout, { PlatformPageHeader } from '@/Layouts/PlatformLayout';
-import { Button, Card, Badge, StatCard, Table, THead, TBody, Tr, Th, Td, Field, Input, Select, EmptyState } from '@/Components/ui';
+import { Button, Card, Badge, KpiCard, Table, THead, TBody, Tr, Th, Td, Field, Input, Select, EmptyState } from '@/Components/ui';
 import Modal from '@/Components/Modal';
-import { History, Layers, Tags } from 'lucide-react';
+import { Activity, Building2, History, Layers, PauseCircle, Tags, Timer } from 'lucide-react';
 import { rt } from './entitlementUi';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -121,11 +121,16 @@ export default function PlatformIndex({ organizations, pagination, filters, plan
             <Head title="Tenants" />
 
             <div className="w-full space-y-6">
+                {/* Headline KPI row — value-only KpiCards (the payload carries no
+                    series or deltas; nothing is fabricated). Contract accents:
+                    orgs → 3 (blue), good-standing → 2 (green), trials/pending →
+                    4 (amber), suspended → 5 (the special/exception set). The
+                    tenant-STATE indicators in the table stay status Badges. */}
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <StatCard label="Tenants" value={data.stats?.tenants ?? 0} />
-                    <StatCard label="Active" value={data.stats?.active ?? 0} />
-                    <StatCard label="Trialing" value={data.stats?.trialing ?? 0} />
-                    <StatCard label="Suspended" value={data.stats?.suspended ?? 0} />
+                    <KpiCard accent={3} icon={<Building2 size={18} />} label="Tenants" value={data.stats?.tenants ?? 0} />
+                    <KpiCard accent={2} icon={<Activity size={18} />} label="Active" value={data.stats?.active ?? 0} />
+                    <KpiCard accent={4} icon={<Timer size={18} />} label="Trialing" value={data.stats?.trialing ?? 0} />
+                    <KpiCard accent={5} icon={<PauseCircle size={18} />} label="Suspended" value={data.stats?.suspended ?? 0} />
                 </div>
 
                 <Card padded={false}>

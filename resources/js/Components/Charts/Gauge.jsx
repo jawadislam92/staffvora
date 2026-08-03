@@ -1,7 +1,10 @@
 import React from "react";
 import { EmptyState } from "@/Components/ui";
+import { useThemeName, themeAllowsGlow } from "./theme";
 
 const cx = (...a) => a.filter(Boolean).join(" ");
+
+const clampSlot = (n) => Math.min(5, Math.max(1, Number(n) || 1));
 
 /**
  * Gauge — a semicircular arc dial for a single 0..100 reading (activity,
@@ -25,6 +28,12 @@ const cx = (...a) => a.filter(Boolean).join(" ");
  *                             Colour bands, ascending by `from`. The value takes
  *                             the tone of the highest band it reaches.
  * - thresholds {number[]}     Tick marks drawn on the track (0..100).
+ * - accent     {1..5}         Paint the value sweep from the categorical --viz
+ *                             slot instead of the semantic band tone. Additive:
+ *                             omitted → legacy band coloring, unchanged.
+ * - glow       {bool}         Soft halo around the value sweep in its own
+ *                             color. Dark/black themes only — light stays
+ *                             crisp. Default false (legacy).
  * - size       {number}       Width in px of the drawing box. Default 220.
  * - caption    {node}         Small explanatory line under the label.
  * - emptyTitle {string}       Heading for the no-data state.
@@ -54,6 +63,8 @@ export default function Gauge({
   unit = "%",
   bands = DEFAULT_BANDS,
   thresholds = [],
+  accent,
+  glow = false,
   size = 220,
   caption,
   emptyTitle = "No reading yet",
@@ -61,6 +72,9 @@ export default function Gauge({
   className,
   ...rest
 }) {
+  // Hook before any early return (rules of hooks) — the no-data state must not
+  // change the hook order between renders.
+  const theme = useThemeName();
   const hasValue = typeof value === "number" && !Number.isNaN(value);
 
   if (!hasValue) {
@@ -99,6 +113,19 @@ export default function Gauge({
     sorted[0] || { tone: "accent" }
   );
   const toneClass = TONE_STROKE[band.tone] || TONE_STROKE.accent;
+
+  // Categorical accent (additive): the sweep wears the --viz slot instead of
+  // the band tone. Glow is dark/black-only, in the sweep's own color either way.
+  const hasAccent = accent != null;
+  const drawGlow = glow && themeAllowsGlow(theme);
+  const sweepClass = hasAccent ? undefined : toneClass;
+  const sweepStyle =
+    hasAccent || drawGlow
+      ? {
+          ...(hasAccent ? { color: `var(--viz-${clampSlot(accent)})` } : null),
+          ...(drawGlow ? { filter: "drop-shadow(0 0 6px currentColor)" } : null),
+        }
+      : undefined;
 
   return (
     <div className={cx("w-full flex flex-col items-center", className)} {...rest}>
@@ -151,7 +178,8 @@ export default function Gauge({
             d={arcTo(pct)}
             fill="none"
             stroke="currentColor"
-            className={toneClass}
+            className={sweepClass}
+            style={sweepStyle}
             strokeWidth={stroke}
             strokeLinecap="round"
           />

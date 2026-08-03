@@ -8,6 +8,7 @@ import {
     CardHeader,
     Badge,
     StatCard,
+    KpiCard,
     Table,
     THead,
     TBody,
@@ -1016,11 +1017,17 @@ export default function ComplianceIndex({
                 point is scanning a fleet at a glance. */}
             <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 space-y-6">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <StatCard
+                    {/* Fleet size is an INVENTORY count (machines → slot 3, blue, per the
+                        cross-page contract). The three tiles beside it are TRUE STATUS
+                        (danger / info-adjacent / warning) and deliberately stay on the
+                        status-toned StatCard — "12 machines flagged" must never look
+                        decorative. */}
+                    <KpiCard
+                        accent={3}
                         label="Machines reporting"
                         value={stats?.machines ?? 0}
-                        hint={stats?.last_report ? `Last report ${fmt(stats.last_report)}` : 'No report received yet'}
-                        icon={<Monitor size={18} />}
+                        sub={stats?.last_report ? `Last report ${fmt(stats.last_report)}` : 'No report received yet'}
+                        icon={<Monitor className="h-[18px] w-[18px]" />}
                     />
                     <StatCard
                         label="Open alerts"

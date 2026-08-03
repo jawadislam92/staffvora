@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Card, Badge, StatCard, EmptyState, Segmented } from '@/Components/ui';
+import { Button, Card, Badge, StatCard, KpiCard, EmptyState, Segmented } from '@/Components/ui';
 import { Check, Minus, Users, Wallet, Receipt, Puzzle, Clock, Lock } from 'lucide-react';
 import { money, moneyOr, perSeat, shortDate } from './money';
 
@@ -219,8 +219,12 @@ export default function PlanAddonsTab({ data, canManage, busy, onAddAddon, onRem
 
     return (
         <div className="space-y-6">
+            {/* Contract accents: seats are people (slot 3, blue); price is money
+                (slot 5, pink). "Current plan" is plan STATE (trial / renewal
+                dates) and stays on the status-neutral StatCard. */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <StatCard
+                <KpiCard
+                    accent={3}
                     label="Seats"
                     value={
                         <>
@@ -230,19 +234,20 @@ export default function PlanAddonsTab({ data, canManage, busy, onAddAddon, onRem
                             </span>
                         </>
                     }
-                    hint={data.seatLimit ? `${seatPct}% of your plan's seats in use` : 'Unlimited seats on your plan'}
-                    icon={<Users className="h-5 w-5" />}
+                    sub={data.seatLimit ? `${seatPct}% of your plan's seats in use` : 'Unlimited seats on your plan'}
+                    icon={<Users className="h-[18px] w-[18px]" />}
                 />
                 {data.subscription && (
-                    <StatCard
+                    <KpiCard
+                        accent={5}
                         label="Your price"
                         value={moneyOr(data.subscription.price_cents, data.subscription.currency, 'Contact us')}
-                        hint={
+                        sub={
                             data.subscription.has_custom_price
                                 ? 'Negotiated price, per seat'
                                 : `per seat, per ${cycle === 'yearly' ? 'year' : 'month'}`
                         }
-                        icon={<Wallet className="h-5 w-5" />}
+                        icon={<Wallet className="h-[18px] w-[18px]" />}
                     />
                 )}
                 <StatCard

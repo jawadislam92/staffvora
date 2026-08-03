@@ -10,8 +10,8 @@ import {
     CardHeader,
     EmptyState,
     Field,
+    KpiCard,
     Select,
-    StatCard,
     Table,
     TBody,
     Td,
@@ -22,11 +22,15 @@ import {
 } from '@/Components/ui';
 import { RankedBars } from '@/Components/charts';
 import {
+    Activity,
     ArrowLeft,
     CalendarRange,
     CheckCircle2,
+    CircleDollarSign,
+    Clock,
     History,
     Lock,
+    PenLine,
     RotateCcw,
     Send,
     XCircle,
@@ -288,11 +292,12 @@ export default function TimesheetShow({
                     )}
                 </Card>
 
+                {/* Contract accents: hours=1 (violet), billable=5 (pink), tracked=2 (green), manual=3 (blue) */}
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                    <StatCard label="Total hours" value={hrs(sums?.total)} hint={`${sums?.entries || 0} entries`} />
-                    <StatCard label="Billable" value={hrs(sums?.billable)} hint={`${pct(sums?.billable, sums?.total)} of total`} />
-                    <StatCard label="Tracked" value={hrs(sums?.tracked)} hint={`${pct(sums?.tracked, sums?.total)} measured`} />
-                    <StatCard label="Manual" value={hrs(sums?.manual)} hint={`${pct(sums?.manual, sums?.total)} added by hand`} />
+                    <KpiCard accent={1} icon={<Clock className="h-[18px] w-[18px]" />} label="Total hours" value={hrs(sums?.total)} sub={`${sums?.entries || 0} entries`} />
+                    <KpiCard accent={5} icon={<CircleDollarSign className="h-[18px] w-[18px]" />} label="Billable" value={hrs(sums?.billable)} sub={`${pct(sums?.billable, sums?.total)} of total`} />
+                    <KpiCard accent={2} icon={<Activity className="h-[18px] w-[18px]" />} label="Tracked" value={hrs(sums?.tracked)} sub={`${pct(sums?.tracked, sums?.total)} measured`} />
+                    <KpiCard accent={3} icon={<PenLine className="h-[18px] w-[18px]" />} label="Manual" value={hrs(sums?.manual)} sub={`${pct(sums?.manual, sums?.total)} added by hand`} />
                 </div>
 
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -315,9 +320,13 @@ export default function TimesheetShow({
                                     <div key={d.date} className="flex items-center gap-3">
                                         <span className="w-28 shrink-0 text-xs text-muted">{dayLabel(d.date)}</span>
                                         <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-surface-2">
+                                            {/* Hours series wears the time slot (viz-1), per the cross-page contract. */}
                                             <div
-                                                className="h-full rounded-full bg-accent"
-                                                style={{ width: `${Math.max(3, Math.round((d.hours / peak) * 100))}%` }}
+                                                className="h-full rounded-full"
+                                                style={{
+                                                    width: `${Math.max(3, Math.round((d.hours / peak) * 100))}%`,
+                                                    backgroundColor: 'var(--viz-1)',
+                                                }}
                                             />
                                         </div>
                                         <span className="w-16 shrink-0 text-right text-xs tabular-nums text-body">{hrs(d.hours)}</span>

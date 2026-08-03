@@ -8,6 +8,7 @@ import {
     Card,
     Badge,
     StatCard,
+    KpiCard,
     Table,
     THead,
     TBody,
@@ -593,11 +594,17 @@ export default function FeedbackIndex({ auth, items, canManage, preview = false 
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <StatCard
+                    {/* Volume tiles wear the contract accents: inbox volume comes
+                        from people (slot 3, blue); unread is pending-attention —
+                        amber-adjacent but NOT a workflow status (slot 4). "Open"
+                        is TRUE workflow state (new / in review / planned) and
+                        stays on the status-neutral StatCard. */}
+                    <KpiCard
+                        accent={3}
                         label={manage ? 'Requests' : 'My requests'}
                         value={list.length}
-                        icon={<Inbox className="h-5 w-5" />}
-                        hint="Everything in this inbox"
+                        icon={<Inbox className="h-[18px] w-[18px]" />}
+                        sub="Everything in this inbox"
                     />
                     <StatCard
                         label="Open"
@@ -605,11 +612,12 @@ export default function FeedbackIndex({ auth, items, canManage, preview = false 
                         icon={<CircleDot className="h-5 w-5" />}
                         hint="New, in review or planned"
                     />
-                    <StatCard
+                    <KpiCard
+                        accent={4}
                         label="Needs your attention"
                         value={unreadCount}
-                        icon={<Bell className="h-5 w-5" />}
-                        hint={manage ? 'Unread activity from the team' : 'Replies you have not read'}
+                        icon={<Bell className="h-[18px] w-[18px]" />}
+                        sub={manage ? 'Unread activity from the team' : 'Replies you have not read'}
                     />
                 </div>
 

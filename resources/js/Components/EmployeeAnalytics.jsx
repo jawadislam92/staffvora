@@ -2,13 +2,39 @@ import React, { useState } from 'react';
 import LineChart from './Charts/LineChart';
 import BarChart from './Charts/BarChart';
 import DoughnutChart from './Charts/DoughnutChart';
+import { Card, KpiCard, StatCard, Tabs } from '@/Components/ui';
+import { useThemeName, textTokens, vizColor, vizPalette, cssVar, withAlpha } from './Charts/theme';
+import { Clock, CalendarDays, CalendarRange } from 'lucide-react';
+
+/**
+ * EmployeeAnalytics — the personal analytics block (today/week/month hours,
+ * client distribution, personal metrics).
+ *
+ * Visual language follows the dashboard rebuild: KpiCards on the cross-page
+ * color contract (hours/duration → viz slot 1), token-driven surfaces, and
+ * Chart.js series painted from the --viz tokens — never raw palette colors.
+ * Data derivations are untouched.
+ */
+
+const PERIOD_TABS = [
+    { key: 'today', label: 'Today' },
+    { key: 'week', label: 'This Week' },
+    { key: 'month', label: 'This Month' },
+];
 
 export default function EmployeeAnalytics({ analytics, user }) {
     const [activeTab, setActiveTab] = useState('today');
 
+    // Re-render (and re-read the token values below) when the theme flips —
+    // Chart.js rasterizes colors at draw time.
+    const theme = useThemeName();
+    const tokens = textTokens();
+    const gridColor = withAlpha(cssVar('--border', '#1e2b45'), 0.8);
+    const subtle = cssVar('--text-subtle', '#6b7793');
+
     // Handle case where analytics might be undefined or empty
     const safeAnalytics = analytics || {};
-    
+
     // Default data for when no analytics are available
     const defaultSummary = {
         today: '0h',
@@ -23,14 +49,32 @@ export default function EmployeeAnalytics({ analytics, user }) {
         productivity: 0
     };
 
-    // Prepare chart data based on active tab
+    // Shared scale/tooltip options — text wears the theme's text tokens, grid
+    // wears the border token. Recomputed on theme flips via `theme` above.
+    const axisOptions = React.useMemo(() => ({
+        scales: {
+            x: {
+                grid: { color: gridColor },
+                ticks: { color: tokens.muted, font: { family: 'Inter, sans-serif', size: 11 } },
+            },
+            y: {
+                grid: { color: gridColor },
+                ticks: { color: tokens.muted, font: { family: 'Inter, sans-serif', size: 11 } },
+            },
+        },
+        plugins: { legend: { display: false } },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }), [theme]);
+
+    // Prepare chart data based on active tab. All of these series are HOURS,
+    // so they all wear viz slot 1 (time/duration) per the color contract.
     const getChartData = () => {
         const today = safeAnalytics.today || {};
         const week = safeAnalytics.week || {};
         const month = safeAnalytics.month || {};
 
         switch (activeTab) {
-            case 'today':
+            case 'today': {
                 const todayData = today.hourly || { labels: [], data: [] };
                 if (!todayData.labels || todayData.labels.length === 0) {
                     return {
@@ -38,8 +82,8 @@ export default function EmployeeAnalytics({ analytics, user }) {
                         datasets: [{
                             label: 'No Data Available',
                             data: new Array(11).fill(0),
-                            borderColor: 'rgba(156, 163, 175, 0.5)',
-                            backgroundColor: 'rgba(156, 163, 175, 0.1)',
+                            borderColor: withAlpha(subtle, 0.5),
+                            backgroundColor: withAlpha(subtle, 0.1),
                             borderWidth: 2,
                         }]
                     };
@@ -50,19 +94,16 @@ export default function EmployeeAnalytics({ analytics, user }) {
                         {
                             label: 'Hours Worked',
                             data: todayData.data,
-                            borderColor: 'rgb(34, 197, 94)',
-                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                            borderWidth: 3,
-                            fill: true,
+                            borderColor: vizColor(1),
+                            borderWidth: 2.5,
                             tension: 0.4,
-                            pointBackgroundColor: 'rgb(34, 197, 94)',
-                            pointBorderColor: 'white',
-                            pointBorderWidth: 2,
-                            pointRadius: 6,
+                            pointRadius: 3,
+                            pointBackgroundColor: vizColor(1),
                         }
                     ]
                 };
-            case 'week':
+            }
+            case 'week': {
                 const weekData = week.daily || { labels: [], data: [] };
                 if (!weekData.labels || weekData.labels.length === 0) {
                     return {
@@ -70,48 +111,24 @@ export default function EmployeeAnalytics({ analytics, user }) {
                         datasets: [{
                             label: 'No Data Available',
                             data: new Array(7).fill(0),
-                            backgroundColor: ['rgba(156, 163, 175, 0.3)'],
-                            borderColor: ['rgba(156, 163, 175, 0.5)'],
-                            borderWidth: 2,
+                            backgroundColor: withAlpha(subtle, 0.3),
                         }]
                     };
                 }
+                // Weekday bars are TIME BUCKETS of one concept (hours), not
+                // categorical entities — one hue (slot 1), never a rainbow.
                 return {
                     labels: weekData.labels,
                     datasets: [
                         {
                             label: 'Daily Hours',
                             data: weekData.data,
-                            backgroundColor: weekData.data.map((_, index) => {
-                                const colors = [
-                                    'rgba(34, 197, 94, 0.8)',
-                                    'rgba(59, 130, 246, 0.8)',
-                                    'rgba(168, 85, 247, 0.8)',
-                                    'rgba(245, 158, 11, 0.8)',
-                                    'rgba(239, 68, 68, 0.8)',
-                                    'rgba(16, 185, 129, 0.8)',
-                                    'rgba(99, 102, 241, 0.8)'
-                                ];
-                                return colors[index % colors.length];
-                            }),
-                            borderColor: weekData.data.map((_, index) => {
-                                const colors = [
-                                    'rgb(34, 197, 94)',
-                                    'rgb(59, 130, 246)',
-                                    'rgb(168, 85, 247)',
-                                    'rgb(245, 158, 11)',
-                                    'rgb(239, 68, 68)',
-                                    'rgb(16, 185, 129)',
-                                    'rgb(99, 102, 241)'
-                                ];
-                                return colors[index % colors.length];
-                            }),
-                            borderWidth: 2,
-                            borderRadius: 8,
+                            backgroundColor: withAlpha(vizColor(1), 0.85),
                         }
                     ]
                 };
-            case 'month':
+            }
+            case 'month': {
                 const monthData = month.weekly || { labels: [], data: [] };
                 if (!monthData.labels || monthData.labels.length === 0) {
                     return {
@@ -119,8 +136,8 @@ export default function EmployeeAnalytics({ analytics, user }) {
                         datasets: [{
                             label: 'No Data Available',
                             data: new Array(4).fill(0),
-                            borderColor: 'rgba(156, 163, 175, 0.5)',
-                            backgroundColor: 'rgba(156, 163, 175, 0.1)',
+                            borderColor: withAlpha(subtle, 0.5),
+                            backgroundColor: withAlpha(subtle, 0.1),
                             borderWidth: 2,
                         }]
                     };
@@ -131,200 +148,161 @@ export default function EmployeeAnalytics({ analytics, user }) {
                         {
                             label: 'Weekly Hours',
                             data: monthData.data,
-                            borderColor: 'rgb(168, 85, 247)',
-                            backgroundColor: 'rgba(168, 85, 247, 0.1)',
-                            borderWidth: 3,
-                            fill: true,
+                            borderColor: vizColor(1),
+                            borderWidth: 2.5,
                             tension: 0.4,
-                            pointBackgroundColor: 'rgb(168, 85, 247)',
-                            pointBorderColor: 'white',
-                            pointBorderWidth: 2,
-                            pointRadius: 6,
+                            pointRadius: 3,
+                            pointBackgroundColor: vizColor(1),
                         }
                     ]
                 };
+            }
         }
     };
 
+    // Clients are ENTITIES → arcs wear the fixed categorical --viz slots in
+    // order (never cycled); any client past slot 5 wears the subtle token.
+    const hasClientData = (safeAnalytics.clientDistribution?.labels || []).length > 0;
+
     const getClientDistributionData = () => {
         const clientDist = safeAnalytics.clientDistribution || { labels: [], data: [] };
-        
-        if (!clientDist.labels || clientDist.labels.length === 0) {
+
+        if (!hasClientData) {
             return {
                 labels: ['No Data'],
                 datasets: [{
                     data: [1],
-                    backgroundColor: ['rgba(156, 163, 175, 0.3)'],
-                    borderColor: ['rgba(156, 163, 175, 0.5)'],
-                    borderWidth: 2,
+                    backgroundColor: [withAlpha(subtle, 0.3)],
+                    borderWidth: 0,
                 }]
             };
         }
 
+        const palette = vizPalette();
         return {
             labels: clientDist.labels,
             datasets: [
                 {
                     data: clientDist.data,
-                    backgroundColor: [
-                        'rgba(34, 197, 94, 0.8)',
-                        'rgba(59, 130, 246, 0.8)',
-                        'rgba(168, 85, 247, 0.8)',
-                        'rgba(245, 158, 11, 0.8)',
-                        'rgba(239, 68, 68, 0.8)',
-                        'rgba(16, 185, 129, 0.8)',
-                    ],
-                    borderColor: [
-                        'rgb(34, 197, 94)',
-                        'rgb(59, 130, 246)',
-                        'rgb(168, 85, 247)',
-                        'rgb(245, 158, 11)',
-                        'rgb(239, 68, 68)',
-                        'rgb(16, 185, 129)',
-                    ],
-                    borderWidth: 2,
+                    backgroundColor: clientDist.labels.map((_, i) => (i < palette.length ? palette[i] : subtle)),
+                    borderWidth: 0,
                 }
             ]
         };
     };
 
+    // Natural-height donut (same pattern as the dashboard's time-breakdown
+    // card): the canvas keeps its own aspect ratio and the HTML dots legend
+    // flows below it instead of overflowing a fixed-height box.
+    const donutOptions = React.useMemo(() => ({
+        maintainAspectRatio: true,
+        aspectRatio: 1.6,
+        // canvas legend off in every case: the dots legend (or the caption
+        // below, in the no-data case) carries the labels in HTML text tokens
+        plugins: { legend: { display: false } },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }), [theme]);
+
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="text-center">
-                <h2 className="text-2xl font-bold text-white mb-2">Your Work Analytics</h2>
-                <p className="text-white/70">Track your productivity and work patterns</p>
+            <div>
+                <h2 className="text-xl font-semibold text-body mb-1">Your Work Analytics</h2>
+                <p className="text-sm text-muted">Track your productivity and work patterns</p>
             </div>
 
-            {/* Summary Cards */}
+            {/* Summary cards — all three are hours/duration, so all three wear
+                viz slot 1 (the same concept wears the same accent everywhere). */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-gradient-to-br from-green-500/20 to-green-600/20 backdrop-blur-md p-6 rounded-xl border border-green-400/30">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-green-200 text-sm">Today</p>
-                            <p className="text-2xl font-bold text-white">{safeAnalytics.summary?.today || defaultSummary.today}</p>
-                        </div>
-                        <div className="p-3 bg-green-500/30 rounded-lg">
-                            <svg className="w-6 h-6 text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 backdrop-blur-md p-6 rounded-xl border border-blue-400/30">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-blue-200 text-sm">This Week</p>
-                            <p className="text-2xl font-bold text-white">{safeAnalytics.summary?.week || defaultSummary.week}</p>
-                        </div>
-                        <div className="p-3 bg-blue-500/30 rounded-lg">
-                            <svg className="w-6 h-6 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                            </svg>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/20 backdrop-blur-md p-6 rounded-xl border border-purple-400/30">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-purple-200 text-sm">This Month</p>
-                            <p className="text-2xl font-bold text-white">{safeAnalytics.summary?.month || defaultSummary.month}</p>
-                        </div>
-                        <div className="p-3 bg-purple-500/30 rounded-lg">
-                            <svg className="w-6 h-6 text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                        </div>
-                    </div>
-                </div>
+                <KpiCard
+                    accent={1}
+                    icon={<Clock size={18} />}
+                    label="Today"
+                    value={safeAnalytics.summary?.today || defaultSummary.today}
+                />
+                <KpiCard
+                    accent={1}
+                    icon={<CalendarDays size={18} />}
+                    label="This Week"
+                    value={safeAnalytics.summary?.week || defaultSummary.week}
+                />
+                <KpiCard
+                    accent={1}
+                    icon={<CalendarRange size={18} />}
+                    label="This Month"
+                    value={safeAnalytics.summary?.month || defaultSummary.month}
+                />
             </div>
 
             {/* Chart Section */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Main Chart */}
-                <div className="lg:col-span-2">
-                    <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl p-6 rounded-2xl border border-white/10">
-                        {/* Tab Navigation */}
-                        <div className="flex space-x-1 mb-6 p-1 bg-white/5 rounded-lg">
-                            <button
-                                onClick={() => setActiveTab('today')}
-                                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-                                    activeTab === 'today'
-                                        ? 'bg-green-500 text-white shadow-lg'
-                                        : 'text-white/70 hover:text-white hover:bg-white/10'
-                                }`}
-                            >
-                                Today
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('week')}
-                                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-                                    activeTab === 'week'
-                                        ? 'bg-blue-500 text-white shadow-lg'
-                                        : 'text-white/70 hover:text-white hover:bg-white/10'
-                                }`}
-                            >
-                                This Week
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('month')}
-                                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-                                    activeTab === 'month'
-                                        ? 'bg-purple-500 text-white shadow-lg'
-                                        : 'text-white/70 hover:text-white hover:bg-white/10'
-                                }`}
-                            >
-                                This Month
-                            </button>
-                        </div>
-
-                        <div className="h-80">
-                            {activeTab === 'week' ? (
-                                <BarChart data={getChartData()} />
-                            ) : (
-                                <LineChart data={getChartData()} />
-                            )}
-                        </div>
+                <Card className="lg:col-span-2">
+                    {/* Tab Navigation */}
+                    <div className="mb-6">
+                        <Tabs
+                            tabs={PERIOD_TABS}
+                            value={activeTab}
+                            onChange={setActiveTab}
+                            size="sm"
+                            aria-label="Analytics period"
+                        />
                     </div>
-                </div>
+
+                    <div className="h-80">
+                        {activeTab === 'week' ? (
+                            <BarChart
+                                data={getChartData()}
+                                options={axisOptions}
+                                roundedTops
+                                valueLabels
+                                className="h-full"
+                            />
+                        ) : (
+                            <LineChart
+                                data={getChartData()}
+                                options={axisOptions}
+                                gradientFill
+                                glow
+                                className="h-full"
+                            />
+                        )}
+                    </div>
+                </Card>
 
                 {/* Client Distribution */}
-                <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl p-6 rounded-2xl border border-white/10">
-                    <h3 className="text-lg font-semibold text-white mb-4">Work Distribution</h3>
-                    <div className="h-80">
-                        <DoughnutChart data={getClientDistributionData()} />
-                    </div>
-                </div>
+                <Card title="Work Distribution" description="Time by client">
+                    <DoughnutChart
+                        data={getClientDistributionData()}
+                        options={donutOptions}
+                        legend={hasClientData ? 'dots' : undefined}
+                    />
+                    {!hasClientData ? (
+                        <p className="mt-3 text-xs text-subtle text-center">
+                            No client data yet — the split appears once time is logged.
+                        </p>
+                    ) : null}
+                </Card>
             </div>
 
-            {/* Performance Metrics */}
+            {/* Performance Metrics — dense secondary tiles stay StatCard. */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl p-4 rounded-xl border border-white/10">
-                    <div className="text-center">
-                        <div className="text-2xl font-bold text-white">{safeAnalytics.metrics?.avgDailyHours || defaultMetrics.avgDailyHours}</div>
-                        <div className="text-sm text-white/70">Avg Daily Hours</div>
-                    </div>
-                </div>
-                <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl p-4 rounded-xl border border-white/10">
-                    <div className="text-center">
-                        <div className="text-2xl font-bold text-white">{safeAnalytics.metrics?.totalClients || defaultMetrics.totalClients}</div>
-                        <div className="text-sm text-white/70">Active Clients</div>
-                    </div>
-                </div>
-                <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl p-4 rounded-xl border border-white/10">
-                    <div className="text-center">
-                        <div className="text-2xl font-bold text-white">{safeAnalytics.metrics?.consistency || defaultMetrics.consistency}%</div>
-                        <div className="text-sm text-white/70">Consistency</div>
-                    </div>
-                </div>
-                <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl p-4 rounded-xl border border-white/10">
-                    <div className="text-center">
-                        <div className="text-2xl font-bold text-white">{safeAnalytics.metrics?.productivity || defaultMetrics.productivity}%</div>
-                        <div className="text-sm text-white/70">Productivity</div>
-                    </div>
-                </div>
+                <StatCard
+                    label="Avg Daily Hours"
+                    value={safeAnalytics.metrics?.avgDailyHours || defaultMetrics.avgDailyHours}
+                />
+                <StatCard
+                    label="Active Clients"
+                    value={safeAnalytics.metrics?.totalClients || defaultMetrics.totalClients}
+                />
+                <StatCard
+                    label="Consistency"
+                    value={`${safeAnalytics.metrics?.consistency || defaultMetrics.consistency}%`}
+                />
+                <StatCard
+                    label="Productivity"
+                    value={`${safeAnalytics.metrics?.productivity || defaultMetrics.productivity}%`}
+                />
             </div>
         </div>
     );

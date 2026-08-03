@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import AuthenticatedLayout from '../Layouts/AuthenticatedLayout';
 import { TraditionalPagination } from '../Components/Pagination';
 import { Head, Link, router } from '@inertiajs/react';
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays, Clock, ListChecks, Users, Briefcase } from 'lucide-react';
 import { timeFormat } from '../helpers';
 import { exportRowsToCsv } from '@/Utils/csvExport';
 import SearchableMultiSelect from '../Components/Filters/SearchableMultiSelect';
@@ -15,7 +15,7 @@ import {
     Field,
     Input,
     Select,
-    StatCard,
+    KpiCard,
     Table,
     THead,
     TBody,
@@ -654,12 +654,16 @@ export default function WorkHoursReport({
                     </div>
                 </div>
 
-                {/* Stats */}
+                {/* Stats — KpiCards on the cross-page color contract:
+                    hours → slot 1 (time), entries → slot 2 (activity volume),
+                    people → slot 3 (people), clients → slot 5 (billable/money
+                    side). Value-only: the props carry no per-KPI series, so no
+                    spark is invented (the trend chart below carries the shape). */}
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                    <StatCard label="Total hours" value={timeFormat(totalHours.toFixed(2))} hint="Across the rows shown" />
-                    <StatCard label="Entries" value={totalEntries} hint="Grouped rows on this page" />
-                    <StatCard label="People" value={uniqueUsers} hint="Distinct team members" />
-                    <StatCard label="Clients" value={uniqueClientsCount} hint="Distinct clients" />
+                    <KpiCard accent={1} icon={<Clock size={18} />} label="Total hours" value={timeFormat(totalHours.toFixed(2))} sub="Across the rows shown" />
+                    <KpiCard accent={2} icon={<ListChecks size={18} />} label="Entries" value={totalEntries} sub="Grouped rows on this page" />
+                    <KpiCard accent={3} icon={<Users size={18} />} label="People" value={uniqueUsers} sub="Distinct team members" />
+                    <KpiCard accent={5} icon={<Briefcase size={18} />} label="Clients" value={uniqueClientsCount} sub="Distinct clients" />
                 </div>
 
                 {/* Trend chart */}
@@ -671,7 +675,7 @@ export default function WorkHoursReport({
                         />
                     )}
                 >
-                    <TrendChart data={trendSeries} avg={trendAvg} unit="h" height={240} />
+                    <TrendChart data={trendSeries} avg={trendAvg} unit="h" height={240} gradientFill glow />
                 </Card>
 
                 {/* Filters & Actions Card */}

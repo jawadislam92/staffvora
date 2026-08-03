@@ -8,7 +8,7 @@ import {
     Card,
     CardHeader,
     Badge,
-    StatCard,
+    KpiCard,
     Table,
     THead,
     TBody,
@@ -312,31 +312,35 @@ export default function TeamIndex({
                     </div>
                 </div>
 
-                {/* KPI row */}
+                {/* KPI row — contract accents: people=3 (blue), activity=2 (green), hours=1 (violet) */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <StatCard
+                    <KpiCard
+                        accent={3}
                         label="Live now"
                         value={totals.people_live}
-                        hint="Tracking right now"
-                        icon={<UserCheck className="h-4 w-4" />}
+                        sub="Tracking right now"
+                        icon={<UserCheck className="h-[18px] w-[18px]" />}
                     />
-                    <StatCard
+                    <KpiCard
+                        accent={2}
                         label="Tracked time"
                         value={`${totals.people_with_time} of ${totals.team_size}`}
-                        hint="Members with time in range"
-                        icon={<Users className="h-4 w-4" />}
+                        sub="Members with time in range"
+                        icon={<Users className="h-[18px] w-[18px]" />}
                     />
-                    <StatCard
+                    <KpiCard
+                        accent={1}
                         label="Team total"
                         value={fmtHm(totals.day)}
-                        hint="Combined hours in range"
-                        icon={<Clock className="h-4 w-4" />}
+                        sub="Combined hours in range"
+                        icon={<Clock className="h-[18px] w-[18px]" />}
                     />
-                    <StatCard
+                    <KpiCard
+                        accent={3}
                         label="Team size"
                         value={totals.team_size}
-                        hint="Everyone on the roster"
-                        icon={<Activity className="h-4 w-4" />}
+                        sub="Everyone on the roster"
+                        icon={<Activity className="h-[18px] w-[18px]" />}
                     />
                 </div>
 

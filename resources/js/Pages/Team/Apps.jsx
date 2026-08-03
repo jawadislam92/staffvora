@@ -2,8 +2,8 @@ import React from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Globe, Laptop, Users, Clock } from 'lucide-react';
-import { Card, StatCard, Select, Button, Badge } from '@/Components/ui';
-import { RankedBars } from '@/Components/charts';
+import { Card, KpiCard, Select, Button, Badge, EmptyState } from '@/Components/ui';
+import { GradientBar } from '@/Components/charts';
 
 function fmtHm(seconds) {
     const s = Math.max(0, Math.floor(seconds || 0));
@@ -58,14 +58,41 @@ const DEV_SAMPLE = {
     totals: { tracked_seconds: 590400, people: 5 },
 };
 
-function toItems(rows) {
-    const max = Math.max(...rows.map((r) => r.total_seconds || 0), 1);
-    return rows.map((r) => ({
-        label: r.name,
-        value: fmtHm(r.total_seconds),
-        pct: Math.max(2, Math.round(((r.total_seconds || 0) / max) * 100)),
-        meta: `${r.user_count} ${r.user_count === 1 ? 'person' : 'people'}${r.top_user ? ` · most: ${r.top_user}` : ''}`,
-    }));
+/**
+ * One usage list (apps or websites) as GradientBars. Each row's pct is its
+ * honest share of ALL sampled activity in range (not share-of-max), the hours
+ * ride along as the count, and the people/most meta line is preserved below.
+ * All bars in a list are ONE measure, so the whole list wears one contract
+ * accent (activity → slot 2) rather than cycling hues per row.
+ */
+function UsageBars({ rows, totalSeconds }) {
+    if (!rows.length) {
+        return (
+            <EmptyState
+                title="Nothing to rank yet"
+                description="Items appear here once there's activity to compare."
+            />
+        );
+    }
+    const denom = Math.max(totalSeconds || 0, 1);
+    return (
+        <div className="space-y-4">
+            {rows.map((r) => (
+                <div key={r.name}>
+                    <GradientBar
+                        accent={2}
+                        label={r.name}
+                        pct={((r.total_seconds || 0) / denom) * 100}
+                        count={fmtHm(r.total_seconds)}
+                    />
+                    <div className="mt-1 text-[11px] text-subtle">
+                        {r.user_count} {r.user_count === 1 ? 'person' : 'people'}
+                        {r.top_user ? ` · most: ${r.top_user}` : ''}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
 }
 
 export default function TeamApps({
@@ -124,25 +151,28 @@ export default function TeamApps({
                     <Badge tone="neutral" title="Times are estimates from activity samples">Sampled activity</Badge>
                 </div>
 
-                {/* KPI row */}
+                {/* KPI row — contract accents: people=3 (blue), hours=1 (violet), activity=2 (green) */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <StatCard
+                    <KpiCard
+                        accent={3}
                         label="People sampled"
                         value={totals.people}
-                        hint={`${start} → ${end}`}
-                        icon={<Users className="h-4 w-4" />}
+                        sub={`${start} → ${end}`}
+                        icon={<Users className="h-[18px] w-[18px]" />}
                     />
-                    <StatCard
+                    <KpiCard
+                        accent={1}
                         label="Sampled activity"
                         value={`~${fmtHm(totals.tracked_seconds)}`}
-                        hint="Estimated from activity samples"
-                        icon={<Clock className="h-4 w-4" />}
+                        sub="Estimated from activity samples"
+                        icon={<Clock className="h-[18px] w-[18px]" />}
                     />
-                    <StatCard
+                    <KpiCard
+                        accent={2}
                         label="Tracked surfaces"
                         value={`${apps.length} apps · ${urls.length} sites`}
-                        hint="Distinct apps and websites seen"
-                        icon={<Laptop className="h-4 w-4" />}
+                        sub="Distinct apps and websites seen"
+                        icon={<Laptop className="h-[18px] w-[18px]" />}
                     />
                 </div>
 
@@ -181,15 +211,15 @@ export default function TeamApps({
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                     <Card
                         title={<span className="inline-flex items-center gap-2"><Laptop className="h-4 w-4 text-muted" /> Applications</span>}
-                        description="Ranked by sampled time"
+                        description="Ranked by sampled time · % of all sampled activity"
                     >
-                        <RankedBars items={toItems(apps)} />
+                        <UsageBars rows={apps} totalSeconds={totals.tracked_seconds} />
                     </Card>
                     <Card
                         title={<span className="inline-flex items-center gap-2"><Globe className="h-4 w-4 text-muted" /> Websites</span>}
-                        description="Ranked by sampled time"
+                        description="Ranked by sampled time · % of all sampled activity"
                     >
-                        <RankedBars items={toItems(urls)} />
+                        <UsageBars rows={urls} totalSeconds={totals.tracked_seconds} />
                     </Card>
                 </div>
             </div>

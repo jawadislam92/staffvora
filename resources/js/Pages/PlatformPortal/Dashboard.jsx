@@ -1,11 +1,12 @@
 import PlatformLayout, { PlatformPageHeader } from '@/Layouts/PlatformLayout';
-import { StatCard, Card, Badge, Table, THead, TBody, Tr, Th, Td, EmptyState } from '@/Components/ui';
+import { KpiCard, Card, Badge, Table, THead, TBody, Tr, Th, Td, EmptyState } from '@/Components/ui';
 import { TrendChart, RankedBars } from '@/Components/charts';
 
 // Offline sample so `preview` renders fully without a backend. The real
 // dashboard payload only carries { tenants, staff }; the extra KPIs / series
 // below are illustrative and only surface in preview or once the controller
 // starts sending them. Non-preview behavior is unchanged.
+// Deltas follow the KpiCard contract: {pct, direction, good, label}.
 const DEV_SAMPLE = {
     stats: {
         tenants: 128,
@@ -14,10 +15,10 @@ const DEV_SAMPLE = {
         active: 112,
         trials: 14,
         deltas: {
-            tenants: { value: '+9', dir: 'up' },
-            mrr: { value: '+6.2%', dir: 'up' },
-            active: { value: '+5', dir: 'up' },
-            trials: { value: '-2', dir: 'down', good: true },
+            tenants: { pct: 7.6, direction: 'up', good: true, label: 'vs last month' },
+            mrr: { pct: 6.2, direction: 'up', good: true, label: 'vs last month' },
+            active: { pct: 4.7, direction: 'up', good: true, label: 'vs last month' },
+            trials: { pct: 12.5, direction: 'down', good: true, label: 'vs last month' },
         },
     },
     mrrTrend: [
@@ -77,15 +78,21 @@ export default function Dashboard({ stats, preview = false }) {
     const s = data.stats || {};
     const d = s.deltas || {};
 
-    const tiles = [
-        { key: 'tenants', label: 'Tenants', value: fmtNum(s.tenants ?? 0), hint: 'Total organizations', icon: ICONS.tenants, delta: d.tenants },
-        { key: 'mrr', label: 'MRR', value: s.mrr != null ? fmtMoney(s.mrr) : '—', hint: 'Monthly recurring revenue', icon: ICONS.mrr, delta: d.mrr },
-        { key: 'active', label: 'Active tenants', value: s.active != null ? fmtNum(s.active) : '—', hint: 'Paying, in good standing', icon: ICONS.active, delta: d.active },
-        { key: 'trials', label: 'Trials', value: s.trials != null ? fmtNum(s.trials) : '—', hint: 'In trial period', icon: ICONS.trials, delta: d.trials },
-        { key: 'staff', label: 'Platform staff', value: fmtNum(s.staff ?? 0), hint: 'Operator portal seats', icon: ICONS.staff },
-    ];
-
     const hasTrend = Array.isArray(data.mrrTrend) && data.mrrTrend.length > 1;
+
+    // Cross-page color contract: orgs/people → slot 3 (blue), money → slot 5
+    // (pink), activity/good-standing rate → slot 2 (green), trials/pending →
+    // slot 4 (amber). Tenants and staff are both people/org counts, so both
+    // honestly wear slot 3. The MRR spark reuses the mrrTrend series the page
+    // already carries (preview-only today) — no new server work.
+    const mrrSpark = hasTrend ? data.mrrTrend.map((p) => p.value) : null;
+    const tiles = [
+        { key: 'tenants', accent: 3, label: 'Tenants', value: fmtNum(s.tenants ?? 0), hint: 'Total organizations', icon: ICONS.tenants, delta: d.tenants },
+        { key: 'mrr', accent: 5, label: 'MRR', value: s.mrr != null ? fmtMoney(s.mrr) : '—', hint: 'Monthly recurring revenue', icon: ICONS.mrr, delta: d.mrr, spark: mrrSpark },
+        { key: 'active', accent: 2, label: 'Active tenants', value: s.active != null ? fmtNum(s.active) : '—', hint: 'Paying, in good standing', icon: ICONS.active, delta: d.active },
+        { key: 'trials', accent: 4, label: 'Trials', value: s.trials != null ? fmtNum(s.trials) : '—', hint: 'In trial period', icon: ICONS.trials, delta: d.trials },
+        { key: 'staff', accent: 3, label: 'Platform staff', value: fmtNum(s.staff ?? 0), hint: 'Operator portal seats', icon: ICONS.staff },
+    ];
     const hasPlans = Array.isArray(data.plans) && data.plans.length > 0;
     const hasTenants = Array.isArray(data.tenants) && data.tenants.length > 0;
 
@@ -101,7 +108,16 @@ export default function Dashboard({ stats, preview = false }) {
         >
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                 {tiles.map((t) => (
-                    <StatCard key={t.key} label={t.label} value={t.value} hint={t.hint} icon={t.icon} delta={t.delta} />
+                    <KpiCard
+                        key={t.key}
+                        accent={t.accent}
+                        icon={t.icon}
+                        label={t.label}
+                        value={t.value}
+                        sub={t.hint}
+                        delta={t.delta}
+                        spark={t.spark}
+                    />
                 ))}
             </div>
 
@@ -113,12 +129,13 @@ export default function Dashboard({ stats, preview = false }) {
                             title="Revenue trend"
                             description="Monthly recurring revenue, last 6 months"
                         >
-                            <TrendChart data={data.mrrTrend} unit="" height={240} />
+                            <TrendChart data={data.mrrTrend} unit="" height={240} gradientFill glow />
                         </Card>
                     )}
                     {hasPlans && (
                         <Card title="Tenants by plan" description="Distribution across editions">
-                            <RankedBars items={data.plans} />
+                            {/* tenant counts per plan → orgs concept, slot 3 */}
+                            <RankedBars items={data.plans} accent={3} glow />
                         </Card>
                     )}
                 </div>

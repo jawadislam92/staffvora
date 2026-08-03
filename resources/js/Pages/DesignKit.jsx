@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Head } from '@inertiajs/react';
 import {
-    Button, Card, CardHeader, Badge, StatCard, DeltaChip,
+    Button, Card, CardHeader, Badge, StatCard, DeltaChip, KpiCard,
     Table, THead, TBody, Tr, Th, Td,
     Field, Input, Select, Textarea, Checkbox, Toggle,
     EmptyState, Skeleton, SkeletonText, SkeletonCard, Tabs, Spinner,
     LockedFeature, LockBadge,
 } from '@/Components/ui';
+import {
+    Sparkline as VizSparkline, TrendChart, ActivityStrip, RankedBars,
+    Gauge, GradientBar,
+} from '@/Components/charts';
+import { vizPalette } from '@/Components/charts/theme';
+import { LazyBarChart, LazyDoughnutChart, LazyLineChart, ChartWrapper } from '@/Components/LazyLoad';
+import { Activity, CircleDollarSign, Clock, Coffee, Users } from 'lucide-react';
 
 /**
  * Internal design-kit gallery (/_kit, local only). Renders every shared UI
@@ -33,6 +40,25 @@ function Sparkline() {
 
 const THEMES = ['dark', 'light', 'black'];
 
+// ── Sample series for the visual-language sections (kit fixtures only) ──────
+// Slot hues are CVD-validated and fixed: 1=violet, 2=green, 3=blue, 4=amber,
+// 5=pink. Never re-order, never cycle past 5 — extras wear --text-subtle.
+const KIT_SPARK = [18, 22, 19, 26, 24, 30, 27, 33, 31, 35, 34, 37];
+const KIT_KPIS = [
+    { accent: 1, icon: <Clock size={18} />, label: 'Hours tracked', value: '142h 30m', sub: 'Time → violet (slot 1)', delta: { pct: 8.4, direction: 'up', good: true, label: 'vs prev 14 days' } },
+    { accent: 2, icon: <Activity size={18} />, label: 'Avg activity', value: '68%', sub: 'Activity → green (slot 2)', delta: { pct: 3.1, direction: 'up', good: true, label: 'vs prev 14 days' } },
+    { accent: 3, icon: <Users size={18} />, label: 'Active members', value: '12 / 15', sub: 'People → blue (slot 3)', delta: { pct: 14.3, direction: 'down', good: false, label: 'vs prev 14 days' } },
+    { accent: 4, icon: <Coffee size={18} />, label: 'Break time', value: '5h 20m', sub: 'Breaks → amber (slot 4)', delta: { pct: 0, direction: 'flat', good: null, label: 'no change' } },
+    { accent: 5, icon: <CircleDollarSign size={18} />, label: 'Billable', value: '$8,420', sub: 'Money → pink (slot 5)', delta: { pct: 5.9, direction: 'up', good: true, label: 'vs prev 14 days' } },
+];
+const KIT_TREND = [
+    { label: 'Mon', value: 6.5 }, { label: 'Tue', value: 7.2 }, { label: 'Wed', value: 5.8 },
+    { label: 'Thu', value: 8.1 }, { label: 'Fri', value: 7.6 }, { label: 'Sat', value: 3.2 },
+    { label: 'Sun', value: 2.1 }, { label: 'Mon', value: 6.9 }, { label: 'Tue', value: 7.8 },
+    { label: 'Wed', value: 8.4 }, { label: 'Thu', value: 7.1 }, { label: 'Fri', value: 6.3 },
+];
+const KIT_TREND_COMPARE = [5.9, 6.8, 6.1, 7.2, 7.9, 2.8, 1.9, 6.2, 7.1, 7.6, 6.8, 6.9];
+
 export default function DesignKit() {
     const [theme, setTheme] = useState('dark');
     const [tab, setTab] = useState('overview');
@@ -43,6 +69,12 @@ export default function DesignKit() {
         document.documentElement.setAttribute('data-theme', theme);
         return () => { if (prev) document.documentElement.setAttribute('data-theme', prev); };
     }, [theme]);
+
+    // Chart.js canvases can't consume var() strings, so the doughnut/line demos
+    // need RESOLVED --viz colors. Re-read them after the effect above has set
+    // data-theme (this effect is declared later, so it runs after it).
+    const [palette, setPalette] = useState(() => vizPalette());
+    useEffect(() => { setPalette(vizPalette()); }, [theme]);
 
     return (
         <div className="min-h-screen bg-app text-body">
@@ -97,6 +129,150 @@ export default function DesignKit() {
                         <StatCard label="Avg activity" value="68%" delta={{ value: '3.1%', dir: 'up' }} hint="vs last week" />
                         <StatCard label="Idle time" value="21%" delta={{ value: '1.4%', dir: 'down', good: true }} />
                         <StatCard label="Overtime" value="6h 10m" delta={{ value: '12%', dir: 'up', good: false }} />
+                    </div>
+                </Section>
+
+                <Section title="KPI cards (KpiCard) — the 5 accent slots">
+                    <p className="mb-4 text-sm text-muted">
+                        The cross-page color contract: 1 violet = time/hours · 2 green = activity/rates ·
+                        3 blue = people/members · 4 amber = breaks/pending · 5 pink = billable/money.
+                        Delta arrows follow <span className="text-body">good</span>, not direction; spark glows in dark/black only.
+                    </p>
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                        {KIT_KPIS.map((k) => (
+                            <KpiCard key={k.accent} accent={k.accent} icon={k.icon} label={k.label} value={k.value} sub={k.sub} delta={k.delta} spark={KIT_SPARK} />
+                        ))}
+                    </div>
+                    <p className="mt-6 mb-3 text-xs uppercase tracking-wide text-subtle">Value-only (no delta / no spark — the default when props carry no series)</p>
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                        {KIT_KPIS.map((k) => (
+                            <KpiCard key={k.accent} accent={k.accent} icon={k.icon} label={k.label} value={k.value} sub={k.sub} />
+                        ))}
+                    </div>
+                </Section>
+
+                <Section title="Gradient bars (GradientBar)">
+                    <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+                        <GradientBar accent={1} label="Deep work" pct={72.4} count={133} />
+                        <GradientBar accent={2} label="Active input" pct={58} count={97} />
+                        <GradientBar accent={3} label="Meetings" pct={34.5} count={41} />
+                        <GradientBar accent={4} label="Breaks" pct={12} count={18} />
+                        <GradientBar accent={5} label="Billable share" pct={81} />
+                    </div>
+                </Section>
+
+                <Section title="SVG chart kit — gradient + glow props">
+                    <div className="space-y-8">
+                        <div>
+                            <p className="mb-2 text-xs uppercase tracking-wide text-subtle">TrendChart · gradientFill + glow (glow renders in dark/black only)</p>
+                            <TrendChart data={KIT_TREND} compare={KIT_TREND_COMPARE} avg={6.4} gradientFill glow />
+                        </div>
+
+                        <div>
+                            <p className="mb-2 text-xs uppercase tracking-wide text-subtle">Sparkline · accent={'{1..5}'} + glow</p>
+                            <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+                                {[1, 2, 3, 4, 5].map((slot) => (
+                                    <div key={slot} className="rounded-lg border border-line bg-surface p-3">
+                                        <VizSparkline data={KIT_SPARK} height={36} accent={slot} glow />
+                                        <div className="mt-2 text-[11px] text-subtle">accent={slot}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="grid gap-6 lg:grid-cols-2">
+                            <div>
+                                <p className="mb-2 text-xs uppercase tracking-wide text-subtle">Gauge · legacy semantic bands (status stays status)</p>
+                                <Gauge value={68} label="Avg activity" thresholds={[30, 50]} caption="Band tones: danger < 30, warning < 50, success above." />
+                            </div>
+                            <div>
+                                <p className="mb-2 text-xs uppercase tracking-wide text-subtle">Gauge · accent={'{2}'} + glow (categorical, not stateful)</p>
+                                <Gauge value={68} label="Avg activity" thresholds={[30, 50]} accent={2} glow caption="Same reading wearing the activity slot instead of a band tone." />
+                            </div>
+                        </div>
+
+                        <div>
+                            <p className="mb-2 text-xs uppercase tracking-wide text-subtle">ActivityStrip · per-segment accent + glow (legacy tones first)</p>
+                            <div className="space-y-6">
+                                <ActivityStrip breakdown={{ tracked: 58, manual: 12, idle: 14, untracked: 16 }} hours={false} />
+                                <ActivityStrip
+                                    hours={false}
+                                    glow
+                                    segments={[
+                                        { label: 'Deep work', pct: 46, accent: 1 },
+                                        { label: 'Collaboration', pct: 22, accent: 3 },
+                                        { label: 'Breaks', pct: 14, accent: 4 },
+                                        { label: 'Untracked', pct: 18, tone: 'untracked' },
+                                    ]}
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <p className="mb-2 text-xs uppercase tracking-wide text-subtle">RankedBars · accent + glow (per-item accent stays entity-fixed under filtering)</p>
+                            <RankedBars
+                                accent={1}
+                                glow
+                                items={[
+                                    { label: 'Website redesign', value: '38h 20m', pct: 100, meta: 'Northwind Studio' },
+                                    { label: 'Mobile app', value: '24h 05m', pct: 63 },
+                                    { label: 'Internal tooling', value: '11h 40m', pct: 30 },
+                                ]}
+                            />
+                        </div>
+                    </div>
+                </Section>
+
+                <Section title="Chart.js kit — value labels, viz colors, dot legends">
+                    <p className="mb-4 text-sm text-muted">
+                        Lazy-loaded (Chart.js never enters the SVG-kit bundle). Value labels print only at ≤8 bars;
+                        donut legend dots carry % + count; one axis per chart, always.
+                    </p>
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <div>
+                            <p className="mb-2 text-xs uppercase tracking-wide text-subtle">BarChart · valueLabels + roundedTops + vizColors</p>
+                            <ChartWrapper
+                                component={LazyBarChart}
+                                valueLabels
+                                roundedTops
+                                vizColors
+                                data={{
+                                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+                                    datasets: [{ label: 'Hours', data: [6.5, 7.2, 5.8, 8.1, 7.6, 3.2] }],
+                                }}
+                                options={{ plugins: { legend: { display: false } } }}
+                            />
+                        </div>
+                        <div>
+                            <p className="mb-2 text-xs uppercase tracking-wide text-subtle">DoughnutChart · centerValue + centerLabel + legend=&quot;dots&quot;</p>
+                            <ChartWrapper
+                                component={LazyDoughnutChart}
+                                centerValue="128h"
+                                centerLabel="This week"
+                                legend="dots"
+                                data={{
+                                    labels: ['Deep work', 'Collaboration', 'Meetings', 'Ops'],
+                                    datasets: [{ data: [54, 34, 24, 16], backgroundColor: palette.slice(0, 4), borderWidth: 0 }],
+                                }}
+                                // DoughnutChart defaults maintainAspectRatio:false — give it
+                                // a real aspect (same as the app dashboard's donut) or the
+                                // canvas grows unbounded.
+                                options={{ maintainAspectRatio: true, aspectRatio: 1.9, plugins: { legend: { display: false } } }}
+                            />
+                        </div>
+                        <div className="lg:col-span-2">
+                            <p className="mb-2 text-xs uppercase tracking-wide text-subtle">LineChart · gradientFill + glow</p>
+                            <ChartWrapper
+                                component={LazyLineChart}
+                                gradientFill
+                                glow
+                                data={{
+                                    labels: KIT_TREND.map((p) => p.label),
+                                    datasets: [{ label: 'Hours', data: KIT_TREND.map((p) => p.value), borderColor: palette[0], pointRadius: 0, tension: 0.4 }],
+                                }}
+                                options={{ plugins: { legend: { display: false } } }}
+                            />
+                        </div>
                     </div>
                 </Section>
 

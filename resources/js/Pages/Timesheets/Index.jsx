@@ -10,6 +10,7 @@ import {
     CardHeader,
     EmptyState,
     Field,
+    KpiCard,
     Select,
     StatCard,
     Table,
@@ -22,11 +23,22 @@ import {
     Tr,
 } from '@/Components/ui';
 import {
+    Activity,
     CalendarRange,
     CheckCheck,
     CheckCircle2,
+    CircleDollarSign,
     ClipboardCheck,
+    Clock,
+    Hourglass,
     Lock,
+    // Pencil, NOT PenLine. With PenLine here, Rollup merges this page's chunk
+    // into its sibling Timesheets/Show.jsx (which also imports PenLine) and the
+    // page LOSES ITS VITE MANIFEST ENTRY — the built site then 500s on
+    // /timesheets with "Unable to locate file in Vite manifest" while dev mode
+    // works fine, which is exactly how it shipped broken. Verified by bisect:
+    // removing only this import restores the manifest entry deterministically.
+    Pencil,
     RotateCcw,
     Send,
     Undo2,
@@ -343,11 +355,12 @@ export default function TimesheetsIndex({
                         />
                     }
                 >
+                    {/* Contract accents: hours=1 (violet), billable=5 (pink), tracked=2 (green), manual=3 (blue) */}
                     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                        <StatCard label="Total hours" value={hrs(own?.totals?.total)} hint={`${own?.totals?.entries || 0} entries`} />
-                        <StatCard label="Billable" value={hrs(own?.totals?.billable)} hint={`${pct(own?.totals?.billable, own?.totals?.total)} of total`} />
-                        <StatCard label="Tracked" value={hrs(own?.totals?.tracked)} hint="Measured by the desktop tracker" />
-                        <StatCard label="Manual" value={hrs(own?.totals?.manual)} hint="Added by hand" />
+                        <KpiCard accent={1} icon={<Clock className="h-[18px] w-[18px]" />} label="Total hours" value={hrs(own?.totals?.total)} sub={`${own?.totals?.entries || 0} entries`} />
+                        <KpiCard accent={5} icon={<CircleDollarSign className="h-[18px] w-[18px]" />} label="Billable" value={hrs(own?.totals?.billable)} sub={`${pct(own?.totals?.billable, own?.totals?.total)} of total`} />
+                        <KpiCard accent={2} icon={<Activity className="h-[18px] w-[18px]" />} label="Tracked" value={hrs(own?.totals?.tracked)} sub="Measured by the desktop tracker" />
+                        <KpiCard accent={3} icon={<Pencil className="h-[18px] w-[18px]" />} label="Manual" value={hrs(own?.totals?.manual)} sub="Added by hand" />
                     </div>
 
                     {/* Four zeroes explain nothing on day one. Say what the
@@ -381,12 +394,15 @@ export default function TimesheetsIndex({
                 {/* Approver queue */}
                 {perms.review && board && (
                     <>
+                        {/* Approval-queue counts are TRUE STATUS — they keep the
+                            status tokens (awaiting=warning, approved=success,
+                            sent-back=danger) and never wear a viz identity hue. */}
                         {rollup && (
                             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                                <StatCard label="Awaiting approval" value={rollup.counts?.submitted ?? 0} hint="In this period" />
-                                <StatCard label="Approved" value={rollup.counts?.approved ?? 0} hint="Locked for payroll" />
-                                <StatCard label="Sent back" value={rollup.counts?.rejected ?? 0} hint="Needs a resubmit" />
-                                <StatCard label="Not submitted" value={rollup.counts?.open ?? 0} hint={`of ${rollup.people} people`} />
+                                <StatCard label="Awaiting approval" value={rollup.counts?.submitted ?? 0} hint="In this period" icon={<Hourglass className="h-4 w-4 text-warning" />} />
+                                <StatCard label="Approved" value={rollup.counts?.approved ?? 0} hint="Locked for payroll" icon={<CheckCircle2 className="h-4 w-4 text-success" />} />
+                                <StatCard label="Sent back" value={rollup.counts?.rejected ?? 0} hint="Needs a resubmit" icon={<XCircle className="h-4 w-4 text-danger" />} />
+                                <StatCard label="Not submitted" value={rollup.counts?.open ?? 0} hint={`of ${rollup.people} people`} icon={<Send className="h-4 w-4 text-muted" />} />
                             </div>
                         )}
 

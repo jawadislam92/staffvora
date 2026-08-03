@@ -7,6 +7,7 @@ import {
     Card,
     Badge,
     StatCard,
+    KpiCard,
     Table,
     THead,
     TBody,
@@ -513,19 +514,23 @@ export default function ClientsList({
                     )}
                 </div>
 
-                {/* Stats */}
+                {/* Stats — contract accents: clients are the billable entity of the
+                    workspace (slot 5, pink); work types are billing / tracking
+                    modes for TIME (slot 1, violet). */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <StatCard
+                    <KpiCard
+                        accent={5}
                         label={`Total ${clientTermPlural.toLowerCase()}`}
                         value={totalCount}
-                        icon={<FolderKanban className="h-5 w-5" />}
-                        hint={`Across your workspace`}
+                        icon={<FolderKanban className="h-[18px] w-[18px]" />}
+                        sub="Across your workspace"
                     />
-                    <StatCard
+                    <KpiCard
+                        accent={1}
                         label="Work types"
                         value={Object.keys(types || {}).length}
-                        icon={<Clock className="h-5 w-5" />}
-                        hint="Configured billing / tracking modes"
+                        icon={<Clock className="h-[18px] w-[18px]" />}
+                        sub="Configured billing / tracking modes"
                     />
                 </div>
 
@@ -807,9 +812,21 @@ export default function ClientsList({
                                             )}
                                         </Td>
                                         <Td>
-                                            <Badge tone="accent" className="font-mono tabular-nums">
+                                            {/* Hours wear slot 1 (violet) everywhere. The tinted
+                                                chip + dot carry the identity; the number itself
+                                                stays on a text token. No GradientBar here — the
+                                                props carry no percentage, only "HH:MM". */}
+                                            <span
+                                                className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-xs tabular-nums text-body"
+                                                style={{ backgroundColor: 'var(--viz-1-soft)' }}
+                                            >
+                                                <span
+                                                    aria-hidden="true"
+                                                    className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                                    style={{ backgroundColor: 'var(--viz-1)' }}
+                                                />
                                                 {client.weekly_hours_worked || '00:00'}
-                                            </Badge>
+                                            </span>
                                         </Td>
                                         {canManage && (
                                             <Td className="text-right">
