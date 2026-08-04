@@ -8,10 +8,12 @@ use App\Models\SitePage;
 use App\Models\SiteTheme;
 use App\Support\DefaultSiteContent;
 use App\Support\HtmlSanitizer;
+use App\Support\ImageGuard;
 use App\Support\SitePalettes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -25,6 +27,26 @@ use Inertia\Response;
  */
 class SiteBuilderController extends Controller
 {
+    /**
+     * Ceilings on a single page's draft.
+     *
+     * These are a CPU budget, not a taste judgement. Every block on a published
+     * page is walked by App\Support\HtmlSanitizer, and until now `blocks` was
+     * validated as `present|array` with no count and no size limit at all — so
+     * one operator (or one stolen operator session) could store a page whose
+     * render cost seconds of CPU. SitePage now caches the sanitised payload, so
+     * that cost is paid once per cache fill rather than once per anonymous
+     * visitor; these caps bound the once, and bound the request that stores it.
+     *
+     * Sized off the real corpus with room to spare: the largest page the site
+     * actually ships has 8 blocks and ~9 KB of JSON (the legal pages, which are
+     * entirely rich_text), so this is ~12× the block count and ~56× the bytes.
+     * No page a human writes will meet either.
+     */
+    private const MAX_BLOCKS = 100;
+
+    private const MAX_BLOCKS_BYTES = 512_000;
+
     /**
      * Page `title` / `meta_title` / `meta_description` live in the columns the
      * PUBLIC renderer reads (SitePage::publicPayload). Writing them on every
@@ -105,6 +127,10 @@ class SiteBuilderController extends Controller
      * Only platform admins reach this route (the `platform` middleware group).
      * That lowers the likelihood, not the impact: the output is served to every
      * anonymous visitor, and an operator account is a phishing target.
+     *
+     * `blocks` is also SIZE-capped here (MAX_BLOCKS / MAX_BLOCKS_BYTES). It was
+     * `present|array` with no ceiling, which made one save a lever on the public
+     * site's CPU cost — see the constants.
      */
     public function saveDraft(Request $request, SitePage $page): RedirectResponse
     {
@@ -112,7 +138,7 @@ class SiteBuilderController extends Controller
             'title' => 'required|string|max:120',
             'meta_title' => 'nullable|string|max:200',
             'meta_description' => 'nullable|string|max:400',
-            'blocks' => 'present|array',
+            'blocks' => ['present', 'array', 'max:'.self::MAX_BLOCKS, $this->blockPayloadSizeRule()],
             // `blocks.*.data.html` is what ends up inside dangerouslySetInnerHTML.
             // The sanitiser now coerces a non-string value instead of skipping it,
             // but a malformed block should be REJECTED at the door rather than
@@ -142,6 +168,36 @@ class SiteBuilderController extends Controller
         $page->update($attributes);
 
         return back()->with('success', 'Draft saved.');
+    }
+
+    /**
+     * Total serialised weight of the block tree.
+     *
+     * A block COUNT limit alone is not a budget: HtmlSanitizer caps a single
+     * `html` string at 512 KB, so forty blocks under a count cap of 100 is still
+     * ~20 MB of DOM parsing. The measured cost of that shape was 2,280 ms per
+     * render. Capping the bytes is what actually bounds the work.
+     *
+     * A tree that will not encode at all (PHP's 512-level json_encode depth,
+     * which is the recursion the sanitiser would then have to walk) is rejected
+     * for the same reason rather than being measured as zero bytes.
+     */
+    private function blockPayloadSizeRule(): \Closure
+    {
+        return static function (string $attribute, mixed $value, callable $fail): void {
+            $json = json_encode($value);
+
+            if ($json === false) {
+                $fail('This page is too deeply nested to save. Please simplify it.');
+
+                return;
+            }
+
+            if (strlen($json) > self::MAX_BLOCKS_BYTES) {
+                $fail('This page is too large to save ('.number_format(strlen($json) / 1024).' KB). '
+                    .'Please split it across pages — the limit is '.number_format(self::MAX_BLOCKS_BYTES / 1024).' KB.');
+            }
+        };
     }
 
     public function publish(SitePage $page): RedirectResponse
@@ -293,16 +349,34 @@ class SiteBuilderController extends Controller
      * downscales raster formats). If SVG is ever wanted back it needs a
      * separate origin or `Content-Disposition: attachment` PLUS an XML
      * sanitiser; re-adding it to this list alone re-opens the hole.
+     *
+     * Excluding svg HERE was never sufficient on its own, and the read side is
+     * where it is actually enforced now: every row written before this rule
+     * existed still carries `image/svg+xml`, and Site\PageController::media used
+     * to echo that column straight back as the response Content-Type. A
+     * write-side allow-list cannot retroactively change what is already in the
+     * table.
+     *
+     * The `mimes:` rule is likewise not a guard on its own — it proves the bytes
+     * are a PNG, not that the PNG is one we can afford to handle. An 89-byte
+     * file can declare 40 megapixels. ImageGuard::rules() is the single budget
+     * every upload path in the app now shares.
      */
     public function uploadImage(Request $request): JsonResponse
     {
-        $request->validate(['image' => ['required', 'file', 'mimes:png,jpg,jpeg,webp', 'max:8192']]);
+        $request->validate(['image' => ImageGuard::rules(['png', 'jpg', 'webp'], 8192)]);
 
-        $path = $request->file('image')->store('site', 'avatars');
+        $file = $request->file('image');
+        $path = $file->store('site', 'avatars');
+
         $media = SiteMedia::create([
             'path' => $path,
-            'mime' => $request->file('image')->getMimeType(),
-            'original_name' => $request->file('image')->getClientOriginalName(),
+            // The CANONICAL mime for the bytes, decided by the header — not
+            // getMimeType()'s guess and never the client's Content-Type. This
+            // column is only ever a cache of the answer the serving route
+            // re-derives for itself, so it must be written the same way.
+            'mime' => ImageGuard::inspect($file->getRealPath(), ImageGuard::MAX_PIXELS, ['png', 'jpg', 'webp'])['mime'] ?? null,
+            'original_name' => $file->getClientOriginalName(),
         ]);
 
         return response()->json(['id' => $media->id, 'url' => $media->url()]);
@@ -310,9 +384,15 @@ class SiteBuilderController extends Controller
 
     public function setLogo(Request $request): RedirectResponse
     {
-        // See uploadImage(): SVG is excluded because /site/logo serves the raw
-        // bytes as image/svg+xml, inline, on the app origin.
-        $request->validate(['logo' => ['required', 'file', 'mimes:png,jpg,jpeg,webp', 'max:8192']]);
+        // See uploadImage(). SVG is excluded because /site/logo used to serve
+        // the raw bytes as image/svg+xml, inline, on the app origin — that
+        // branch is gone from the serving side too, which is the half that
+        // covers everything already stored.
+        // MAX_DISPLAY_PIXELS, not MAX_PIXELS: unlike a builder image, the logo
+        // is DECODED on render (Site\PageController::logo downscales it to 400
+        // px on an anonymous route), so it gets the tighter budget that applies
+        // to everything a web request has to hand to GD.
+        $request->validate(['logo' => ImageGuard::rules(['png', 'jpg', 'webp'], 8192, ImageGuard::MAX_DISPLAY_PIXELS)]);
 
         $theme = SiteTheme::current();
         $old = $theme->logo_path;
@@ -320,7 +400,13 @@ class SiteBuilderController extends Controller
         $theme->update(['logo_path' => $path]);
         SiteTheme::forgetCache();
 
+        // New bytes, clean slate — a replaced logo must not inherit the
+        // previous one's "unrenderable" verdict (see ImageGuard::decodeOnce).
+        ImageGuard::forgetDecodeVerdict('site-logo:'.md5($path));
+
         if ($old && $old !== $path) {
+            Cache::forget('site-logo-thumb:'.md5($old));
+            ImageGuard::forgetDecodeVerdict('site-logo:'.md5($old));
             Storage::disk('avatars')->delete($old);
         }
 

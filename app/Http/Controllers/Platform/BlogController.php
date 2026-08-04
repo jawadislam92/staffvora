@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Platform;
 
 use App\Http\Controllers\Controller;
 use App\Models\BlogPost;
+use App\Support\HtmlSanitizer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
+use Inertia\Response;
 
 /**
  * No-code blog management in the Platform console (platform-admin only). Mirrors
@@ -16,7 +18,7 @@ use Inertia\Inertia;
  */
 class BlogController extends Controller
 {
-    public function index(): \Inertia\Response
+    public function index(): Response
     {
         return Inertia::render('Platform/Blog/Index', [
             'posts' => BlogPost::orderByRaw('COALESCE(published_at, created_at) desc')->get()
@@ -31,17 +33,17 @@ class BlogController extends Controller
         ]);
     }
 
-    public function create(): \Inertia\Response
+    public function create(): Response
     {
         return $this->editor(new BlogPost(['status' => 'draft']));
     }
 
-    public function edit(BlogPost $post): \Inertia\Response
+    public function edit(BlogPost $post): Response
     {
         return $this->editor($post);
     }
 
-    private function editor(BlogPost $post): \Inertia\Response
+    private function editor(BlogPost $post): Response
     {
         return Inertia::render('Platform/Blog/Editor', [
             'post' => [
@@ -122,29 +124,37 @@ class BlogController extends Controller
         ]);
     }
 
-    /** Light HTML allow-list for the post body (headings, text, links, lists, images). */
+    /**
+     * Normalise the post before it reaches the model.
+     *
+     * The body goes through App\Support\HtmlSanitizer — the same allow-list
+     * parser the rest of the public site uses, and the same one BlogPost applies
+     * on write and again on read.
+     *
+     * WHAT USED TO BE HERE, AND WHY IT IS GONE. This method ran three
+     * hand-rolled regexes over the body first, including
+     * `preg_replace('#javascript:#i', '', $html)` — a blind substring delete
+     * across the whole document, attribute or not. By the time the real
+     * sanitiser existed those regexes added nothing (an allow-list parser drops
+     * `<script>`, every `on*` handler and every unsafe href by construction),
+     * but they were still MANGLING legitimate copy: a security post or a how-to
+     * that names the `javascript:` scheme in a `<code>` block silently lost the
+     * word, in the operator's saved draft, with no error and no way to get it
+     * back. A guard that only ever damages honest content is not a guard.
+     *
+     * Regex is the wrong tool here in any case: `<scr<script>ipt>` defeats the
+     * tag pattern, and `on\w+=` cannot tell an attribute from prose. The parser
+     * decides what an attribute is by parsing.
+     */
     private function fill(array $data, ?BlogPost $post = null): array
     {
         if (array_key_exists('body', $data)) {
-            $data['body'] = $this->sanitize($data['body']);
+            $data['body'] = HtmlSanitizer::clean($data['body']);
         }
         if (empty($data['slug'])) {
             $data['slug'] = Str::slug($data['title']);
         }
 
         return $data;
-    }
-
-    private function sanitize(?string $html): ?string
-    {
-        if (! $html) {
-            return $html;
-        }
-        // Strip script/style/iframe blocks and inline event handlers; keep markup.
-        $html = preg_replace('#<(script|style|iframe)\b[^>]*>.*?</\1>#is', '', $html);
-        $html = preg_replace('#\son\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)#i', '', $html);
-        $html = preg_replace('#javascript:#i', '', $html);
-
-        return $html;
     }
 }

@@ -164,13 +164,19 @@ class SlackTenantIsolationReattackTest extends TestCase
     {
         Organization::factory()->create();
 
+        // NOTE: every install already carries ONE organization_id = NULL row —
+        // the create-table migration inserts it (this app grew out of a
+        // single-tenant product). So the property is "the probe adds no NEW
+        // ownerless row", measured as a delta, not an absolute count.
+        $before = DB::table('monitoring_settings')->whereNull('organization_id')->count();
+
         app(SlackBotService::class)->configured();
 
-        $stray = DB::table('monitoring_settings')->whereNull('organization_id')->count();
+        $after = DB::table('monitoring_settings')->whereNull('organization_id')->count();
 
         $this->assertSame(
-            0,
-            $stray,
+            $before,
+            $after,
             'HOLE OPEN: an unbound SlackBotService probe created a monitoring_settings row with organization_id = NULL.'
         );
     }
@@ -240,12 +246,19 @@ class SlackTenantIsolationReattackTest extends TestCase
 
         $this->assertSame(0, $slackCalls, 'nothing may leave the box');
 
-        // This assertion documents the collateral: the swallow is TOTALLY silent.
-        // If it ever starts logging, this fails and the finding is resolved.
-        $this->assertSame(
-            [],
+        // THE COLLATERAL IS NOW FIXED. Failing closed is correct; failing
+        // closed in TOTAL SILENCE is not — an admin whose attendance alerts
+        // stopped had no way whatsoever to find out. The drop must leave a
+        // trace somebody can act on.
+        $this->assertNotEmpty(
             $logged,
-            'GOOD: the fail-closed path now emits a log line an operator can see.'
+            'COLLATERAL: the fail-closed path is still totally silent — nothing is logged, so a workspace whose Slack alerts stopped can never find out why.'
+        );
+
+        $this->assertTrue(
+            collect($logged)->contains(fn ($line) => str_contains($line, 'warning:')
+                && str_contains($line, 'Slack is not connected for this workspace')),
+            'The log line must name the actual cause (workspace has not connected Slack), not just any warning. Got: '.json_encode($logged)
         );
     }
 
@@ -319,11 +332,24 @@ class SlackTenantIsolationReattackTest extends TestCase
             ]);
         });
 
-        // The stray landlord row (ATTACK 3 shows the app creates it by itself;
-        // a prod install that predates tenancy already has one) with attendance
-        // posts switched on — which is exactly how the single-tenant original
-        // shipped.
-        MonitoringSetting::current()->update(['slack_clockin_enabled' => true]);
+        // The stray landlord row. Every install has one (the create-table
+        // migration inserts it — this app grew out of a single-tenant product),
+        // and here it carries attendance posts switched ON pointing at the
+        // OPERATOR's own channel, which is exactly how the single-tenant
+        // original shipped. Written straight through the query builder so it is
+        // a genuine legacy row and not something the model layer produced.
+        DB::table('monitoring_settings')->whereNull('organization_id')->update([
+            'slack_clockin_enabled' => true,
+            'slack_clockout_enabled' => true,
+            'slack_attendance_channel' => '#operator-attendance',
+        ]);
+
+        $this->assertSame(
+            1,
+            DB::table('monitoring_settings')->whereNull('organization_id')
+                ->where('slack_clockin_enabled', true)->count(),
+            'the legacy ownerless settings row must actually exist for this attack to be meaningful'
+        );
 
         $this->app->terminate();
 

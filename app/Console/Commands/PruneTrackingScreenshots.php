@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\RequiresBoundTenant;
 use App\Models\AttendanceClockCheck;
 use App\Models\DesktopDiagnostic;
 use App\Models\Machine;
@@ -52,6 +53,8 @@ use Illuminate\Support\Facades\Storage;
  */
 class PruneTrackingScreenshots extends Command
 {
+    use RequiresBoundTenant;
+
     protected $signature = 'monitoring:prune-screenshots
         {--days= : Override the configured retention period}
         {--dry-run : Report what would be deleted without deleting}

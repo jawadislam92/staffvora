@@ -4,12 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\MonitoringSetting;
 use App\Models\Organization;
+use App\Support\ImageGuard;
+use App\Support\ImageResizer;
 use App\Tenancy\CurrentOrganization;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use Inertia\Response;
 
 /**
  * Self-service app logo. Stored on the S3-backed avatars disk so the host's
@@ -21,6 +24,18 @@ class BrandingController extends Controller
     /**
      * Serve the uploaded logo (public — it appears on the login page).
      * 404 when none is uploaded; the frontend falls back to the bundled logo.
+     *
+     * ⚠️ THIS ROUTE IS ANONYMOUS. It renders on the login page, so anything
+     * expensive here is reachable by anyone on the internet, at whatever rate
+     * they like, with no account. That is why the upload side is now guarded
+     * (see update()) and why the decode below goes through ImageResizer, whose
+     * memory budget and crash breadcrumb are what stop one bad logo from
+     * turning every unauthenticated hit into a fresh out-of-memory fatal.
+     *
+     * The Content-Type is decided from the BYTES, never from the stored path's
+     * extension. A file extension is attacker-influenced and a stored value
+     * written before a rule was tightened lives forever; the header in front of
+     * us is the only trustworthy source.
      */
     public function logo(Request $request)
     {
@@ -41,14 +56,27 @@ class BrandingController extends Controller
             if (! Storage::disk('avatars')->exists($path)) {
                 return false;
             }
-            $fallbackMime = match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
-                'png' => 'image/png',
-                'webp' => 'image/webp',
-                default => 'image/jpeg',
-            };
-            $resized = \App\Support\ImageResizer::fit(Storage::disk('avatars')->get($path), 320);
 
-            return ['bytes' => $resized['bytes'], 'mime' => $resized['mime'] ?? $fallbackMime];
+            $bytes = (string) Storage::disk('avatars')->get($path);
+
+            // Decide the type from the header, not from the extension. A row
+            // written before the upload rule was tightened still carries
+            // whatever it carried then, and this response goes to anonymous
+            // visitors on the app origin — the origin the customer session
+            // cookie is scoped to. Non-raster bytes (an SVG is a scriptable XML
+            // document, not an image) get no response at all: 404 makes the
+            // frontend draw the bundled logo, which is the correct outcome.
+            $sourceMime = ImageGuard::serveMime($bytes);
+
+            if ($sourceMime === null) {
+                return false;
+            }
+
+            // Keyed by PATH, so the breadcrumb survives across requests and a
+            // replaced logo starts with a clean slate (see update()).
+            $resized = ImageResizer::fit($bytes, 320, ImageGuard::MAX_PIXELS, 'branding-logo:'.md5($path));
+
+            return ['bytes' => $resized['bytes'], 'mime' => $resized['mime'] ?? $sourceMime];
         });
 
         if ($cached === false) {
@@ -68,8 +96,17 @@ class BrandingController extends Controller
     {
         $this->authorizeBranding($request);
 
+        // ONE guard for every image upload in the app — see App\Support\ImageGuard.
+        //
+        // This was the worst of the unguarded siblings: `image|mimes:...|max:8192`
+        // with no dimension check at all, feeding logo() — which is ANONYMOUS.
+        // An 89-byte PNG declaring 8000x4999 cost GD ~274 MB there, which at a
+        // 128-256 MB memory_limit is an uncatchable fatal, so Cache::remember()
+        // never wrote and EVERY subsequent hit on the login page repeated it.
+        // One upload, by one admin, and the login page is a self-sustaining
+        // anonymous denial of service.
         $request->validate([
-            'logo' => ['required', 'image', 'mimes:png,jpg,jpeg,webp', 'max:8192'],
+            'logo' => ImageGuard::rules(['png', 'jpg', 'webp'], 8192, ImageGuard::MAX_DISPLAY_PIXELS),
         ]);
 
         $settings = MonitoringSetting::current();
@@ -78,17 +115,26 @@ class BrandingController extends Controller
         $path = $request->file('logo')->store('branding', 'avatars');
         $settings->update(['branding_logo_path' => $path]);
 
+        // New bytes, clean slate: a replaced logo must not inherit the previous
+        // one's "unrenderable" verdict. store() hashes the name, so this is
+        // normally a fresh key anyway — but the verdict outliving the file it
+        // was about is exactly the kind of thing that is discovered six months
+        // later as "the logo just won't come back".
+        ImageGuard::forgetDecodeVerdict('branding-logo:'.md5($path));
+
         if ($old && $old !== $path) {
             Storage::disk('avatars')->delete($old);
+            Cache::forget('branding-logo-thumb:'.md5($old));
+            ImageGuard::forgetDecodeVerdict('branding-logo:'.md5($old));
         }
 
-        \App\Models\MonitoringSetting::forgetSharedCache();
+        MonitoringSetting::forgetSharedCache();
 
         return back()->with('success', 'Logo updated. Browsers may show the old one for a moment until their cache refreshes.');
     }
 
     /** The white-label settings page (workspace name, accent, logo, default theme). */
-    public function edit(): \Inertia\Response
+    public function edit(): Response
     {
         $org = $this->currentOrg();
         $logoPath = MonitoringSetting::current()->branding_logo_path;

@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\Shift;
 use App\Models\Team;
 use App\Models\User;
+use App\Support\ImageGuard;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -252,9 +253,17 @@ class UserController extends Controller
             'shift_id' => ['nullable', Rule::in(Shift::pluck('id')->all())],
         ];
 
-        // Only add avatar validation if file is present
+        // Only add avatar validation if file is present.
+        //
+        // ONE guard for every image upload in the app — see App\Support\ImageGuard.
+        // This form is the sibling of /profile and had NEITHER half of the
+        // guard: `image|mimes:...|max:2048` proves the bytes are an image, not
+        // that they are a sane one, so a 40000x40000 header that /profile
+        // rejected outright was accepted here and stored, ready for the next
+        // team-page render to hand to GD. Same call, same budget, same
+        // rejection message as every other avatar/logo door.
         if ($request->hasFile('avatar')) {
-            $rules['avatar'] = 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048';
+            $rules['avatar'] = ImageGuard::rules(['jpg', 'png', 'gif'], 2048, ImageGuard::MAX_DISPLAY_PIXELS, required: false);
         }
 
         $validated = $request->validate($rules);
@@ -397,9 +406,17 @@ class UserController extends Controller
             'shift_id' => ['nullable', Rule::in(Shift::pluck('id')->all())],
         ];
 
-        // Only add avatar validation if file is present
+        // Only add avatar validation if file is present.
+        //
+        // ONE guard for every image upload in the app — see App\Support\ImageGuard.
+        // This form is the sibling of /profile and had NEITHER half of the
+        // guard: `image|mimes:...|max:2048` proves the bytes are an image, not
+        // that they are a sane one, so a 40000x40000 header that /profile
+        // rejected outright was accepted here and stored, ready for the next
+        // team-page render to hand to GD. Same call, same budget, same
+        // rejection message as every other avatar/logo door.
         if ($request->hasFile('avatar')) {
-            $rules['avatar'] = 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048';
+            $rules['avatar'] = ImageGuard::rules(['jpg', 'png', 'gif'], 2048, ImageGuard::MAX_DISPLAY_PIXELS, required: false);
         }
 
         $validated = $request->validate($rules);
@@ -459,9 +476,13 @@ class UserController extends Controller
         // "anything that raises seatUsage() runs the seat check", not "the
         // fields today's form happens to submit". Editing a demo user's e-mail
         // was how a two-seat plan grew to eight users.
-        $consumedBefore = ! User::isReservedDemoEmail($user->getOriginal('email'))
+        //
+        // Read from the `is_demo` MARKER, not from the address: the address
+        // predicate is a byte comparison the database disagreed with, and this
+        // has to describe exactly the rows User::scopeSeatConsuming() counts.
+        $consumedBefore = ! (bool) $user->getRawOriginal('is_demo')
             && (bool) ($user->getOriginal('is_active') ?? true);
-        $consumesAfter = ! User::isReservedDemoEmail($user->email) && $user->isActive();
+        $consumesAfter = ! $user->isDemoIdentity() && $user->isActive();
 
         if (! $consumedBefore && $consumesAfter) {
             User::withSeatGuard($request->user()->organization, fn () => $user->save());
@@ -851,15 +872,32 @@ class UserController extends Controller
             ? $this->filteredUserQuery($request)
             : User::whereIn('id', $data['ids'] ?? []))->excludingDemoIdentities();
 
+        // Narrow to the rows that would ACTUALLY change, in SQL rather than in
+        // PHP. These three predicates used to be `reject()` closures applied
+        // after every 500-row page had already been read — which meant the
+        // reactivation branch below dragged the whole directory through the
+        // tenant's serialisation lock just to discard most of it. The PHP
+        // rejects are kept underneath as belt-and-braces.
+        $base = $base
+            ->where('is_active', ! $isActive)
+            ->whereKeyNot($actor->getKey());
+
+        if (! $actor->isSuperAdmin()) {
+            $base = $base->where(fn ($q) => $q->where('role', '!=', 'super_admin')->orWhereNull('role'));
+        }
+
         // Reactivation is a SEAT-INCREASING path (a deactivated person is
         // neither billed nor counted), so it is capped by the plan's remaining
         // headroom instead of being allowed to overshoot silently. Deactivation
         // never needs a cap and must not pay for a lock.
-        $headroom = null;
-
-        $apply = function () use ($base, $actor, $isActive, &$changed, &$hitSeatLimit, &$headroom) {
+        //
+        // The LOCK-FREE path below is for deactivation, and for reactivation on
+        // an unlimited plan. Neither consumes a seat, so neither takes the
+        // tenant lock, and streaming the set through chunkById holds nothing
+        // while it works.
+        $apply = function () use ($base, $actor, $isActive, &$changed) {
             $base->select(['id', 'role', 'is_active'])
-                ->chunkById(500, function ($chunk) use ($actor, $isActive, &$changed, &$hitSeatLimit, &$headroom) {
+                ->chunkById(500, function ($chunk) use ($actor, $isActive, &$changed) {
                     $ids = $chunk
                         ->reject(fn (User $user) => $user->isSuperAdmin() && ! $actor->isSuperAdmin())
                         ->reject(fn (User $user) => $actor->is($user))
@@ -869,24 +907,6 @@ class UserController extends Controller
 
                     if ($ids === []) {
                         return;
-                    }
-
-                    if ($headroom !== null) {
-                        if (count($ids) > $headroom) {
-                            $hitSeatLimit = true;
-                            $ids = array_slice($ids, 0, $headroom);
-                        }
-                        $headroom -= count($ids);
-
-                        if ($ids === []) {
-                            // Stop the scan rather than walking the rest of a
-                            // "select all N matching" set we can no longer act
-                            // on — this loop runs inside the seat transaction,
-                            // and holding the organizations lock while reading
-                            // tens of thousands of rows would queue every other
-                            // signup behind it.
-                            return false;
-                        }
                     }
 
                     // One UPDATE per chunk instead of one per row. No model
@@ -908,12 +928,6 @@ class UserController extends Controller
                     }
 
                     $changed += count($ids);
-
-                    if ($headroom !== null && $headroom <= 0) {
-                        $hitSeatLimit = true;
-
-                        return false;
-                    }
                 });
         };
 
@@ -921,14 +935,46 @@ class UserController extends Controller
             // Same transaction + same organizations-row lock a new hire takes,
             // so a bulk reactivation racing a POST /users cannot both spend the
             // last seat. The headroom is read INSIDE the lock.
-            DB::transaction(function () use ($actor, $apply, &$headroom) {
+            //
+            // 🔴 BOUNDED. The lock serialises the whole tenant, so the work done
+            // while holding it must be bounded by something small — and it is:
+            // a reactivation can never touch more rows than the plan has free
+            // seats. Streaming the entire matching set through `chunkById`
+            // inside the transaction (the previous shape) meant a "select all N
+            // matching" on a 100k-row tenant held the organizations row while it
+            // walked every page, queueing every signup, hire and reactivation in
+            // that workspace behind it until it timed out. One bounded SELECT of
+            // headroom+1 ids replaces the scan; the extra id is only there to
+            // tell the customer that the rest did not fit.
+            DB::transaction(function () use ($actor, $base, $isActive, &$changed, &$hitSeatLimit) {
                 Organization::query()
                     ->whereKey($actor->organization_id)
                     ->lockForUpdate()
                     ->first();
 
                 $headroom = User::seatHeadroom($actor->organization) ?? 0;
-                $apply();
+
+                $ids = $headroom < 1
+                    ? []
+                    : $base->clone()->orderBy('id')->limit($headroom + 1)->pluck('id')->all();
+
+                if (count($ids) > $headroom) {
+                    $hitSeatLimit = true;
+                    $ids = array_slice($ids, 0, $headroom);
+                }
+
+                foreach (array_chunk($ids, 500) as $chunk) {
+                    User::whereIn('id', $chunk)->update([
+                        'is_active' => $isActive,
+                        'updated_at' => now(),
+                    ]);
+                    $changed += count($chunk);
+                }
+
+                // Nothing fitted at all, but there was something to do.
+                if ($headroom < 1 && $base->clone()->limit(1)->exists()) {
+                    $hitSeatLimit = true;
+                }
             });
         } else {
             $apply();

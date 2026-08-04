@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\RequiresBoundTenant;
 use App\Models\DesktopDiagnostic;
 use App\Models\MonitoringSetting;
 use App\Models\TimeEntry;
@@ -67,6 +68,8 @@ use Illuminate\Support\Facades\Log;
  */
 class SilentTrackerCheck extends Command
 {
+    use RequiresBoundTenant;
+
     protected $signature = 'monitoring:silent-tracker-check
         {--minutes= : Flag a live session with no screenshot/sample for this long (default: services.attendance.tracker_health_silent_minutes, 20)}
         {--live-minutes= : How recent a heartbeat must be for the session to count as live (default: services.attendance.tracker_health_live_minutes, 5)}

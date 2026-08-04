@@ -146,7 +146,22 @@ class PublicAuthSurfaceHardeningTest extends TestCase
     // 2. POST /reset-password throttling (CPU burn + 6-digit code brute force)
     // ---------------------------------------------------------------------
 
-    public function test_reset_password_locks_out_one_address_after_five_wrong_tokens(): void
+    /**
+     * The guessing budget belongs to the ACCOUNT and survives IP rotation, and
+     * once it is spent even a CORRECT guess is refused.
+     *
+     * Every request below comes from a different source address, so the per-IP
+     * route throttle can never be the thing refusing them — this is purely the
+     * account-wide budget in NewPasswordController.
+     *
+     * The budget used to be a ten-minute HARD block keyed on the submitted
+     * address string. That was evadable (see
+     * RedTeamPasswordResetChainTest::test_redteam_lockout_key_is_not_collation_equivalent)
+     * and doubled as a denial-of-service weapon against the real owner. It now
+     * escalates instead of hard-blocking; PasswordResetTakeoverHardeningTest
+     * pins the "the owner still gets in" half of that bargain.
+     */
+    public function test_reset_password_budget_is_account_wide_and_survives_ip_rotation(): void
     {
         $victim = $this->owner('Victim Corp', 'victim-brute@corp.test');
 
@@ -158,22 +173,27 @@ class PublicAuthSurfaceHardeningTest extends TestCase
             ['token' => Hash::make($code), 'created_at' => now()]
         );
 
-        for ($i = 0; $i < 5; $i++) {
-            $this->from('/reset-password/x')->post('/reset-password', [
-                'token' => str_pad((string) $i, 6, '0', STR_PAD_LEFT),
+        for ($i = 0; $i <= 5; $i++) {
+            $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.'.$i])
+                ->from('/reset-password/x')
+                ->post('/reset-password', [
+                    'token' => str_pad((string) $i, 6, '0', STR_PAD_LEFT),
+                    'email' => $victim->email,
+                    'password' => 'attacker-password-1',
+                    'password_confirmation' => 'attacker-password-1',
+                ]);
+        }
+
+        // Even the CORRECT code is now refused: the budget is spent, and a
+        // fresh source address does not refill it.
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.200'])
+            ->from('/reset-password/x')
+            ->post('/reset-password', [
+                'token' => $code,
                 'email' => $victim->email,
                 'password' => 'attacker-password-1',
                 'password_confirmation' => 'attacker-password-1',
-            ]);
-        }
-
-        // Even the CORRECT code is now refused: the guessing budget is spent.
-        $this->from('/reset-password/x')->post('/reset-password', [
-            'token' => $code,
-            'email' => $victim->email,
-            'password' => 'attacker-password-1',
-            'password_confirmation' => 'attacker-password-1',
-        ])->assertSessionHasErrors('email');
+            ])->assertStatus(429);
 
         $this->assertFalse(
             Hash::check('attacker-password-1', $victim->fresh()->password),

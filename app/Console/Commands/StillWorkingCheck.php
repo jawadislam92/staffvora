@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\RequiresBoundTenant;
 use App\Models\AttendanceClockCheck;
 use App\Models\TimeEntry;
 use App\Models\TrackingSession;
@@ -22,6 +23,8 @@ use Illuminate\Support\Facades\Log;
  */
 class StillWorkingCheck extends Command
 {
+    use RequiresBoundTenant;
+
     protected $signature = 'attendance:still-working-check
         {--reprompt-minutes=10 : Minimum gap between nudges to the same person}
         {--max-prompts= : Clock the person out after this many unanswered nudges (default from config, 4)}

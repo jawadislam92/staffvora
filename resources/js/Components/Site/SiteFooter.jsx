@@ -1,11 +1,20 @@
 import { Link } from '@inertiajs/react';
 import SiteLogo from './SiteLogo';
+// One implementation of the rule, shared with SiteHeader — see the comment on
+// safeHref there. Footer links and the social icons are builder-editable
+// `site_themes` values rendered into an href on every public page, and React
+// does not block a `javascript:` href on its own.
+import { safeHref } from './SiteHeader';
 
 const isAppRoute = (url) => ['/login', '/register', '/dashboard'].includes(url);
-const FLink = ({ url, label }) =>
-    isAppRoute(url)
-        ? <Link href={url} className="text-sm text-[var(--muted)] transition hover:text-[var(--brand)]">{label}</Link>
-        : <a href={url} className="text-sm text-[var(--muted)] transition hover:text-[var(--brand)]">{label}</a>;
+const FLink = ({ url, label }) => {
+    const href = safeHref(url);
+    const className = 'text-sm text-[var(--muted)] transition hover:text-[var(--brand)]';
+
+    return href !== undefined && isAppRoute(href)
+        ? <Link href={href} className={className}>{label}</Link>
+        : <a href={href} className={className}>{label}</a>;
+};
 
 const SOCIALS = [
     { key: 'linkedin', label: 'LinkedIn', d: 'M4.98 3.5a2.5 2.5 0 11-.02 5 2.5 2.5 0 01.02-5zM3 9h4v12H3zM9 9h3.8v1.7h.05c.53-1 1.83-2.05 3.77-2.05 4.03 0 4.78 2.65 4.78 6.1V21h-4v-5.3c0-1.27-.02-2.9-1.77-2.9-1.77 0-2.04 1.38-2.04 2.8V21H9z' },
@@ -28,8 +37,8 @@ export default function SiteFooter({ nav = [], brand }) {
                         <a href="/" aria-label={name}><SiteLogo name={name} size={28} textClass="text-lg" /></a>
                         {brand?.tagline && <p className="mt-4 max-w-xs text-sm leading-relaxed text-[var(--muted)]">{brand.tagline}</p>}
                         <div className="mt-6 flex gap-2.5">
-                            {SOCIALS.filter((s) => socials[s.key]).map((s) => (
-                                <a key={s.key} href={socials[s.key]} target="_blank" rel="noreferrer" aria-label={s.label}
+                            {SOCIALS.filter((s) => safeHref(socials[s.key]) !== undefined).map((s) => (
+                                <a key={s.key} href={safeHref(socials[s.key])} target="_blank" rel="noreferrer" aria-label={s.label}
                                     className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--surface)] text-[var(--muted)] ring-1 ring-[var(--line)] transition hover:text-[var(--brand)]">
                                     <svg className="h-[18px] w-[18px]" fill="currentColor" viewBox="0 0 24 24"><path d={s.d} /></svg>
                                 </a>

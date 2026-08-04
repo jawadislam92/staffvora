@@ -3,9 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\BlogPost;
+use App\Models\PlatformUser;
 use App\Models\SitePage;
 use App\Models\SiteTheme;
+use App\Support\DefaultSiteContent;
 use App\Support\HtmlSanitizer;
+use Database\Seeders\SiteContentSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -144,12 +147,13 @@ class SanitizerReattackTest extends TestCase
     // 4. THEME — the chrome on every public page.
     // ------------------------------------------------------------------
 
-    public function test_theme_public_payload_does_NOT_sanitise_a_stored_row(): void
+    public function test_theme_public_payload_sanitises_a_stored_row(): void
     {
-        // ATTACK: unlike SitePage/BlogPost, SiteTheme has no read-pass and no
-        // model-level guard — the ONLY check is in SiteBuilderController.
-        // A row already in the database (i.e. every row written before the fix
-        // shipped, on the live site) is served verbatim to every visitor.
+        // WAS: unlike SitePage/BlogPost, SiteTheme had no read pass and no
+        // model-level guard — the ONLY check was in SiteBuilderController, so a
+        // row already in the database (i.e. every row written before the fix
+        // shipped, on the live site) was served verbatim to every visitor.
+        // SiteTheme now cleans on write AND on read; this is the inverted form.
         \DB::table('site_themes')->insert([
             'id' => 1,
             'nav_links' => json_encode([['label' => 'Pricing', 'url' => 'javascript:alert(1)']]),
@@ -161,10 +165,10 @@ class SanitizerReattackTest extends TestCase
 
         $payload = SiteTheme::current()->publicPayload();
 
-        // These assertions PASSING is the finding: the payload comes back raw.
-        $this->assertSame('javascript:alert(1)', $payload['nav_links'][0]['url']);
-        $this->assertSame('javascript:alert(2)', $payload['footer_columns'][0]['links'][0]['url']);
-        $this->assertSame('javascript:alert(3)', $payload['social_links']['x']);
+        $this->assertNull($payload['nav_links'][0]['url']);
+        $this->assertNull($payload['footer_columns'][0]['links'][0]['url']);
+        $this->assertSame('', $payload['social_links']['x']);
+        $this->assertPayloadInert($payload, 'theme');
     }
 
     // ------------------------------------------------------------------
@@ -173,7 +177,7 @@ class SanitizerReattackTest extends TestCase
 
     public function test_real_seeder_content_is_byte_identical_after_sanitising(): void
     {
-        $ref = new \ReflectionClass(\Database\Seeders\SiteContentSeeder::class);
+        $ref = new \ReflectionClass(SiteContentSeeder::class);
         $method = $ref->getMethod('pages');
         $method->setAccessible(true);
         $pages = $method->invoke($ref->newInstanceWithoutConstructor());
@@ -193,9 +197,9 @@ class SanitizerReattackTest extends TestCase
     //    fetches. This is the property — "can script reach a public page".
     // ------------------------------------------------------------------
 
-    private function operator(): \App\Models\PlatformUser
+    private function operator(): PlatformUser
     {
-        return \App\Models\PlatformUser::create([
+        return PlatformUser::create([
             'name' => 'Op', 'email' => 'reattack@platform.test',
             'password' => 'operator-secret-pw', 'role' => 'owner',
         ]);
@@ -221,7 +225,7 @@ class SanitizerReattackTest extends TestCase
 
     public function test_operator_cannot_land_script_on_a_published_page_via_the_builder(): void
     {
-        \App\Support\DefaultSiteContent::ensure();
+        DefaultSiteContent::ensure();
         $page = SitePage::where('slug', 'home')->firstOrFail();
 
         // Payload battery: every content-bearing shape the renderers actually
@@ -266,18 +270,28 @@ class SanitizerReattackTest extends TestCase
      * graph with `dangerouslySetInnerHTML` into a <script type="application/
      * ld+json">. JSON.stringify escapes neither `<` nor `/`.
      *
-     * This test records that the raw `</script>` reaches the JSON-LD payload.
-     * It is NOT currently exploitable — verified in a real browser: setting
-     * .innerHTML on a <script> element parses the whole string as raw text
-     * (fragment parsing uses the script-data tokenizer state and no start tag
-     * has been emitted, so `</script>` is not an "appropriate end tag"), so no
-     * element is created and nothing executes. It becomes a live stored XSS the
-     * day this page is server-rendered (Inertia SSR), because the string would
-     * then be written into the HTML source. Treat it as a tripwire.
+     * This test records that the raw `</script>` reaches the JSON-LD PROP — and
+     * that is fine and expected: the prop is operator-authored FAQ text, and
+     * Inertia carries it inside an HTML-escaped `data-page` attribute.
+     *
+     * The danger was one step later, in SiteShell, which fed the graph to
+     * dangerouslySetInnerHTML through a bare `JSON.stringify`. It was NOT
+     * exploitable — verified in a real browser: setting .innerHTML on a <script>
+     * element parses the whole string as raw text (fragment parsing uses the
+     * script-data tokenizer state and no start tag has been emitted, so
+     * `</script>` is not an "appropriate end tag"), so no element is created and
+     * nothing executes — but it became a live stored XSS the day the page was
+     * server-rendered (Inertia SSR), because the string would then be written
+     * into the HTML source.
+     *
+     * SiteShell now escapes `<`, `>`, `&` and `/` for the script context
+     * (jsonLdText), so the tripwire below stays as documentation of the prop
+     * shape; the escaping itself is covered by
+     * PublicSiteChromeAndScaleDefenceTest.
      */
     public function test_faq_text_reaches_the_json_ld_script_unescaped(): void
     {
-        \App\Support\DefaultSiteContent::ensure();
+        DefaultSiteContent::ensure();
         $page = SitePage::where('slug', 'home')->firstOrFail();
         $op = $this->operator();
 
@@ -298,12 +312,12 @@ class SanitizerReattackTest extends TestCase
         // SiteShell actually feeds to dangerouslySetInnerHTML.
         $json = json_encode($props['jsonLd'], JSON_UNESCAPED_SLASHES);
         $this->assertStringContainsString('</script>', $json,
-            'If this now fails the JSON-LD path has been hardened — delete this tripwire.');
+            'If this now fails the JSON-LD prop shape changed — re-check SiteShell::jsonLdText.');
     }
 
     public function test_operator_cannot_land_a_javascript_link_in_the_site_chrome(): void
     {
-        \App\Support\DefaultSiteContent::ensure();
+        DefaultSiteContent::ensure();
         $op = $this->operator();
 
         $attempts = [
@@ -347,7 +361,7 @@ class SanitizerReattackTest extends TestCase
      */
     public function test_theme_links_below_the_validation_rules_are_still_neutralised(): void
     {
-        \App\Support\DefaultSiteContent::ensure();
+        DefaultSiteContent::ensure();
         $op = $this->operator();
 
         $this->actingAs($op, 'platform')->put(route('platform.site.theme'), [
@@ -412,12 +426,14 @@ class SanitizerReattackTest extends TestCase
     }
 
     /**
-     * COLLATERAL: Platform\BlogController::sanitize() is a leftover regex pass
-     * that runs BEFORE the model's real sanitiser. It is no longer needed for
-     * safety, and it silently corrupts legitimate copy — a post explaining URL
-     * schemes loses the literal text. HtmlSanitizer::clean() keeps it.
+     * COLLATERAL: Platform\BlogController::sanitize() WAS a leftover regex pass
+     * that ran BEFORE the model's real sanitiser. It added nothing to safety
+     * once the allow-list parser existed, and it silently corrupted legitimate
+     * copy — a post explaining URL schemes lost the literal text, in the
+     * operator's own saved draft, with no error. It is gone; HtmlSanitizer,
+     * which keeps the text, is the only pass now.
      */
-    public function test_blog_controller_regex_pass_corrupts_legitimate_copy(): void
+    public function test_blog_controller_no_longer_corrupts_legitimate_copy(): void
     {
         $op = $this->operator();
         $body = '<p>Never put a <code>javascript:</code> URL in a link.</p>';
@@ -428,10 +444,9 @@ class SanitizerReattackTest extends TestCase
 
         $stored = BlogPost::where('slug', 'schemes')->firstOrFail()->body;
 
-        // The model-level sanitiser alone would have kept it (proved below).
         $this->assertStringContainsString('javascript:', HtmlSanitizer::clean($body));
-        // The controller's regex ate it first. This assertion PASSING is the bug.
-        $this->assertStringNotContainsString('javascript:', $stored);
+        $this->assertStringContainsString('javascript:', $stored, 'a regex pass is still eating honest copy');
+        $this->assertSame(HtmlSanitizer::clean($body), $stored);
     }
 
     public function test_clean_is_idempotent_and_does_not_strip_ordinary_text(): void

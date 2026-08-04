@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\RequiresBoundTenant;
 use App\Models\TrackingSession;
 use App\Services\TrackingSessionService;
 use Illuminate\Console\Command;
@@ -16,6 +17,8 @@ use Illuminate\Console\Command;
  */
 class ResyncWorkHours extends Command
 {
+    use RequiresBoundTenant;
+
     protected $signature = 'tracker:resync-work-hours
         {--since= : Only sessions started on/after this date (Y-m-d)}
         {--user= : Limit to one user id}

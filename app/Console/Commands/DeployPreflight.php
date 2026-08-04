@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Http\Middleware\TrustHosts;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -62,6 +63,7 @@ class DeployPreflight extends Command
         $this->checkDebug();
         $this->checkEnvironment();
         $this->checkAppUrl();
+        $this->checkHostProtection();
         $this->checkDatabase();
         $this->checkMigrations();
         $this->checkStorageLink();
@@ -167,6 +169,78 @@ class DeployPreflight extends Command
         }
 
         $this->pass('Site address', 'APP_URL is '.$url.'.');
+    }
+
+    /**
+     * Is the Host header actually being validated on this box?
+     *
+     * Two silent ways it is not, both of which end with a customer receiving a
+     * genuine password-reset token on a link that points at somebody else:
+     *
+     *  1. APP_ENV=local. Laravel's TrustHosts::shouldSpecifyTrustedHosts() makes
+     *     the whole middleware a no-op outside production-ish environments, and
+     *     the repo .env says local. Copy that .env onto the server — which is
+     *     exactly how these boxes get set up — and host validation is off while
+     *     everything else looks fine.
+     *  2. An empty trusted-host list. Symfony reads "no patterns" as "trust
+     *     every host on earth", so an APP_URL it cannot parse plus a blank
+     *     PLATFORM_HOST used to disable the protection instead of enabling it.
+     *     TrustHosts now substitutes a never-matching pattern so that state
+     *     fails CLOSED (the site refuses everything) — loud, but the site is
+     *     down, so catch it here before the deploy rather than after.
+     */
+    private function checkHostProtection(): void
+    {
+        $patterns = (new TrustHosts($this->laravel))->publicHostPatterns();
+
+        if ($patterns === [] || $patterns === [TrustHosts::NEVER_MATCHES]) {
+            $this->blocker(
+                'Host protection',
+                'The trusted host list resolves to NOTHING — APP_URL cannot be parsed and PLATFORM_HOST is blank. The site will refuse every request (it fails closed on purpose), and on older builds it would instead have trusted any Host header, which lets an attacker put their own domain inside a real customer\'s password-reset link.',
+                'Set APP_URL to the full site address, e.g. APP_URL=https://staffvora.com (and PLATFORM_HOST if the operator console lives on its own domain), then run: php artisan config:clear && php artisan config:cache'
+            );
+
+            return;
+        }
+
+        if ($this->isProduction()) {
+            $this->pass('Host protection', 'Host header validation is active for '.implode(' and ', $patterns).'.');
+
+            return;
+        }
+
+        $message = 'APP_ENV is "'.config('app.env').'", so Laravel switches Host header validation OFF. Anyone can then post to /forgot-password with their own Host header and have a real customer emailed a genuine reset token on a link that points at the attacker.';
+        $fix = 'Set APP_ENV=production in the .env ON THE SERVER (the repo .env is a development one), then run: php artisan config:clear && php artisan config:cache';
+
+        if ($this->looksLikeALiveSite()) {
+            $this->blocker('Host protection', $message, $fix);
+
+            return;
+        }
+
+        $this->caution('Host protection', $message.' Fine on a development machine, never on the live server.', $fix);
+    }
+
+    /**
+     * Does this box look like it is serving real customers, whatever APP_ENV
+     * claims? A public https address that is not a development hostname is the
+     * honest signal — it is what customers, and attackers, actually reach.
+     */
+    private function looksLikeALiveSite(): bool
+    {
+        $url = strtolower((string) config('app.url'));
+
+        if (! str_starts_with($url, 'https://')) {
+            return false;
+        }
+
+        foreach (['localhost', '127.0.0.1', '.test', '.local', '.localhost'] as $development) {
+            if (str_contains($url, $development)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function checkDatabase(): void

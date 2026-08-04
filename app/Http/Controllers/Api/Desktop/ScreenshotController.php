@@ -16,9 +16,16 @@ use Illuminate\Support\Facades\Log;
 class ScreenshotController extends DesktopController
 {
     /**
-     * Total pixel budget. Per-axis bounds cannot express this — 7999x7999 is
-     * 64 Mpx (~256 MB under GD) and passes any "max 8000 wide" rule. 40 Mpx
-     * comfortably covers a dual-4K capture.
+     * Total pixel budget for what we will STORE.
+     *
+     * Per-axis bounds cannot express this and are harmful in both directions:
+     * 7999x7999 is 64 Mpx and passes any "max 8000 wide" rule, while an honest
+     * triple-4K capture (11520x2160 = 24.9 Mpx) FAILS one at 62% of the budget —
+     * which is how a monitoring product ends up silently losing evidence from
+     * exactly the multi-monitor workstations it most needs to watch.
+     *
+     * Note this is not a memory bound and nothing may decode on the strength of
+     * it — see ImageGuard, and GenerateScreenshotThumbnail for the decode side.
      */
     private const MAX_PIXELS = ImageGuard::MAX_PIXELS;
 
@@ -81,9 +88,21 @@ class ScreenshotController extends DesktopController
                 'bytes' => $file->getSize(),
             ]);
 
+            // Explicit and machine-readable: the agent buffers captures and
+            // needs to know the difference between "retry later" and "this one
+            // will never be accepted, stop holding it". A silent drop is what
+            // makes "the screenshots just stopped" undiagnosable.
+            $rawPixels = (float) ($raw[0] ?? 0) * (float) ($raw[1] ?? 0);
+
             return response()->json([
-                'message' => 'The screenshot is too large to process.',
+                'message' => $rawPixels > self::MAX_PIXELS
+                    ? 'The screenshot is '.($raw[0] ?? '?').'x'.($raw[1] ?? '?').', which is over the '
+                        .round(self::MAX_PIXELS / 1_000_000).' megapixel limit.'
+                    : 'The screenshot is not a readable '.implode('/', self::ALLOWED_FORMATS).' image.',
                 'code' => 'screenshot_too_large',
+                'max_pixels' => self::MAX_PIXELS,
+                'width' => $raw[0] ?? null,
+                'height' => $raw[1] ?? null,
             ], 422);
         }
 

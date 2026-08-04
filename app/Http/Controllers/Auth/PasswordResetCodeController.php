@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\SlackBotService;
 use App\Tenancy\CurrentOrganization;
 use Carbon\Carbon;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,31 +22,69 @@ use Illuminate\Validation\ValidationException;
  * whose members don't reliably receive email. The code is DMed straight to
  * the employee's Slack (matched by their account email); if they aren't on
  * Slack with that email, it falls back to the admin-only resets channel.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THROTTLING: BOTH SIDES ARE KEYED ON THE ACCOUNT
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Both limiters here used to be keyed `{email}|{ip}`, on top of a per-IP route
+ * throttle — so neither had an account-wide budget at all. Rotating 40 source
+ * addresses bought 200 guesses at a six-digit secret and then the account; and
+ * 60 accepted code requests let an attacker spray a victim's Slack DMs.
+ *
+ *   • VERIFY side: delegated wholesale to NewPasswordController's shared
+ *     account budget. Both endpoints unlock the same `password_reset_tokens`
+ *     row, so they must draw on ONE counter — otherwise the budget is simply
+ *     spent on whichever endpoint is not being watched. Read that class for why
+ *     the key is the resolved user id and why the lockout escalates instead of
+ *     hard-blocking.
+ *
+ *   • REQUEST side: a hard per-account cap on how many codes can be sent, since
+ *     this is a send/amplification vector. A hard cap is safe here (unlike on the
+ *     verify side) because the codes go to the VICTIM's Slack, not the
+ *     attacker's: spending the budget hands the owner five working codes rather
+ *     than denying them anything.
+ *
+ * The account key falls back to the address (never address+IP) when nothing
+ * resolves, so an unknown address is throttled exactly like a real one and this
+ * endpoint stays free of an account-existence oracle.
  */
 class PasswordResetCodeController extends Controller
 {
     private const CODE_TTL_MINUTES = 10;
 
+    /** Codes that may be sent for one account per window. */
+    public const MAX_CODES_PER_WINDOW = 5;
+
+    public const CODE_REQUEST_WINDOW_SECONDS = 900;
+
     public function store(Request $request, SlackBotService $slack): RedirectResponse
     {
         $request->validate(['email' => ['required', 'email']]);
 
-        $email = strtolower(trim($request->input('email')));
-        $throttleKey = 'pwcode:'.$email.'|'.$request->ip();
-
-        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
-            throw ValidationException::withMessages([
-                'email' => 'Too many code requests. Try again in a few minutes.',
-            ]);
-        }
-        RateLimiter::hit($throttleKey, 600);
+        $submittedEmail = (string) $request->input('email');
 
         // This endpoint is anonymous, so no tenant is bound. Resolve the
         // account explicitly unscoped rather than relying on the global scope
-        // happening to be a no-op here.
-        $user = app(CurrentOrganization::class)->runUnscoped(
-            fn () => User::where('email', $email)->first()
-        );
+        // happening to be a no-op here — and key the budget on what came back,
+        // so no spelling of the address can buy a fresh allowance.
+        $user = NewPasswordController::resolveAccount($submittedEmail);
+
+        $sendKey = 'pwcode-send:'.NewPasswordController::accountScope($user, $submittedEmail);
+
+        if (RateLimiter::tooManyAttempts($sendKey, self::MAX_CODES_PER_WINDOW)) {
+            $seconds = max(1, RateLimiter::availableIn($sendKey));
+
+            // Identical for a real and an unknown address: both are counted on
+            // the same kind of key at the same rate, so this cannot be used to
+            // ask "does this person use Staffvora?".
+            throw new ThrottleRequestsException(
+                'Too many reset codes requested. Try again in '.$seconds.' seconds.',
+                null,
+                ['Retry-After' => $seconds]
+            );
+        }
+
+        RateLimiter::hit($sendKey, self::CODE_REQUEST_WINDOW_SECONDS);
 
         // Never reveal whether an account exists.
         $neutralMessage = 'If that account exists, a reset code is on its way via Slack.';
@@ -98,40 +137,43 @@ class PasswordResetCodeController extends Controller
             'password' => ['required', 'confirmed', Password::min(12)],
         ]);
 
-        $email = strtolower(trim($request->input('email')));
-        $throttleKey = 'pwcode-verify:'.$email.'|'.$request->ip();
+        $submittedEmail = (string) $request->input('email');
 
-        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
-            throw ValidationException::withMessages([
-                'code' => 'Too many attempts. Request a new code in a few minutes.',
-            ]);
-        }
-        RateLimiter::hit($throttleKey, 600);
+        $user = NewPasswordController::resolveAccount($submittedEmail);
 
-        $record = DB::table('password_reset_tokens')->where('email', $email)->first();
+        // ONE budget, shared with POST /reset-password. Checked before the
+        // bcrypt comparison below, which is what bounds the CPU an attacker can
+        // burn on this box as well as the number of guesses they get.
+        NewPasswordController::guardResetAttempt($user, $submittedEmail);
+
+        // Read the token row by the account's OWN stored address, exactly like
+        // DatabaseTokenRepository does — never by the string that was submitted.
+        // One more place where a collation could otherwise be the deciding vote.
+        $record = $user
+            ? DB::table('password_reset_tokens')->where('email', $user->email)->first()
+            : null;
 
         $valid = $record
             && Carbon::parse($record->created_at)->gt(now()->subMinutes(self::CODE_TTL_MINUTES))
             && Hash::check($request->input('code'), $record->token);
 
-        // Anonymous endpoint: no tenant bound, so resolve explicitly unscoped.
-        $user = app(CurrentOrganization::class)->runUnscoped(
-            fn () => User::where('email', $email)->first()
-        );
+        if (! $valid) {
+            NewPasswordController::penaliseFailedReset($user, $submittedEmail);
 
-        if (! $valid || ! $user) {
             throw ValidationException::withMessages([
                 'code' => 'That code is invalid or expired. Request a new one.',
             ]);
         }
 
+        /** @var User $user */
         $user->forceFill([
             'password' => Hash::make($request->input('password')),
             'remember_token' => Str::random(60),
         ])->save();
 
-        DB::table('password_reset_tokens')->where('email', $email)->delete();
-        RateLimiter::clear($throttleKey);
+        DB::table('password_reset_tokens')->where('email', $user->email)->delete();
+
+        NewPasswordController::forgetResetAttempts($user, $submittedEmail);
 
         return redirect()->route('login')->with('status', 'Password updated — sign in with your new password.');
     }

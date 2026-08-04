@@ -2,12 +2,15 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\RequiresBoundTenant;
 use App\Models\TrackingSession;
 use App\Services\TrackingSessionService;
 use Illuminate\Console\Command;
 
 class CloseStaleTrackingSessions extends Command
 {
+    use RequiresBoundTenant;
+
     protected $signature = 'monitoring:close-stale-sessions
         {--minutes=15 : Close active sessions with no heartbeat for this many minutes}
         {--dry-run : Report what would be closed without closing}';

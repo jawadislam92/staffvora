@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\RequiresBoundTenant;
 use App\Models\AttendanceClockCheck;
 use App\Models\TimeEntry;
 use App\Models\TrackingSession;
@@ -32,6 +33,8 @@ use Illuminate\Support\Facades\Log;
  */
 class AutoCloseAttendance extends Command
 {
+    use RequiresBoundTenant;
+
     protected $signature = 'attendance:auto-clock-out
         {--cap-hours=12 : Maximum hours a single clock-in may span before it is force-closed}
         {--idle-hours=2 : Close a tracked session this many hours after its last heartbeat}

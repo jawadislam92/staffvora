@@ -107,6 +107,69 @@ class MonitoringSetting extends Model
             : Carbon::SUNDAY;
     }
 
+    /**
+     * The shipped defaults for a brand-new workspace settings row. Also the
+     * shape of the throw-away instance returned when NO tenant is bound.
+     *
+     * @return array<string, mixed>
+     */
+    public static function defaults(): array
+    {
+        return [
+            'screenshots_per_hour' => 6,
+            'screenshot_interval_min_seconds' => 300,
+            'screenshot_interval_max_seconds' => 600,
+            'idle_threshold_seconds' => 300,
+            'activity_sample_interval_seconds' => 60,
+            'retention_days' => 60,
+            'blur_screenshots' => false,
+            'capture_enabled' => true,
+            'require_active_window_metadata' => true,
+            'activity_tracking_enabled' => true,
+            'app_url_tracking_enabled' => false,
+            'weekly_time_limit_hours' => null,
+            'auto_pause_minutes' => 5,
+            'allow_offline_time' => false,
+            'notify_on_screenshot' => false,
+            'week_starts_on' => 'monday',
+            'currency_symbol' => '$',
+            'desktop_auto_start' => false,
+            'desktop_force_quit_on_idle' => false,
+            'display_timezone' => 'Asia/Karachi',
+            'time_format' => '12',
+            'slack_clockin_enabled' => false,
+            'slack_clockout_enabled' => false,
+            'slack_attendance_channel' => null,
+        ];
+    }
+
+    /**
+     * The ACTIVE tenant's settings row.
+     *
+     * ─────────────────────────────────────────────────────────────────────────
+     * WHY UNBOUND NEVER TOUCHES THE DATABASE
+     * ─────────────────────────────────────────────────────────────────────────
+     * This used to firstOrCreate() on `organization_id = NULL` whenever nothing
+     * was bound — a console command run without `tenant:run`, a guest request, a
+     * terminating callback. That stray "landlord" row is not harmless: it is a
+     * settings row nobody owns, nobody can see in any UI, and every unbound code
+     * path then reads its toggles and its `slack_attendance_channel`. That is
+     * exactly how a tenant's clock-in ended up announced in the OPERATOR's own
+     * Slack workspace — the only thing standing in the way was the DEFAULT value
+     * of a boolean column, and a prod install that predates tenancy already has
+     * such a row with the toggles ON.
+     *
+     * So: unbound returns a THROW-AWAY, unsaved defaults instance. Reads keep
+     * working everywhere they did before (week start, timezone, retention…),
+     * nothing is created, and a pre-existing NULL-org row can no longer be read
+     * back either. Writes unbound are a no-op by construction — Eloquent will
+     * not update a model that does not exist — which is the correct outcome:
+     * there is no workspace to write to.
+     *
+     * The tenant id is the BOUND one (boundId), not the query-scoping one, so a
+     * lookup inside a runUnscoped() block still resolves the bound workspace's
+     * own settings instead of silently degrading to the landlord row.
+     */
     public static function current(): self
     {
         // One settings row per organization, memoized per org in the container
@@ -114,41 +177,24 @@ class MonitoringSetting extends Model
         // across orgs in a long-lived worker). The container is fresh per
         // request/test, and persists across the tenant:run loop where each org
         // has its own key — so this stays correct everywhere.
-        $orgId = app(CurrentOrganization::class)->id();
+        $orgId = app(CurrentOrganization::class)->boundId();
         $key = 'monitoring_settings.current.'.($orgId ?? 0);
 
         if (app()->bound($key)) {
             return app($key);
         }
 
+        if ($orgId === null) {
+            // Unsaved, unpersisted, un-shared: read-only defaults for a context
+            // that has no workspace. Deliberately NOT memoized in the container —
+            // a later bound lookup must never be served this instance, and
+            // nothing should be able to mutate a shared "nobody's settings".
+            return static::make(static::defaults());
+        }
+
         $row = static::firstOrCreate(
             ['organization_id' => $orgId],
-            [
-                'screenshots_per_hour' => 6,
-                'screenshot_interval_min_seconds' => 300,
-                'screenshot_interval_max_seconds' => 600,
-                'idle_threshold_seconds' => 300,
-                'activity_sample_interval_seconds' => 60,
-                'retention_days' => 60,
-                'blur_screenshots' => false,
-                'capture_enabled' => true,
-                'require_active_window_metadata' => true,
-                'activity_tracking_enabled' => true,
-                'app_url_tracking_enabled' => false,
-                'weekly_time_limit_hours' => null,
-                'auto_pause_minutes' => 5,
-                'allow_offline_time' => false,
-                'notify_on_screenshot' => false,
-                'week_starts_on' => 'monday',
-                'currency_symbol' => '$',
-                'desktop_auto_start' => false,
-                'desktop_force_quit_on_idle' => false,
-                'display_timezone' => 'Asia/Karachi',
-                'time_format' => '12',
-                'slack_clockin_enabled' => false,
-                'slack_clockout_enabled' => false,
-                'slack_attendance_channel' => null,
-            ]
+            static::defaults()
         );
 
         app()->instance($key, $row);

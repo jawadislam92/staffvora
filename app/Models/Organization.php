@@ -308,12 +308,25 @@ class Organization extends Model
         return $this->can($key);
     }
 
-    /** Seat limit — effective max_users (override → plan), null = unlimited. */
+    /**
+     * Seat limit — effective max_users (override → add-on → plan), null =
+     * unlimited.
+     *
+     * FAILS SAFE. A ceiling that is missing is NOT a ceiling of zero. The
+     * resolver used to hand back `false` for any key absent from the ACTIVE
+     * feature catalogue, and `(int) false` is `0` — so deactivating the
+     * `max_users` Feature row from the operator panel collapsed EVERY tenant's
+     * ceiling to zero at once: no hire, no reactivation, no onboarding invite,
+     * platform-wide, from one toggle. A limit that vanishes must never become a
+     * lock-out, so anything that is not an integer reads as "no ceiling".
+     */
     public function seatLimit(): ?int
     {
         $value = $this->entitlement('max_users');
 
-        return $value === null ? null : (int) $value;
+        // is_int, not `!== null`: `false`/`true` mean "this key is not a numeric
+        // limit right now", which is a broken catalogue, not a zero-seat plan.
+        return is_int($value) ? $value : null;
     }
 
     /** The base price before discount: a negotiated custom price wins over the plan. */

@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Jobs\Concerns\TenantAware;
 use App\Models\TrackingScreenshot;
+use App\Support\ImageGuard;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -26,13 +27,24 @@ use Illuminate\Support\Facades\Storage;
  * view. Everything here now goes through the disk API, so local and S3 behave
  * identically.
  *
- * MEMORY-BOUNDED. Dimensions are read from the file HEADER
- * (getimagesizefromstring — no decode) and the total pixel count is checked
- * against a budget before GD ever allocates. A single-colour 8 MB PNG can
- * declare 40,000 x 40,000 pixels, which imagecreatefromstring would try to
- * allocate at ~4 bytes/pixel (~6.4 GB) and kill the worker. Under the sync queue
- * driver that worker is a web request from the desktop agent, so the refusal
- * matters more than usual.
+ * MEMORY-BOUNDED, AGAINST MEASURED COST. Dimensions are read from the file
+ * HEADER (getimagesizefromstring — no decode) and checked against TWO budgets
+ * before GD ever allocates. An 89-byte PNG can declare 40,000 x 40,000 pixels,
+ * which imagecreatefromstring would try to allocate and kill the worker with.
+ * Under the sync queue driver that worker is a web request from the desktop
+ * agent, so the refusal matters more than usual.
+ *
+ * The first budget (MAX_SOURCE_PIXELS) is the same "is this plausible" bound the
+ * upload path uses. The second — ImageGuard::decodePixelBudget() — is the one
+ * that actually protects the worker, because it is derived from the memory this
+ * process has left. The old constant claimed 40 Mpx "caps GD at roughly 160 MB"
+ * on a folklore figure of 4 bytes/pixel; the measured figure is ~7.3, so 40 Mpx
+ * is ~274 MB and the documented budget was simply wrong. See ImageGuard.
+ *
+ * DEGRADE ONCE. A memory-limit fatal is uncatchable: $tries = 3 would otherwise
+ * re-run the identical fatal decode three times, and nothing in failed() would
+ * ever run to record why. ImageGuard::decodeOnce leaves a breadcrumb before the
+ * decode, so retry 2 refuses instead of repeating it.
  *
  * FAILS LOUDLY. Every abort path logs. A silent `return` on a 100%-breakage bug
  * is what let the S3 problem live unnoticed; $tries = 3 can only help if the job
@@ -65,12 +77,18 @@ class GenerateScreenshotThumbnail implements ShouldQueue
     public int $backoff = 30;
 
     /**
-     * Total pixel budget. 40 Mpx comfortably covers a dual-4K capture
-     * (7680x2160 = 16.6 Mpx) while capping GD at roughly 160 MB. A per-axis
-     * bound is the wrong shape of check — 7999x7999 passes "max 8000 wide" and
-     * still costs 256 MB.
+     * Total pixel budget for a source we are willing to consider at all — the
+     * same number the upload path stores against, so a capture that was accepted
+     * is never silently un-thumbnailable. A per-axis bound is the wrong shape of
+     * check twice over: 7999x7999 passes "max 8000 wide" and still costs ~470
+     * MB, while an honest triple-4K capture (11520x2160) fails it at 62% of the
+     * budget.
+     *
+     * Whether the decode actually happens is decided by
+     * ImageGuard::decodePixelBudget(), not by this constant — see the class
+     * docblock for why a pixel constant cannot bound memory.
      */
-    private const MAX_SOURCE_PIXELS = 40_000_000;
+    private const MAX_SOURCE_PIXELS = ImageGuard::MAX_PIXELS;
 
     public function __construct(public int $screenshotId, public int $maxWidth = 320)
     {
@@ -126,9 +144,10 @@ class GenerateScreenshotThumbnail implements ShouldQueue
             return;
         }
 
-        [$srcW, $srcH] = $info;
+        $srcW = (int) ($info[0] ?? 0);
+        $srcH = (int) ($info[1] ?? 0);
 
-        if ($srcW < 1 || $srcH < 1 || ($srcW * $srcH) > self::MAX_SOURCE_PIXELS) {
+        if ($srcW < 1 || $srcH < 1 || ((float) $srcW * (float) $srcH) > self::MAX_SOURCE_PIXELS) {
             Log::warning('Oversized or invalid screenshot; skipping thumbnail', [
                 'screenshot_id' => $screenshot->id,
                 'width' => $srcW,
@@ -138,6 +157,44 @@ class GenerateScreenshotThumbnail implements ShouldQueue
             return;
         }
 
+        // The budget that actually protects the worker: derived from the memory
+        // left in THIS process, against the measured ~7.3 bytes/pixel GD costs.
+        // Refusing costs the Timeline a thumbnail (it falls back to the
+        // original); not refusing costs the worker its life, uncatchably, and
+        // takes every other queued job with it.
+        if (! ImageGuard::canDecode($srcW, $srcH)) {
+            Log::warning('Screenshot needs more memory than this worker can spare; skipping thumbnail', [
+                'screenshot_id' => $screenshot->id,
+                'width' => $srcW,
+                'height' => $srcH,
+                'estimated_bytes' => ImageGuard::estimatedDecodeBytes($srcW, $srcH),
+                'budget_pixels' => ImageGuard::decodePixelBudget(),
+                'memory_limit' => ImageGuard::memoryLimitBytes(),
+            ]);
+
+            return;
+        }
+
+        ImageGuard::decodeOnce(
+            'screenshot-thumb:'.$screenshot->id,
+            fn () => $this->render($screenshot, $disk, $bytes, $info, $srcW, $srcH),
+            function () use ($screenshot): void {
+                Log::error('Skipping screenshot thumbnail: a previous decode of this image never returned', [
+                    'screenshot_id' => $screenshot->id,
+                ]);
+            },
+        );
+    }
+
+    /**
+     * Decode → resize → encode → store. Split out so the whole GD section sits
+     * behind ImageGuard::decodeOnce()'s breadcrumb rather than only its first
+     * line.
+     *
+     * @param  array<mixed>  $info
+     */
+    private function render(TrackingScreenshot $screenshot, mixed $disk, string $bytes, array $info, int $srcW, int $srcH): void
+    {
         $src = @imagecreatefromstring($bytes);
         unset($bytes);
 

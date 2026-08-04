@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\User;
+use App\Support\ImageGuard;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -25,15 +26,15 @@ class ProfileUpdateRequest extends FormRequest
             // customer-supplied address (admin create/edit, onboarding invite)
             // already carries it.
             'email' => ['required', 'string', 'lowercase', 'not_regex:/[\r\n]/', 'email', 'max:255', Rule::unique(User::class)->ignore($this->user()->id), User::reservedEmailRule()],
-            // `image` only proves it IS an image — a 2 MB single-colour PNG can
-            // still declare 20,000 x 20,000 px, and ImageResizer decodes avatars
-            // with GD inside the request that renders the team page (~4
-            // bytes/pixel = ~1.6 GB). `dimensions` reads the header via
-            // getimagesize and never decodes, so it is safe on hostile input.
-            // The TOTAL-pixel budget, which per-axis bounds cannot express
-            // (7999x7999 is 64 Mpx), is enforced in ProfileController before the
-            // file is stored. Same two-part shape as UploadScreenshotRequest.
-            'avatar' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif', 'max:2048', 'dimensions:max_width=8000,max_height=8000'],
+            // ONE guard for every image upload in the app — see App\Support\ImageGuard.
+            // The `dimensions:max_width=8000,max_height=8000` rule that used to
+            // sit here passed 8000x4999 (39.99 Mpx, ~274 MB of GD from an
+            // 89-byte file) because 8000 is not > 8000. Per-axis bounds cannot
+            // express a cost budget; a total-pixel bound can. Same call as the
+            // admin user form, the branding logo and the site builder, so the
+            // four sibling avatar/logo doors can no longer disagree about what
+            // they accept.
+            'avatar' => ImageGuard::rules(['jpg', 'png', 'gif'], 2048, ImageGuard::MAX_DISPLAY_PIXELS, required: false),
         ];
     }
 }

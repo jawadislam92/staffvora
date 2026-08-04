@@ -20,6 +20,10 @@ use Illuminate\Support\Facades\Log;
  *    ->get(); nothing here holds the whole tenant list in memory;
  *  - one tenant's failure is caught, logged and skipped — it can never abort the
  *    remaining 499. Both Throwable and the "command not found" case are handled;
+ *  - a tenant whose sub-command EXITS NON-ZERO counts as a failure too. Swallowing
+ *    the exit code meant an aborted daily digest still landed inside "0
+ *    failure(s)", so the one signal an operator actually watches said everything
+ *    was fine while a workspace silently received nothing for months;
  *  - a wall-clock budget stops the pass cleanly and reports where it stopped,
  *    instead of being hard-killed mid-flight by an execution-time limit. That
  *    matters because a process killed inside withoutOverlapping() never releases
@@ -197,10 +201,30 @@ class TenantRun extends Command
                     $orgStartedAt = microtime(true);
 
                     try {
-                        $current->runFor($org, function () use ($command) {
-                            Artisan::call($command, [], $this->getOutput());
+                        // THE EXIT CODE IS THE POINT. This used to discard what
+                        // Artisan::call() returned, so a tenant whose digest
+                        // aborted (Slack not connected, a missing table, a
+                        // refused per-tenant command) was still counted in the
+                        // "0 failure(s)" summary — the admin relying on that
+                        // digest saw nothing at all, forever, and the schedule
+                        // reported success every single night. A non-zero exit
+                        // is now a failure of THIS pass, for THAT organization,
+                        // named in the output and in the log.
+                        $exit = (int) $current->runFor($org, function () use ($command) {
+                            return Artisan::call($command, [], $this->getOutput());
                         });
-                        $processed++;
+
+                        if ($exit !== self::SUCCESS) {
+                            $failures++;
+                            $this->error("[org {$org->id}] {$command} exited {$exit}.");
+                            Log::error('tenant:run sub-command failed', [
+                                'organization_id' => $org->id,
+                                'command' => $command,
+                                'exit_code' => $exit,
+                            ]);
+                        } else {
+                            $processed++;
+                        }
                     } catch (\Throwable $e) {
                         // Isolation is the point: a malformed record, a Slack
                         // outage or a missing table in ONE workspace must not

@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\RequiresBoundTenant;
 use App\Services\ActivityDigestService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -9,6 +10,8 @@ use RuntimeException;
 
 class SendDailyActivityDigest extends Command
 {
+    use RequiresBoundTenant;
+
     protected $signature = 'activity:digest-slack {--date=} {--start=} {--end=}';
 
     protected $description = 'Send a Slack activity digest summarising team tracking for a day (defaults to yesterday)';

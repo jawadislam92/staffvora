@@ -418,10 +418,23 @@ final class HtmlSanitizer
     /**
      * Return the URL if it is safe to emit, or null.
      *
-     * The scheme test runs against a normalised probe with control characters,
-     * whitespace and HTML/numeric entities stripped, so `java&#09;script:`,
+     * The scheme test runs against a normalised probe: entities are DECODED,
+     * then control characters and whitespace are removed. So `java&#09;script:`,
      * `JaVaScRiPt:` and `  javascript:` are all caught. Relative URLs and
-     * fragments pass through untouched.
+     * fragments pass through untouched — only the probe is rewritten, never the
+     * value that is returned.
+     *
+     * ⚠️ THE PROBE MUST DECODE, NOT DELETE. It used to strip entities outright,
+     * which works only while the entity encodes a character that is *incidental*
+     * to the payload. When the entity IS the dangerous character the deletion
+     * destroyed the evidence: `javascript&colon;alert(1)` became
+     * `javascriptalert(1)`, which has no colon, so it fell through as an
+     * innocuous relative path and was STORED — and `&#47;&#47;evil.test` lost
+     * the slashes that made it protocol-relative. A browser decodes those
+     * entities, so anywhere the value is written into HTML source rather than
+     * assigned through the DOM (server-side rendering, an email, an export) it
+     * becomes the live scheme again. Decoding first means the probe sees what
+     * the browser will see.
      */
     private static function safeUrl(string $url): ?string
     {
@@ -431,11 +444,9 @@ final class HtmlSanitizer
             return null;
         }
 
-        $probe = strtolower($value);
-        // Entities first (they can encode the control characters), then the
-        // control characters themselves.
-        $probe = preg_replace('/&#x?[0-9a-f]+;?/i', '', $probe) ?? $probe;
-        $probe = preg_replace('/&(?:tab|newline|colon);/i', '', $probe) ?? $probe;
+        $probe = self::decodeEntities(strtolower($value));
+        // Then the control characters and whitespace the entities may have
+        // spelled out (`java&#09;script:` → `java<TAB>script:` → `javascript:`).
         $probe = preg_replace('/[\x00-\x20\x7f]/', '', $probe) ?? $probe;
 
         if ($probe === '') {
@@ -463,6 +474,43 @@ final class HtmlSanitizer
         // once a `/` or `?` has appeared first, and the check above already
         // covers the case where it could.
         return $value;
+    }
+
+    /**
+     * Decode HTML entities the way a browser's URL-bearing attribute parser
+     * would, for the purposes of the scheme probe ONLY.
+     *
+     * html_entity_decode covers the named set (`&colon;`, `&Tab;`, `&NewLine;`,
+     * `&amp;`) and well-formed numeric ones. Browsers are laxer than that: they
+     * also decode a numeric reference with no trailing semicolon, which is the
+     * classic `&#106avascript:` shape. Those are mopped up afterwards so the
+     * probe never sees a character the browser would have resolved.
+     */
+    private static function decodeEntities(string $value): string
+    {
+        $decoded = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        $decoded = preg_replace_callback(
+            '/&#x([0-9a-f]+);?/i',
+            static fn (array $m): string => self::codePointToUtf8((int) hexdec($m[1])),
+            $decoded
+        ) ?? $decoded;
+
+        return preg_replace_callback(
+            '/&#([0-9]+);?/',
+            static fn (array $m): string => self::codePointToUtf8((int) $m[1]),
+            $decoded
+        ) ?? $decoded;
+    }
+
+    /** Code point → UTF-8, with anything out of range collapsing to nothing. */
+    private static function codePointToUtf8(int $codePoint): string
+    {
+        if ($codePoint <= 0 || $codePoint > 0x10FFFF) {
+            return '';
+        }
+
+        return mb_chr($codePoint, 'UTF-8') ?: '';
     }
 
     /** Serialise a node with HTML (not XML) void-element semantics. */

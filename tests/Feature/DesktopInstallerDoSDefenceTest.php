@@ -72,12 +72,24 @@ class DesktopInstallerDoSDefenceTest extends TestCase
         }
     }
 
-    /** The 100 MB half is bounded — one host cannot pin the worker pool. */
+    /**
+     * The 100 MB half is bounded — one host cannot pin the worker pool.
+     *
+     * The budget is PINNED FROM CONFIG here rather than hardcoded. It used to be
+     * a literal 20 in both the controller and this test, which made the number
+     * look load-bearing when it is a tuning knob — and 20 turned out to be too
+     * tight for the very case its own comment named: a NAT'd office rolling the
+     * tracker out to thirty people is thirty full downloads from ONE address,
+     * and they got 429s. What has to hold is that a bound exists and that
+     * Retry-After is set; the figure itself is an operations decision.
+     */
     public function test_anonymous_installer_downloads_are_rate_limited(): void
     {
+        config()->set('desktop.payload_hits_per_minute', 8);
+
         $this->publish('StaffvoraSetup.exe');
 
-        for ($i = 0; $i < 20; $i++) {
+        for ($i = 0; $i < 8; $i++) {
             $this->get('/desktop-updates/StaffvoraSetup.exe')->assertOk();
         }
 
@@ -87,16 +99,28 @@ class DesktopInstallerDoSDefenceTest extends TestCase
     }
 
     /**
+     * The SHIPPED default must clear the rollout it was sized for. A limit that
+     * 429s a whole office on the day they install the product is a worse failure
+     * than the one it defends against.
+     */
+    public function test_the_shipped_payload_budget_clears_a_thirty_person_rollout(): void
+    {
+        $this->assertGreaterThanOrEqual(30, (int) config('desktop.payload_hits_per_minute'));
+    }
+
+    /**
      * A differential update makes many small Range requests that together cost
      * far less than one full download. Counting them against the full-file
      * budget would 429 the updater mid-update.
      */
     public function test_a_ranged_request_keeps_its_own_budget_so_auto_update_survives(): void
     {
+        config()->set('desktop.payload_hits_per_minute', 8);
+
         $this->publish('StaffvoraSetup.exe', str_repeat('x', 64));
 
         // Exhaust the full-file budget entirely.
-        for ($i = 0; $i < 20; $i++) {
+        for ($i = 0; $i < 8; $i++) {
             $this->get('/desktop-updates/StaffvoraSetup.exe')->assertOk();
         }
         $this->get('/desktop-updates/StaffvoraSetup.exe')->assertStatus(429);
@@ -116,6 +140,8 @@ class DesktopInstallerDoSDefenceTest extends TestCase
     /** The manifest half stays reachable even once the payload budget is gone. */
     public function test_the_manifest_still_answers_after_the_payload_budget_is_exhausted(): void
     {
+        config()->set('desktop.payload_hits_per_minute', 8);
+
         $this->publish('latest.yml', "version: 0.4.6\npath: StaffvoraSetup.exe\n");
         $this->publish('StaffvoraSetup.exe');
 

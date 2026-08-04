@@ -9,11 +9,14 @@ use App\Models\Plan;
 use App\Models\SiteMedia;
 use App\Models\SitePage;
 use App\Models\SiteTheme;
+use App\Support\ImageGuard;
 use App\Support\ImageResizer;
 use App\Support\SiteContext;
 use App\Support\SiteNavigation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -25,6 +28,41 @@ use Inertia\Inertia;
  */
 class PageController extends Controller
 {
+    /**
+     * Per-IP budget for /site/media/{id}, in requests per minute.
+     *
+     * KEYED ON THE IP, unlike the user-keyed limiters in RouteServiceProvider,
+     * because there is no user to key on — that is the whole point of the route
+     * — so the number has to survive a big customer whose whole office sits
+     * behind one NAT looking at the marketing site. 600/minute is 10 requests a
+     * second sustained from a single address: far above a page full of images
+     * (the responses carry a 30-day Cache-Control and an ETag, so a real browser
+     * fetches each asset once and then revalidates), and far below what a flood
+     * needs to be interesting. Refusing an honest visitor an image is a worse
+     * outcome than the attack, so this is deliberately loose — the streaming in
+     * media() is the real fix, this is the ceiling on top of it.
+     */
+    private const MEDIA_HITS_PER_MINUTE = 600;
+
+    /**
+     * How much of an object we are willing to read in order to identify it.
+     *
+     * getimagesize() only needs the header, but "the header" for a JPEG means
+     * everything up to the SOF marker, which sits behind whatever EXIF and ICC
+     * blocks the camera wrote. 512 KB clears that with room to spare while being
+     * 16x smaller than the 8 MB upload cap this route used to read in full on
+     * every single anonymous hit.
+     */
+    private const SNIFF_BYTES = 524288;
+
+    /**
+     * Objects at or under this size are sniffed whole when the partial read was
+     * inconclusive. Bounded by the upload cap, and only ever reached on a cache
+     * miss for one specific media row — an attacker cannot make it repeat,
+     * because the verdict is keyed on the row, not on anything they send.
+     */
+    private const FULL_SNIFF_LIMIT = 8388608;
+
     /**
      * ⚠️ READ-ONLY. Nothing on this path may write.
      *
@@ -198,26 +236,158 @@ class PageController extends Controller
         return SiteContext::brand();
     }
 
-    /** Serve a builder-uploaded image by id, cached a month, ETag-validated. */
+    /**
+     * Serve a builder-uploaded image by id, cached a month, ETag-validated.
+     *
+     * ⚠️ THE CONTENT-TYPE COMES FROM THE BYTES, NOT FROM `$media->mime`.
+     *
+     * The SVG hole was closed on the WRITE side (SiteBuilderController dropped
+     * svg from its `mimes:` list) and that fixed nothing that was already in the
+     * database. This route echoed the stored `mime` column verbatim, inline, on
+     * the app origin — the origin the customer app's session cookie is scoped
+     * to — so every SVG uploaded before that rule changed still executed
+     * `<svg><script>` in the visitor's browser, forever. A stored column is a
+     * record of what an earlier, weaker rule allowed; it is not a fact about the
+     * bytes. `X-Content-Type-Options: nosniff` never helped here: the type was
+     * not being sniffed, it was being obeyed.
+     *
+     * So the header in front of us decides, every time. Anything that is not a
+     * raster image we recognise is served as an inert download rather than
+     * rendered inline — 404 would silently blank existing marketing pages, and
+     * the operator needs to SEE that an asset needs re-uploading.
+     */
     public function media(Request $request, SiteMedia $media)
     {
+        $disk = Storage::disk('avatars');
         $path = $media->path;
-        abort_unless(Storage::disk('avatars')->exists($path), 404);
+        abort_unless($disk->exists($path), 404);
+
+        // Metered here rather than as route middleware, and AFTER the row has
+        // resolved, on purpose. A named `throttle:` limiter keys its bucket on
+        // md5($name.$key) — an opaque, attacker-reachable cache entry on an
+        // anonymous route, which is precisely the shape the previous round spent
+        // its time removing from this surface. Doing it in the action with a
+        // readable key keeps the anonymous cache surface legible, and matches
+        // DesktopDownloadController, the app's other public byte-serving route.
+        // The cost being rationed is the transfer; a request for an id that does
+        // not exist has already 404'd on one primary-key lookup, which is what
+        // every other unmatched public URL costs.
+        $key = 'site-media:'.$request->ip();
+
+        if (RateLimiter::tooManyAttempts($key, self::MEDIA_HITS_PER_MINUTE)) {
+            abort(429, 'Too many image requests. Please slow down.');
+        }
+
+        RateLimiter::hit($key, 60);
 
         $etag = '"'.substr(md5($path), 0, 16).'"';
         if (trim((string) $request->header('If-None-Match')) === $etag) {
             return response('', 304, ['ETag' => $etag, 'Cache-Control' => 'public, max-age=2592000']);
         }
 
-        return response(Storage::disk('avatars')->get($path), 200, [
-            'Content-Type' => $media->mime ?: 'image/jpeg',
+        $size = (int) $disk->size($path);
+        $mime = $this->mediaMime($media, $path, $size);
+
+        if ($mime === null) {
+            Log::warning('Site media is not a raster image; serving it inert.', [
+                'site_media_id' => $media->id,
+                'path' => $path,
+                'stored_mime' => $media->mime,
+            ]);
+
+            return $disk->response($path, null, [
+                // Not the stored mime, and never inline. octet-stream +
+                // attachment + a null CSP means a browser that navigates
+                // straight at this URL downloads a file instead of executing a
+                // document, and an <img> pointing at it simply fails to render
+                // — which is the visible signal that the asset must be replaced.
+                'Content-Type' => 'application/octet-stream',
+                'Content-Disposition' => 'attachment; filename="media-'.$media->id.'.bin"',
+                'Content-Security-Policy' => "default-src 'none'; sandbox",
+                'Cache-Control' => 'public, max-age=2592000',
+                'Content-Length' => $size,
+                'ETag' => $etag,
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        }
+
+        return $disk->response($path, null, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => 'inline',
             'Cache-Control' => 'public, max-age=2592000',
+            'Content-Length' => $size,
             'ETag' => $etag,
             'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
-    /** Serve the site logo (downscaled + cached), like BrandingController::logo. */
+    /**
+     * The canonical mime for a media row, decided by the BYTES and remembered.
+     *
+     * The type still may not come from `$media->mime` — see the media() docblock
+     * — but re-deriving it on every hit meant re-reading the whole object on
+     * every hit, which is what made this anonymous route a memory amplifier.
+     * The verdict is a property of the file, so it is cached against the row id
+     * plus the byte size (a replacement upload changes the size, and a same-size
+     * replacement still writes a different path, which changes the ETag and the
+     * public URL). No part of the key is attacker-supplied: a request for a row
+     * that does not exist 404s in route model binding before it gets here.
+     */
+    private function mediaMime(SiteMedia $media, string $path, int $size): ?string
+    {
+        $mime = Cache::remember(
+            'site_media_mime:'.$media->id.':'.$size,
+            now()->addDays(30),
+            fn (): string => ImageGuard::serveMime($this->sniffBytes($path, $size)) ?? '',
+        );
+
+        return $mime === '' ? null : $mime;
+    }
+
+    /** Enough of the object to identify it, without pulling all of it into RAM. */
+    private function sniffBytes(string $path, int $size): string
+    {
+        $disk = Storage::disk('avatars');
+
+        if ($size <= self::SNIFF_BYTES) {
+            return (string) $disk->get($path);
+        }
+
+        $stream = $disk->readStream($path);
+
+        if (! is_resource($stream)) {
+            return '';
+        }
+
+        $head = (string) stream_get_contents($stream, self::SNIFF_BYTES);
+        fclose($stream);
+
+        // A genuine image whose header did not fit gets one honest second look
+        // rather than being demoted to an inert download — mislabelling a real
+        // marketing photo is worse for the product than the attack this whole
+        // change is about.
+        if ($head !== '' && ImageGuard::serveMime($head) === null && $size <= self::FULL_SNIFF_LIMIT) {
+            return (string) $disk->get($path);
+        }
+
+        return $head;
+    }
+
+    /**
+     * Serve the site logo (downscaled + cached), like BrandingController::logo.
+     *
+     * ⚠️ ANONYMOUS, and the type comes from the BYTES.
+     *
+     * There used to be an explicit branch here that returned the raw stored
+     * bytes as `image/svg+xml`, inline — a hand-written exemption from every
+     * other protection on this path. It is gone. An SVG is a scriptable XML
+     * document; serving one inline from this origin is stored XSS against every
+     * visitor, and the extension it was keyed off is not evidence of anything.
+     *
+     * A non-raster logo now 404s, which is the RIGHT failure for a logo
+     * specifically: the frontend already falls back to the bundled mark, so the
+     * page still renders correctly instead of showing a broken image.
+     */
     public function logo(Request $request)
     {
         $path = SiteTheme::current()->logo_path;
@@ -233,15 +403,21 @@ class PageController extends Controller
             if (! Storage::disk('avatars')->exists($path)) {
                 return false;
             }
-            $fallbackMime = match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
-                'png' => 'image/png', 'webp' => 'image/webp', 'svg' => 'image/svg+xml', default => 'image/jpeg',
-            };
-            if ($fallbackMime === 'image/svg+xml') {
-                return ['bytes' => Storage::disk('avatars')->get($path), 'mime' => $fallbackMime];
-            }
-            $resized = ImageResizer::fit(Storage::disk('avatars')->get($path), 400);
 
-            return ['bytes' => $resized['bytes'], 'mime' => $resized['mime'] ?? $fallbackMime];
+            $bytes = (string) Storage::disk('avatars')->get($path);
+            $sourceMime = ImageGuard::serveMime($bytes);
+
+            if ($sourceMime === null) {
+                Log::warning('Site logo is not a raster image; refusing to serve it.', [
+                    'path' => $path,
+                ]);
+
+                return false;
+            }
+
+            $resized = ImageResizer::fit($bytes, 400, ImageGuard::MAX_PIXELS, 'site-logo:'.md5($path));
+
+            return ['bytes' => $resized['bytes'], 'mime' => $resized['mime'] ?? $sourceMime];
         });
 
         if ($cached === false) {

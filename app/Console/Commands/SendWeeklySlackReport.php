@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Console\Commands\Concerns\RequiresBoundTenant;
 use App\Services\SlackReportService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -9,6 +10,8 @@ use RuntimeException;
 
 class SendWeeklySlackReport extends Command
 {
+    use RequiresBoundTenant;
+
     protected $signature = 'reports:send-weekly-slack {--start=} {--end=}';
 
     protected $description = 'Send the completed weekly work-hours report to Slack';

@@ -5,10 +5,60 @@ import ThemeToggle from './ThemeToggle';
 
 const isAppRoute = (url) => ['/login', '/register', '/dashboard'].includes(url);
 
+// LAST LINE OF DEFENCE for the site chrome, which renders on EVERY public page.
+//
+// The nav/footer/social URLs come from the builder-editable `site_themes` row.
+// The server cleans them on write AND on read (App\Models\SiteTheme +
+// App\Support\HtmlSanitizer), but React does NOT block a `javascript:` href —
+// the production react-dom bundle carries no URL sanitiser at all — so the one
+// component that actually emits the attribute checks it too. That way a new
+// caller, a cached pre-fix payload, or a nav shape nobody wrote a rule for
+// cannot turn into script execution on staffvora.com, the origin the customer
+// app's session cookie belongs to.
+//
+// Same rule as HtmlSanitizer::safeUrl: entities are DECODED and control
+// characters removed before the scheme test, so `java&#09;script:`,
+// `javascript&colon;alert(1)` and `  JaVaScRiPt:` are all caught, and
+// `//evil.test` is protocol-relative rather than site-relative and is rejected.
+//
+// DECODE, don't delete. Strip `&colon;` out of `javascript&colon;alert(1)` and
+// what is left has no colon at all, so it reads as an innocuous relative path —
+// while a browser resolving that entity sees the scheme. The probe has to see
+// what the browser will see.
+// Exported so SiteFooter enforces the identical rule instead of a weaker one.
+const NAMED_ENTITIES = { colon: ':', tab: '\t', newline: '\n', sol: '/', amp: '&', lpar: '(', rpar: ')', semi: ';', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ' };
+
+function decodeEntities(value) {
+    return value
+        // Numeric references, with or without the trailing semicolon — browsers
+        // resolve both, so the probe must too.
+        .replace(/&#x([0-9a-f]+);?/gi, (_, hex) => codePoint(parseInt(hex, 16)))
+        .replace(/&#([0-9]+);?/g, (_, dec) => codePoint(parseInt(dec, 10)))
+        .replace(/&([a-z]+);/gi, (whole, name) => NAMED_ENTITIES[name.toLowerCase()] ?? whole);
+}
+
+function codePoint(n) {
+    return Number.isFinite(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : '';
+}
+
+export function safeHref(value) {
+    if (typeof value !== 'string') return undefined;
+    const probe = decodeEntities(value.toLowerCase()).replace(/[\x00-\x20\x7f]/g, '');
+    if (probe === '') return undefined;
+    if (probe.startsWith('//') || probe.startsWith('/\\')) return undefined;
+    if (probe.startsWith('#') || probe.startsWith('/')) return value;
+    const scheme = probe.match(/^([a-z][a-z0-9+.-]*):/);
+    if (scheme) return ['http', 'https', 'mailto', 'tel'].includes(scheme[1]) ? value : undefined;
+    return value; // relative path such as `pricing`
+}
+
 function Nav({ url, label, className }) {
-    return isAppRoute(url)
-        ? <Link href={url} className={className}>{label}</Link>
-        : <a href={url} className={className}>{label}</a>;
+    const href = safeHref(url);
+    // Inertia's <Link> pushes the value straight into history/router, so it only
+    // ever gets a URL that already passed the check.
+    return href !== undefined && isAppRoute(href)
+        ? <Link href={href} className={className}>{label}</Link>
+        : <a href={href} className={className}>{label}</a>;
 }
 
 // A top-level nav entry: a plain link, or a hover dropdown when it has children.

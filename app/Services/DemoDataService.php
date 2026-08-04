@@ -462,17 +462,18 @@ class DemoDataService
 
     /**
      * This workspace's demo people. Org-scoped by the global scope, and matched
-     * on a LEFT-anchored e-mail prefix so the unique e-mail index can serve it.
-     * The reserved-domain suffix is asserted as well, so nothing but a row this
-     * service created can ever match.
+     * on the `is_demo` MARKER — a column only this service can write.
+     *
+     * It used to be two `LIKE`s on the address. On MySQL those are evaluated in
+     * `utf8mb4_unicode_ci`, which folds accents, so a forged
+     * `demo-<org>-1@demo.staffvora.İnvalid` matched them: the workspace read as
+     * "sample data already loaded" (blocking the real Load button) while the
+     * seat count read the same row as free. The marker cannot be forged and
+     * compares identically on SQLite and MySQL.
      */
     private function userQuery()
     {
-        $orgId = $this->current->id();
-
-        return User::query()
-            ->where('email', 'like', 'demo-'.($orgId ?? 0).'-%')
-            ->where('email', 'like', '%@'.self::EMAIL_DOMAIN);
+        return User::query()->demoIdentities();
     }
 
     /** @return array<int, int> */

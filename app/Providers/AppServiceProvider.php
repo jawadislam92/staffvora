@@ -20,6 +20,23 @@ class AppServiceProvider extends ServiceProvider
 
         // Billing is manual for now; swap this binding for a gateway adapter later.
         $this->app->bind(\App\Billing\PaymentProvider::class, \App\Billing\ManualBankTransfer::class);
+
+        // Every `web` request resolves StartSession out of the container by its
+        // class name, so rebinding it here swaps in LeanSessionStart without
+        // touching the middleware group. That distinction matters: the group is
+        // sorted against $middlewarePriority, which lists the framework class by
+        // its literal name — put a subclass in the group instead and the entry
+        // stops matching, and session/auth middleware ordering silently changes.
+        //
+        // LeanSessionStart stops an anonymous visitor minting one session file
+        // per request under SESSION_DRIVER=file (the production setting); see
+        // that class for the whole story. Inert under the `array` driver.
+        $this->app->singleton(\Illuminate\Session\Middleware\StartSession::class, function ($app) {
+            return new \App\Http\Middleware\LeanSessionStart(
+                $app->make(\Illuminate\Session\SessionManager::class),
+                fn () => $app->make(\Illuminate\Contracts\Cache\Factory::class),
+            );
+        });
     }
 
     /**

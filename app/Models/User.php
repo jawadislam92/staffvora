@@ -116,6 +116,10 @@ class User extends Authenticatable
         'allow_multiple_devices' => 'boolean',
         'is_platform_admin' => 'boolean',
         'is_active' => 'boolean',
+        // NOT fillable — see the DEMO IDENTITIES block below. The cast is here
+        // so `is_demo` reads as a real boolean everywhere; the VALUE is stamped
+        // by the model itself and can never arrive from a request.
+        'is_demo' => 'boolean',
     ];
 
     const ROLES = [
@@ -134,18 +138,38 @@ class User extends Authenticatable
     // ({@see seatUsage()}).
     //
     // That exclusion is a plan-limit bypass, i.e. an abuse surface: if a
-    // customer could mint a user whose address matches the marker, they would
-    // mint themselves unlimited free seats. So the marker is closed at the
-    // MODEL layer, not at any one controller — every write path (admin create,
-    // onboarding invite, self-registration, profile e-mail change, console
-    // command, factory, mass assignment) goes through Eloquent's creating /
-    // updating events, and all of them are refused here. The ONLY way to write
-    // one is {@see asDemoIdentityWriter()}, which is server-side code with no
-    // request-reachable entry point.
+    // customer could mint a user the exclusion hides, they would mint
+    // themselves unlimited free seats.
     //
-    // The address shape is `demo-<orgId>-<n>@demo.staffvora.invalid`. `.invalid`
-    // is reserved by RFC 2606 and can never be delivered to or registered, so
-    // refusing it costs no real customer anything.
+    // 🔴 THE MARKER IS THE `is_demo` COLUMN — NEVER THE E-MAIL ADDRESS.
+    //
+    // It used to be the address, and that cost us production. The refusal was
+    // byte-exact PHP (`str_ends_with(strtolower($email), '@demo…invalid')`)
+    // while the seat EXCLUSION was SQL `LIKE`, evaluated in the column's
+    // collation. MySQL's `utf8mb4_unicode_ci` folds case AND accents, so
+    // `demo-9-1@demo.staffvora.İnvalid` (U+0130) was REFUSED BY NEITHER: PHP
+    // saw a different byte string and let it through, SQL folded it onto the
+    // reserved domain and hid it from the seat count. Eight ordinary
+    // `POST /users` requests produced nine active, login-capable users on a
+    // two-seat plan while seatUsage() and billableSeats() both reported 1.
+    // SQLite (this suite) does not fold, so the tests could not see it.
+    //
+    // A security decision must never depend on how the database compares
+    // strings. So demo identity is now an explicit boolean FACT:
+    //   • it is stamped by this model, in the creating event, from
+    //     {@see asDemoIdentityWriter()} — server-side code with no
+    //     request-reachable entry point;
+    //   • EVERY other create is forced to `false`, whatever the request body,
+    //     the factory or a mass assignment says;
+    //   • it can never be changed on an existing row from outside the writer;
+    //   • the guard and the exclusion both read THAT column, so they cannot
+    //     disagree on any database, in any collation, for any encoding.
+    //
+    // The address shape `demo-<orgId>-<n>@demo.staffvora.invalid` survives only
+    // as a COSMETIC LABEL (and the namespace stays refused so nobody can squat
+    // on it or confuse a support conversation). `.invalid` is reserved by
+    // RFC 2606 and can never be delivered to, so refusing it costs nothing —
+    // but no seat, billing or access decision is taken from it any more.
 
     /** RFC 2606 reserved domain. Canonical home of the marker. */
     public const DEMO_EMAIL_DOMAIN = 'demo.staffvora.invalid';
@@ -183,9 +207,14 @@ class User extends Authenticatable
     }
 
     /**
-     * Does this address claim to be sample data? Matched on the exact shape the
-     * service mints, because this is the predicate the SEAT EXCLUSION keys on —
-     * it must describe precisely the rows that are excluded, no more.
+     * Does this address LOOK like sample data? Matched on the exact shape the
+     * service mints.
+     *
+     * ⚠️ COSMETIC ONLY. No seat, billing or access decision may be taken from
+     * this or from {@see isReservedDemoEmail()} — that is what the `is_demo`
+     * column is for. An address predicate is a string comparison, and a string
+     * comparison is exactly what the database and PHP were caught disagreeing
+     * about (see the block above).
      */
     public static function isDemoIdentityEmail(?string $email): bool
     {
@@ -248,22 +277,34 @@ class User extends Authenticatable
         'permissions',
         'is_platform_admin',
         'organization_id',
+        'is_demo',
     ];
 
     /**
-     * Refuse any attempt to create or rename a user INTO the reserved demo
-     * namespace, and any attempt to rewrite an existing demo row OUT of it.
-     * Both directions have to be closed or the seat exclusion is worthless.
+     * Stamp the demo marker on create, and freeze it thereafter.
+     *
+     * The stamp is the whole point: `is_demo` is not read from the attributes
+     * the caller supplied, it is OVERWRITTEN from the writer flag. So a request
+     * body, a `User::create([... 'is_demo' => true])`, a factory state or a
+     * `forceFill` cannot mint a free seat — only code running inside
+     * {@see asDemoIdentityWriter()} can, and nothing reachable from HTTP is.
      */
     protected static function booted(): void
     {
         static::creating(function (self $user): void {
+            $user->stampDemoIdentity();
             $user->guardDemoIdentity();
         });
 
         static::updating(function (self $user): void {
-            // Direction 1 — INTO the namespace: mints a row the seat count
-            // ignores, i.e. a free seat.
+            // Direction 0 — the MARKER itself. Flipping it on mints a free seat;
+            // flipping it off launders a free row into a real one. Neither is
+            // anyone's business but DemoDataService's.
+            $user->guardDemoMarkerWrite();
+
+            // Direction 1 — INTO the reserved namespace. No longer a seat
+            // decision (that is `is_demo`), but the label stays reserved so
+            // nobody can squat on it or make support unreadable.
             if ($user->isDirty('email')) {
                 $user->guardDemoIdentity();
             }
@@ -271,6 +312,27 @@ class User extends Authenticatable
             // Direction 2 — OUT of it: launders a free row into a real one.
             $user->guardDemoIdentityImmutable();
         });
+    }
+
+    /**
+     * A new row is sample data if and only if DemoDataService is writing it.
+     * Unconditional assignment, so whatever the caller passed is discarded.
+     */
+    private function stampDemoIdentity(): void
+    {
+        $this->is_demo = self::$demoIdentityWrites;
+    }
+
+    /** The marker may only ever change inside {@see asDemoIdentityWriter()}. */
+    private function guardDemoMarkerWrite(): void
+    {
+        if (self::$demoIdentityWrites || ! $this->isDirty('is_demo')) {
+            return;
+        }
+
+        throw new \RuntimeException(
+            'The sample-data marker is owned by demo mode and cannot be set or cleared.'
+        );
     }
 
     private function guardDemoIdentity(): void
@@ -304,7 +366,10 @@ class User extends Authenticatable
      */
     private function guardDemoIdentityImmutable(): void
     {
-        if (self::$demoIdentityWrites || ! self::isReservedDemoEmail($this->getOriginal('email'))) {
+        // Keyed on the stored MARKER, not on the stored address: the address is
+        // a label and a label is forgeable, a column written only by
+        // asDemoIdentityWriter() is not.
+        if (self::$demoIdentityWrites || ! $this->wasStoredAsDemoIdentity()) {
             return;
         }
 
@@ -323,28 +388,45 @@ class User extends Authenticatable
         );
     }
 
-    /** Is THIS row one of DemoDataService's sample-data teammates? */
+    /**
+     * Is THIS row one of DemoDataService's sample-data teammates?
+     *
+     * Reads the marker in BOTH the pending and the stored state, so an
+     * in-flight edit cannot answer "no" for a row that is demo on disk.
+     */
     public function isDemoIdentity(): bool
     {
-        return self::isReservedDemoEmail($this->email)
-            || self::isReservedDemoEmail($this->getOriginal('email'));
+        return (bool) ($this->is_demo ?? false) || $this->wasStoredAsDemoIdentity();
     }
 
-    /** Sample-data teammates in the current organization. */
+    /** The marker AS STORED, untouched by whatever the current request set. */
+    private function wasStoredAsDemoIdentity(): bool
+    {
+        return $this->exists && (bool) $this->getRawOriginal('is_demo');
+    }
+
+    /**
+     * Sample-data teammates in the current organization.
+     *
+     * A column comparison, deliberately: the old `LIKE '%@demo…invalid'` was
+     * evaluated in the connection's collation, and `utf8mb4_unicode_ci` folded
+     * accented forgeries onto the reserved domain — hiding rows the PHP guard
+     * had happily accepted. Booleans compare the same on every engine.
+     */
     public function scopeDemoIdentities($query)
     {
-        return $query
-            ->where('email', 'like', self::DEMO_EMAIL_PREFIX.'%')
-            ->where('email', 'like', '%@'.self::DEMO_EMAIL_DOMAIN);
+        return $query->where('is_demo', true);
     }
 
-    /** Everyone except sample-data teammates. */
+    /**
+     * Everyone except sample-data teammates — THE seat exclusion. It reads the
+     * same column the guard writes, so the set it hides and the set the guard
+     * refuses can never drift apart on a database that compares strings
+     * differently from PHP. {@see SeatMarkerCannotBeForgedTest}
+     */
     public function scopeExcludingDemoIdentities($query)
     {
-        return $query->where(function ($q) {
-            $q->where('email', 'not like', self::DEMO_EMAIL_PREFIX.'%')
-                ->orWhere('email', 'not like', '%@'.self::DEMO_EMAIL_DOMAIN);
-        });
+        return $query->where('is_demo', false);
     }
 
     /**

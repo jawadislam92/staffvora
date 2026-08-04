@@ -59,6 +59,32 @@ function applyAccentOverride(vars, accent, highlight, configAccent) {
     };
 }
 
+// JSON-LD is injected into a `<script type="application/ld+json">` with
+// dangerouslySetInnerHTML, and its contents are OPERATOR-AUTHORED: FAQ q/a from
+// the page builder, blog title/excerpt. `JSON.stringify` escapes quotes and
+// backslashes — it escapes neither `<` nor `/`, so an FAQ answer containing
+// `</script><img src=x onerror=…>` lands verbatim in the script's text.
+//
+// It happens not to execute TODAY, and only by accident of one browser rule:
+// assigning .innerHTML on a <script> element parses the value in the script-data
+// tokenizer state with no start tag emitted, so `</script>` is not an
+// "appropriate end tag" and no element is created. That accident evaporates the
+// moment this page is server-rendered (Inertia SSR), because the same string is
+// then written into the HTML SOURCE, where `</script>` closes the block for
+// real and everything after it is markup.
+//
+// So escape for the script context now, while it costs four replacements:
+// `<`, `>`, `&` and `/` cannot appear in JSON outside a string literal, and
+// `\uXXXX` is valid JSON inside one, so this is lossless — a consumer parses
+// back the identical graph.
+function jsonLdText(graph) {
+    return JSON.stringify(graph)
+        .replace(/&/g, '\\u0026')
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/\//g, '\\u002f');
+}
+
 function initialMode() {
     if (typeof window === 'undefined') return 'light';
     try {
@@ -163,7 +189,7 @@ export default function SiteShell({ brand, theme, nav, jsonLd, isAuthed, meta = 
             </Head>
 
             {Array.isArray(jsonLd) && jsonLd.length > 0 && (
-                <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+                <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdText(jsonLd) }} />
             )}
 
             <SiteHeader nav={headerNav} brand={eb} theme={theme} isAuthed={isAuthed} mode={mode} onToggleTheme={toggleTheme} />

@@ -39,19 +39,51 @@ class TimeEntry extends Model
      * System-generated clock-outs (the auto clock-out cap and the "still
      * working?" auto-close) are skipped here — those paths announce their own
      * worded lockout message, so re-posting would double up.
+     *
+     * ─────────────────────────────────────────────────────────────────────────
+     * WHY THE TENANT IS CAPTURED AND RE-BOUND
+     * ─────────────────────────────────────────────────────────────────────────
+     * `terminating()` runs AFTER the request/command has returned — by which
+     * point runFor() has already restored the active tenant to null. The
+     * callback therefore used to execute completely UNBOUND, with two bad
+     * outcomes at once: the tenant's own announcement was silently dropped
+     * (their Slack is connected, their toggle is on, nothing arrives), and the
+     * settings lookup fell through to the ownerless `organization_id = NULL`
+     * row, whose channel + the operator's platform bot token would have
+     * published a named employee's clock-in inside the OPERATOR's workspace.
+     *
+     * The entry's OWN organization_id is captured at registration time and
+     * re-bound around the callback. It is the row's authoritative owner, so this
+     * is correct even if the ambient tenant changed in between (a tenant:run
+     * loop moving on to the next workspace). An entry with no organization at
+     * all announces nothing — there is no workspace whose Slack it could belong
+     * to, and guessing is precisely the bug.
      */
     protected static function booted(): void
     {
         static::created(function (self $entry) {
+            $organizationId = $entry->organization_id
+                ?? app(\App\Tenancy\CurrentOrganization::class)->boundId();
+
+            if ($organizationId === null) {
+                return;
+            }
+
             // One Slack THREAD per person per day: the day's first clock-in is
             // the parent, breaks and the clock-out reply underneath it, instead
             // of four separate posts cluttering the channel. All the decisions
             // (enabled? channel? system-generated punch?) live in the notifier.
-            app()->terminating(function () use ($entry) {
+            app()->terminating(function () use ($entry, $organizationId) {
                 try {
-                    app(\App\Services\AttendanceClockNotifier::class)->notify($entry);
+                    app(\App\Tenancy\CurrentOrganization::class)->runFor(
+                        $organizationId,
+                        fn () => app(\App\Services\AttendanceClockNotifier::class)->notify($entry)
+                    );
                 } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::warning('Attendance Slack post failed', ['message' => $e->getMessage()]);
+                    \Illuminate\Support\Facades\Log::warning('Attendance Slack post failed', [
+                        'organization_id' => $organizationId,
+                        'message' => $e->getMessage(),
+                    ]);
                 }
             });
         });

@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use Closure;
 use Illuminate\Http\Middleware\TrustProxies as Middleware;
 use Illuminate\Http\Request;
 
@@ -59,9 +60,28 @@ class TrustProxies extends Middleware
     /**
      * The headers that should be used to detect proxies.
      *
-     * X_FORWARDED_PREFIX is included (the framework default has it; the previous
-     * override silently dropped it) so an edge that serves the app under a path
-     * prefix still generates correct URLs.
+     * X_FORWARDED_PREFIX IS DELIBERATELY ABSENT — do not "restore the framework
+     * default" here again.
+     *
+     * TrustHosts validates `getHost()`. Laravel's root URL is
+     * `getSchemeAndHttpHost() . getBaseUrl()`, and Symfony's `getBaseUrl()`
+     * prepends the X-Forwarded-Prefix header verbatim, with no validation at
+     * all, the moment this bit is set and the peer is a trusted proxy. A prefix
+     * of `@evil.test` therefore produces
+     *
+     *     http://staffvora.com@evil.test/reset-password/<REAL TOKEN>
+     *
+     * where the real domain has become URL *userinfo*: the link looks genuine,
+     * carries a genuine token, and lands the victim on the attacker's host. The
+     * previous round added this bit while closing the Host-header hole and so
+     * re-opened it through the back door; it was latent only because
+     * TRUSTED_PROXIES is unset in production — and the docblock above tells the
+     * operator to set it.
+     *
+     * This app is served at the root of its own domain (APP_URL has no path) and
+     * has never been served under a path prefix, so the header buys us nothing
+     * even when it is honest. handle() strips it as well, so re-adding the bit
+     * alone cannot silently re-open the hole.
      *
      * @var int
      */
@@ -70,8 +90,36 @@ class TrustProxies extends Middleware
         Request::HEADER_X_FORWARDED_HOST |
         Request::HEADER_X_FORWARDED_PORT |
         Request::HEADER_X_FORWARDED_PROTO |
-        Request::HEADER_X_FORWARDED_PREFIX |
         Request::HEADER_X_FORWARDED_AWS_ELB;
+
+    /**
+     * Headers that can steer the base path of every absolute URL this app
+     * generates. Removed from the request entirely — belt as well as braces —
+     * before the parent decides what to trust.
+     *
+     * @var array<int, string>
+     */
+    private const PATH_PREFIX_HEADERS = [
+        'X-Forwarded-Prefix',
+        'X-Forwarded-Path',
+        'X-Original-URL',
+        'X-Rewrite-URL',
+    ];
+
+    /**
+     * Handle an incoming request.
+     *
+     * @return mixed
+     */
+    public function handle(Request $request, Closure $next)
+    {
+        foreach (self::PATH_PREFIX_HEADERS as $header) {
+            $request->headers->remove($header);
+            $request->server->remove('HTTP_'.strtoupper(str_replace('-', '_', $header)));
+        }
+
+        return parent::handle($request, $next);
+    }
 
     /**
      * Cloudflare's published edge ranges, usable via `TRUSTED_PROXIES=cloudflare`.

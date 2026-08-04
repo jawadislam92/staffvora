@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\UserMonitoringSetting;
 use App\Support\ImageGuard;
+use App\Support\ImageResizer;
 use App\Tenancy\CurrentOrganization;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
@@ -12,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -128,17 +130,57 @@ class ProfileController extends Controller
         if ($request->hasFile('avatar')) {
             $file = $request->file('avatar');
 
-            // Second half of the decompression-bomb guard (the `dimensions`
-            // rule on ProfileUpdateRequest is the first). A total-pixel budget
-            // is the only shape of check that works: 7999x7999 passes any
-            // per-axis bound and still costs GD ~256 MB when AvatarController
-            // downscales it on the next team-page render. Header-only, so
-            // nothing hostile is ever decoded here.
-            $image = ImageGuard::inspect($file->getRealPath(), ImageGuard::MAX_PIXELS, ['jpg', 'png', 'gif', 'webp']);
+            // Defence in depth behind ImageGuard::rules() on ProfileUpdateRequest
+            // — same class, same budget, same allow-list, so the two cannot
+            // disagree. Header-only, so nothing hostile is ever decoded here.
+            //
+            // The budget is a TOTAL pixel count, never per-axis: 8000x4999 is
+            // 39.99 Mpx and passes "max 8000 wide" in either direction, and
+            // AvatarController hands whatever is stored to GD on the next
+            // team-page render.
+            $image = ImageGuard::inspect($file->getRealPath(), ImageGuard::MAX_DISPLAY_PIXELS, ['jpg', 'png', 'gif']);
 
             if ($image === null) {
                 throw ValidationException::withMessages([
                     'avatar' => 'That image is too large or is not a supported image file.',
+                ]);
+            }
+
+            // ── NOTHING THE CLIENT SENT IS STORED ────────────────────────────
+            //
+            // The upload used to be written byte-for-byte (`$file->store()`),
+            // and "it is a real image" was the whole test. That is not enough: a
+            // file can be a genuine GIF *and* a genuine JavaScript program at
+            // once — the GIF header parses as a JS assignment and everything
+            // after the GIF terminator is free space for a payload. It passes
+            // `mimes:`, it passes finfo, it passes getimagesize(), because it
+            // really is a GIF. PNG/HTML and JPEG/PHP polyglots work the same
+            // way. Signature checks cannot win that game; there is always
+            // another container.
+            //
+            // So we decode it and write our own encoding instead. What lands on
+            // the avatars disk is a function of the PIXELS, and pixels cannot be
+            // script — which also means it stays safe on any future path that
+            // serves it without `X-Content-Type-Options: nosniff` (a CDN, a
+            // presigned S3 URL, a different vhost). The edge header is a second
+            // layer, never the control.
+            //
+            // The decode is bounded by the same two budgets as every other
+            // decode in the app (see ImageResizer::sanitize) — no new memory
+            // ceiling, none of the existing ones relaxed.
+            $clean = ImageResizer::sanitize(
+                (string) file_get_contents((string) $file->getRealPath()),
+                ImageResizer::SANITIZED_MAX_DIM,
+                ImageGuard::MAX_DISPLAY_PIXELS,
+                ['jpg', 'png', 'gif'],
+            );
+
+            if ($clean === null) {
+                // Refuse loudly. Falling back to storing the original bytes is
+                // exactly the hole this closes, and a silent failure on a
+                // profile form is a support ticket nobody can diagnose.
+                throw ValidationException::withMessages([
+                    'avatar' => 'That image could not be processed. Please try a smaller or simpler JPG, PNG or GIF.',
                 ]);
             }
 
@@ -147,11 +189,13 @@ class ProfileController extends Controller
                 Storage::disk('avatars')->delete($user->avatar);
             }
 
-            // Store new avatar. store() names the file from hashName(), whose
-            // extension comes from guessExtension() (finfo on the CONTENT), so
-            // the client never gets to pick the stored extension — see
-            // ImageGuard for why that matters.
-            $avatarPath = $file->store('avatars', 'avatars');
+            // The extension is decided by re-reading OUR OWN output's header,
+            // never by the client — the S3 adapter turns the object key's
+            // extension into its ContentType, so whoever names the file decides
+            // what a browser is later told it is.
+            $avatarPath = 'avatars/'.Str::random(40).'.'.$clean['extension'];
+            Storage::disk('avatars')->put($avatarPath, $clean['bytes']);
+
             $validatedData['avatar'] = $avatarPath;
         } elseif ($request->has('avatar') && $request->input('avatar') === null) {
             // Handle avatar removal

@@ -84,22 +84,23 @@ class DesktopDownloadController extends Controller
     private const MANIFEST_EXTENSIONS = ['yml', 'blockmap'];
 
     /**
-     * Full-file payload fetches allowed per client IP per minute.
+     * Fallback budgets, per client IP per minute, if config/desktop.php is
+     * somehow absent. The real numbers live there and are env-tunable — see
+     * `desktop.payload_hits_per_minute`.
      *
-     * Generous enough that a NAT'd office rolling out the tracker never sees a
-     * 429, small enough that one host cannot pin the worker pool.
+     * The full-file figure used to be a hardcoded 20, which was too tight for
+     * the honest case its own comment named: a NAT'd office rolling the tracker
+     * out to thirty people in a morning is thirty full downloads from ONE
+     * address, and got 429s.
+     *
+     * Ranged fetches keep their own, far larger budget: electron-updater's
+     * differential download reads the blockmap and then fetches only the changed
+     * byte ranges — many small requests that together cost far LESS than one
+     * full download. Counting them against the full-file budget would 429 the
+     * auto-updater mid-update, which is the thing that must keep working.
      */
-    private const PAYLOAD_HITS_PER_MINUTE = 20;
+    private const PAYLOAD_HITS_PER_MINUTE = 60;
 
-    /**
-     * Ranged payload fetches get their own, far larger budget.
-     *
-     * electron-updater's differential download reads the blockmap and then
-     * fetches only the changed byte ranges — many small requests that together
-     * cost far LESS than one full download. Counting them against the full-file
-     * budget would 429 the auto-updater mid-update, which is exactly the thing
-     * that must keep working.
-     */
     private const PAYLOAD_RANGE_HITS_PER_MINUTE = 240;
 
     public function index()
@@ -160,7 +161,24 @@ class DesktopDownloadController extends Controller
         $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
         $isPayload = ! in_array($extension, self::MANIFEST_EXTENSIONS, true);
 
-        if ($isPayload && ($retryAfter = self::payloadRateLimit($request)) !== null) {
+        // Resolve the size BEFORE metering: the bucket depends on whether the
+        // requested range covers the whole object, and that is unknowable
+        // without it. A miss leaves $size null, which meters as a full download
+        // (fail-safe) and then 404s below anyway.
+        $size = null;
+
+        if ($isPayload) {
+            foreach (self::searchDirs() as $dir) {
+                $candidate = rtrim($dir, '/\\').DIRECTORY_SEPARATOR.$file;
+
+                if (File::isFile($candidate)) {
+                    $size = File::size($candidate) ?: null;
+                    break;
+                }
+            }
+        }
+
+        if ($isPayload && ($retryAfter = self::payloadRateLimit($request, $size)) !== null) {
             return response('Too many installer downloads from this address.', 429, [
                 'Retry-After' => $retryAfter,
                 'Cache-Control' => 'no-store',
@@ -199,11 +217,26 @@ class DesktopDownloadController extends Controller
      * (see PAYLOAD_RANGE_HITS_PER_MINUTE) so a differential auto-update — many
      * small ranges, less total traffic than one full download — is never the
      * thing that trips the limit.
+     *
+     * ⚠️ The bucket is chosen by what the range actually COSTS, never by the
+     * mere presence of the header. `Range: bytes=0-` is a whole-file download
+     * wearing a range hat: it is answered 206 with every byte of a ~100 MB
+     * object and it pins a worker for the entire transfer, exactly like a plain
+     * GET. Metering it as a "cheap differential fetch" handed one anonymous IP
+     * five times the intended budget — a red team proved it by exhausting the
+     * full-file bucket and then pulling twenty more complete copies. So a range
+     * that covers (or omits an end and therefore reaches) the whole object is
+     * charged to the full-download bucket.
      */
-    private static function payloadRateLimit(Request $request): ?int
+    private static function payloadRateLimit(Request $request, ?int $size = null): ?int
     {
-        $ranged = $request->headers->has('Range');
-        $limit = $ranged ? self::PAYLOAD_RANGE_HITS_PER_MINUTE : self::PAYLOAD_HITS_PER_MINUTE;
+        $ranged = $request->headers->has('Range')
+            && ! self::rangeCoversWholeFile((string) $request->headers->get('Range'), $size);
+
+        $limit = $ranged
+            ? (int) config('desktop.payload_range_hits_per_minute', self::PAYLOAD_RANGE_HITS_PER_MINUTE)
+            : (int) config('desktop.payload_hits_per_minute', self::PAYLOAD_HITS_PER_MINUTE);
+        $limit = max(1, $limit);
         $key = 'desktop-payload:'.($ranged ? 'range:' : 'full:').sha1((string) $request->ip());
 
         if (RateLimiter::tooManyAttempts($key, $limit)) {
@@ -213,6 +246,47 @@ class DesktopDownloadController extends Controller
         RateLimiter::hit($key, 60);
 
         return null;
+    }
+
+    /**
+     * Does this Range header ask for (effectively) the entire object?
+     *
+     * Fails SAFE: anything unparseable, multi-range, or suffix-based, and any
+     * case where we do not know the object size, is treated as a whole-file
+     * request. A cheap fetch mis-charged to the strict bucket costs a legitimate
+     * updater nothing at 60/min; a whole-file fetch mis-charged to the generous
+     * one is the hole this exists to close.
+     */
+    private static function rangeCoversWholeFile(string $header, ?int $size): bool
+    {
+        $spec = trim(str_ireplace('bytes=', '', $header));
+
+        // Multi-range ("0-99,200-299") — cannot reason cheaply; charge it as full.
+        if ($spec === '' || str_contains($spec, ',')) {
+            return true;
+        }
+
+        [$from, $to] = array_pad(explode('-', $spec, 2), 2, '');
+        $from = trim($from);
+        $to = trim($to);
+
+        // Suffix range ("-500") asks for the last N bytes: genuinely partial
+        // whenever we know the object is bigger than N.
+        if ($from === '') {
+            return $size === null || $to === '' || (int) $to >= $size;
+        }
+
+        // Open-ended ("0-" or "1024-") runs to the end of the file. Only a start
+        // of zero is the whole object; a later start is a genuine resume.
+        if ($to === '') {
+            return (int) $from === 0;
+        }
+
+        if ($size === null) {
+            return true;
+        }
+
+        return (int) $from === 0 && (int) $to >= $size - 1;
     }
 
     /**

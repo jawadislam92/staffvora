@@ -238,22 +238,37 @@ class Entitlements
         return $out;
     }
 
+    /**
+     * A key's kind. Falls back to the BOOT REGISTRY for a key that has been
+     * RETIRED from the live catalogue, so a retired numeric limit is still
+     * known to be a limit rather than degrading into an untyped `false` — see
+     * {@see resolveWithSource()} for why that mattered.
+     */
     public static function kind(string $key): ?string
     {
-        return self::registry()[$key]['kind'] ?? null;
+        return self::registry()[$key]['kind'] ?? self::REGISTRY[$key]['kind'] ?? null;
     }
 
     /**
      * The default-DENY value for an entitlement (false / 0 / a strict floor).
      *
-     * An UNKNOWN or retired key returns `false` — deny — and never `null`,
+     * A key nobody has ever heard of returns `false` — deny — and never `null`,
      * because on a numeric key `null` means UNLIMITED.
+     *
+     * A RETIRED numeric limit is the exception, and it is a deliberate one: a
+     * ceiling that has been switched off is *absent*, and an absent ceiling is
+     * no ceiling. Returning `0`/`false` here is what let one operator toggle
+     * lock every tenant out of hiring at once (see `resolveWithSource()`).
      */
     public static function default(string $key): int|bool|null
     {
         $entry = self::registry()[$key] ?? null;
 
-        return $entry === null ? false : $entry['default'];
+        if ($entry !== null) {
+            return $entry['default'];
+        }
+
+        return self::isNumeric($key) ? null : false;
     }
 
     public static function isFlag(string $key): bool
@@ -293,10 +308,26 @@ class Entitlements
      */
     public static function resolveWithSource(string $key, bool $hasPlan, mixed $planValue, mixed $override, array $addonValues = []): array
     {
-        // A key that is not in the ACTIVE catalogue is denied outright — it never
-        // reads the plan. Retiring a feature in the panel therefore revokes it
-        // everywhere immediately, even for plans whose JSON still grants it.
-        if (! isset(self::registry()[$key])) {
+        $isActiveKey = isset(self::registry()[$key]);
+
+        // A CAPABILITY (flag) that is not in the ACTIVE catalogue is denied
+        // outright — it never reads the plan. Retiring a feature in the panel
+        // therefore revokes it everywhere immediately, even for plans whose JSON
+        // still grants it. Same for a key nobody has ever heard of.
+        //
+        // 🔴 A LIMIT IS THE OPPOSITE CASE, and getting this wrong took the
+        // product down in review. `max`/`min` keys are CEILINGS and FLOORS, not
+        // grants: denying one does not withhold a capability, it sets the
+        // ceiling to zero. Because an unknown key returned `false` and
+        // `Organization::seatLimit()` cast that to `0`, deactivating the
+        // `max_users` Feature row flipped every tenant's seat limit 2 → 0 at
+        // once — every new hire, every reactivation and every onboarding invite
+        // refused, platform-wide, from a single operator toggle.
+        //
+        // So a retired LIMIT keeps resolving through the normal layers
+        // (override → add-on → plan), and if no layer speaks it is UNLIMITED.
+        // A limit that vanished is not a limit of zero.
+        if (! $isActiveKey && ! self::isNumeric($key)) {
             return ['value' => self::cast($key, self::default($key)), 'source' => 'unknown'];
         }
 
@@ -312,6 +343,11 @@ class Entitlements
 
         if ($hasPlan) {
             return ['value' => self::cast($key, $planValue), 'source' => 'plan'];
+        }
+
+        // A retired limit with nothing left to say is unlimited, never zero.
+        if (! $isActiveKey) {
+            return ['value' => null, 'source' => 'unknown'];
         }
 
         return ['value' => self::cast($key, self::default($key)), 'source' => 'default'];
