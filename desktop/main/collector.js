@@ -86,6 +86,7 @@ const { execFile } = require('node:child_process');
 const api = require('./api');
 const store = require('./store');
 const report = require('./report');
+const consent = require('./consent');
 
 let appVersion = '?';
 try { appVersion = require('../package.json').version; } catch { /* non-electron / test harness */ }
@@ -690,6 +691,15 @@ async function run(reason) {
 
   if (process.platform !== 'win32') { lastResult = 'skip_platform'; return lastResult; }
   if (!store.get('token')) { lastResult = 'skip_signed_out'; return lastResult; }
+  // NOTHING is inventoried before the employee has passed the consent gate.
+  // This module is started from app.whenReady() and runs 45s later on its own
+  // timer, independently of the renderer — so unlike screenshots and activity
+  // (which cannot happen until someone starts the tracker, which lives behind
+  // the gate) it would otherwise be the ONE capture path that runs on a machine
+  // whose user has not yet been told anything. The consent screen names this
+  // inventory explicitly; collecting it before the tick would make that
+  // disclosure a lie.
+  if (!consent.hasAccepted()) { lastResult = 'skip_no_consent'; return lastResult; }
   if (running) { lastResult = 'skip_running'; return lastResult; }
 
   const now = Date.now();

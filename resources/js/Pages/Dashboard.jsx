@@ -140,12 +140,10 @@ const LOCKABLE_MODULES = [
         permission: "compliance.view",
         blurb: "Per-PC inventory of extensions, programs and VPNs, with a blocklist and findings.",
     },
-    {
-        key: "upwork_profiles",
-        name: "Profiles",
-        permission: "profiles.view",
-        blurb: "Track work per marketplace profile and keep client work attributed to the right one.",
-    },
+    // Profiles is deliberately NOT here. Marketplace/Upwork vocabulary is
+    // domain-specific, not a universal upsell — a workspace that tracks its own
+    // employees should never be shown it, locked or otherwise. The upsell lives
+    // in Settings → Workspace type + the Billing add-on store. See AppShell.jsx.
     {
         key: "ai",
         name: "AI assistant",

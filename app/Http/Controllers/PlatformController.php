@@ -9,15 +9,19 @@ use App\Models\Organization;
 use App\Models\Plan;
 use App\Models\PlatformAuditLog;
 use App\Models\Scopes\OrganizationScope;
+use App\Models\Subscription;
 use App\Models\User;
+use App\Services\SubscriptionManager;
 use App\Tenancy\CurrentOrganization;
 use App\Tenancy\Entitlements;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 /**
@@ -27,7 +31,8 @@ use Inertia\Inertia;
  *
  * ─── ROLE GATES (declared on the routes, listed here so they're auditable) ───
  *   any operator role  index, show, resume, impersonate
- *   admin or owner     suspend, setTrial, recordPayment, updateTenant, plans
+ *   admin or owner     suspend, setTrial, recordPayment, updateTenant,
+ *                      updateSubscription, plans
  *
  * ─── AUDIT ───────────────────────────────────────────────────────────────────
  * EVERY mutating action below writes a `platform_audit_logs` row — including
@@ -142,11 +147,19 @@ class PlatformController extends Controller
     // Tenant detail
     // -----------------------------------------------------------------------
 
-    public function show(Request $request, Organization $organization)
+    public function show(Request $request, Organization $organization, SubscriptionManager $subscriptions)
     {
         $sub = $organization->subscription;
         $plan = $organization->activePlan();
         $activeAddons = $organization->activeAddons()->get();
+
+        // EVERY plan is assignable, archived and hidden ones included: a customer
+        // may legitimately sit on a legacy plan, and a console that cannot put
+        // them back on it cannot correct its own mistakes. They are labelled, not
+        // hidden. `impactMap` resolves what each one would mean for THIS company
+        // through the single entitlement engine, so the switcher can show the
+        // gains and losses before anything is applied.
+        $assignablePlans = Plan::ordered()->get();
 
         return Inertia::render('Platform/Show', [
             'organization' => [
@@ -167,13 +180,19 @@ class PlatformController extends Controller
                 'plan_key' => $sub->plan?->key,
                 'plan_name' => $sub->plan?->name,
                 'status' => $sub->status,
+                'billing_cycle' => $sub->cycle(),
                 'trial_ends_at' => $sub->trial_ends_at?->toDateString(),
+                'current_period_start' => $sub->current_period_start?->toDateString(),
                 'current_period_end' => $sub->current_period_end?->toDateString(),
+                'on_trial' => $sub->onTrial(),
+                'usable' => $sub->isUsable(),
+                // The states the status control may set. `trialing` is absent on
+                // purpose — a trial is a date too, so it belongs to the trial
+                // control, which writes both.
+                'settable_statuses' => Subscription::OPERATOR_SETTABLE_STATUSES,
+                'cycles' => Subscription::CYCLES,
             ] : null,
-            // Archived plans are hidden from the switcher, EXCEPT the one this
-            // company is already on (so the select can render its current value).
-            'plans' => Plan::ordered()->get()
-                ->filter(fn (Plan $p) => ! $p->isArchived() || $p->id === $sub?->plan_id)
+            'plans' => $assignablePlans
                 ->map(fn (Plan $p) => [
                     'key' => $p->key,
                     'name' => $p->name,
@@ -182,7 +201,10 @@ class PlatformController extends Controller
                     'currency' => $p->currency,
                     'visibility' => $p->visibility,
                     'archived' => $p->isArchived(),
+                    'max_users' => $p->max_users,
                 ])->values(),
+            // key => what switching to it would change for THIS company.
+            'planImpact' => $sub ? $subscriptions->impactMap($organization, $assignablePlans) : (object) [],
             'payments' => $organization->payments()
                 ->orderByDesc('paid_at')
                 ->limit(50)
@@ -204,7 +226,7 @@ class PlatformController extends Controller
      * The add-ons tab: the sellable catalogue plus what this company holds
      * (with the pivot's validity window, so a time-boxed trial is visible).
      *
-     * @param  \Illuminate\Support\Collection<int, Addon>  $activeAddons
+     * @param  Collection<int, Addon>  $activeAddons
      */
     private function addonPanel(Organization $organization, $activeAddons): array
     {
@@ -248,7 +270,7 @@ class PlatformController extends Controller
      * plus a `layers` breakdown showing what each layer SAYS, so the operator
      * can see why a value is what it is without us re-deciding anything.
      *
-     * @param  \Illuminate\Support\Collection<int, Addon>  $activeAddons
+     * @param  Collection<int, Addon>  $activeAddons
      */
     private function accessPanel(Organization $organization, ?Plan $plan, $activeAddons): array
     {
@@ -328,13 +350,14 @@ class PlatformController extends Controller
      * Each distinct kind of change is audited SEPARATELY (plan / access / price)
      * so the history reads like a story rather than one opaque blob.
      */
-    public function updateTenant(Request $request, Organization $organization, CurrentOrganization $current)
+    public function updateTenant(Request $request, Organization $organization, SubscriptionManager $subscriptions)
     {
         $data = $request->validate([
             'overrides' => ['nullable', 'array', 'max:200'],
             'custom_price_cents' => ['nullable', 'integer', 'min:0', 'max:100000000'],
             'discount_percent' => ['nullable', 'integer', 'min:0', 'max:100'],
             'plan' => ['nullable', 'string', 'exists:plans,key'],
+            'acknowledge_seat_overage' => ['sometimes', 'boolean'],
             'reason' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -351,21 +374,17 @@ class PlatformController extends Controller
             'custom_price_cents' => $organization->custom_price_cents,
             'discount_percent' => $organization->discount_percent,
         ];
-        $beforePlan = $organization->activePlan()?->key;
-
-        if (! empty($data['plan']) && $data['plan'] !== $beforePlan) {
-            $plan = Plan::where('key', $data['plan'])->firstOrFail();
-
-            $current->runFor($organization, fn () => $organization->subscription?->update(['plan_id' => $plan->id]));
-
-            PlatformAuditLog::record(
-                action: PlatformAuditLog::ACTION_TENANT_PLAN_CHANGED,
-                organizationId: $organization->id,
-                targetType: 'organization',
-                targetId: $organization->id,
-                before: ['plan' => $beforePlan],
-                after: ['plan' => $plan->key],
-                reason: $reason,
+        // A plan switch here goes through the SAME service as the subscription
+        // panel — same seat guard, same audit shape, same cache invalidation.
+        // There is one way to move a company between plans, not two.
+        if (! empty($data['plan'])) {
+            $subscriptions->apply(
+                $organization,
+                [
+                    'plan' => $data['plan'],
+                    'acknowledge_seat_overage' => (bool) ($data['acknowledge_seat_overage'] ?? false),
+                ],
+                $reason,
             );
         }
 
@@ -465,68 +484,87 @@ class PlatformController extends Controller
     }
 
     /**
-     * Trial controls: extend by N days, end the trial now, or set an exact end
-     * date. Keeps the org and its subscription in step.
+     * PER-COMPANY SUBSCRIPTION MANAGEMENT — the control the console was missing.
+     *
+     * Moves a company between plans (archived and legacy ones included), flips
+     * the billing cycle, and sets the subscription's own state. Any subset may
+     * be sent; each change that actually moves is audited on its own row.
+     *
+     * The work is done by SubscriptionManager, which is also what the trial
+     * control and the payment recorder call — so there is exactly ONE writer of
+     * a company's subscription, one seat guard, and one cache invalidation.
+     *
+     * ⚠️ THIS IS NOT AN ACCESS PATH. It writes the subscription; access is still
+     * resolved only by `Organization::can()` (override → add-on → plan → deny),
+     * so a per-company override keeps winning over whatever plan is set here.
      */
-    public function setTrial(Request $request, Organization $organization, CurrentOrganization $current)
+    public function updateSubscription(Request $request, Organization $organization, SubscriptionManager $subscriptions)
+    {
+        $data = $request->validate([
+            'plan' => ['nullable', 'string', 'exists:plans,key'],
+            'billing_cycle' => ['nullable', 'string', Rule::in(Subscription::CYCLES)],
+            'status' => ['nullable', 'string', Rule::in(Subscription::OPERATOR_SETTABLE_STATUSES)],
+            'acknowledge_seat_overage' => ['sometimes', 'boolean'],
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $notes = $subscriptions->apply(
+            $organization,
+            [
+                'plan' => $data['plan'] ?? null,
+                'billing_cycle' => $data['billing_cycle'] ?? null,
+                'status' => $data['status'] ?? null,
+                'acknowledge_seat_overage' => (bool) ($data['acknowledge_seat_overage'] ?? false),
+            ],
+            $data['reason'] ?? null,
+        );
+
+        $this->forgetTenantCaches($organization->id);
+
+        return back()->with(
+            'success',
+            $notes === []
+                ? 'Nothing to change — the subscription already matches.'
+                : implode(' ', $notes),
+        );
+    }
+
+    /**
+     * Trial controls: extend by N days, end the trial now, or set an exact end
+     * date.
+     *
+     * Delegates to the SAME service the plan control uses, so a trial is one
+     * concept rather than two: the organization row, the subscription's trial
+     * date and the subscription's own STATUS all move together (they used to
+     * drift, showing "Active" beside a live trial date).
+     */
+    public function setTrial(Request $request, Organization $organization, SubscriptionManager $subscriptions)
     {
         $data = $request->validate([
             'action' => ['required', 'in:extend,end,set'],
             'days' => ['nullable', 'integer', 'min:1', 'max:365'],
-            'date' => ['nullable', 'date'],
+            'date' => ['nullable', 'date', 'required_if:action,set'],
             'reason' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $before = [
-            'trial_ends_at' => $organization->trial_ends_at?->toIso8601String(),
-            'status' => $organization->status,
-        ];
+        $result = $subscriptions->setTrial(
+            organization: $organization,
+            action: $data['action'],
+            days: isset($data['days']) ? (int) $data['days'] : null,
+            date: $data['date'] ?? null,
+            reason: $data['reason'] ?? null,
+        );
+
+        $this->forgetTenantCaches($organization->id);
 
         if ($data['action'] === 'end') {
-            $organization->update(['trial_ends_at' => now(), 'status' => Organization::STATUS_ACTIVE]);
-            $current->runFor($organization, fn () => $organization->subscription?->update(['trial_ends_at' => now()]));
-
-            $this->recordTrialChange($organization, $before, 'end', $data['reason'] ?? null);
-
             return back()->with('success', "Trial ended for {$organization->name}.");
         }
 
-        $base = $organization->trial_ends_at && $organization->trial_ends_at->isFuture()
-            ? $organization->trial_ends_at->copy()
-            : Carbon::now();
-
-        $end = $data['action'] === 'extend'
-            ? $base->addDays((int) ($data['days'] ?? 14))
-            : Carbon::parse($data['date'])->endOfDay();
-
-        $organization->update(['trial_ends_at' => $end, 'status' => Organization::STATUS_TRIAL]);
-        $current->runFor($organization, fn () => $organization->subscription?->update(['trial_ends_at' => $end]));
-
-        $this->recordTrialChange($organization, $before, $data['action'], $data['reason'] ?? null);
-
-        return back()->with('success', "{$organization->name}'s trial now ends {$end->toDateString()}.");
+        return back()->with('success', "{$organization->name}'s trial now ends {$result['ends_at']->toDateString()}.");
     }
 
-    private function recordTrialChange(Organization $organization, array $before, string $action, ?string $reason): void
-    {
-        $fresh = $organization->fresh();
-
-        PlatformAuditLog::record(
-            action: PlatformAuditLog::ACTION_TENANT_TRIAL_CHANGED,
-            organizationId: $organization->id,
-            targetType: 'organization',
-            targetId: $organization->id,
-            before: $before,
-            after: [
-                'trial_ends_at' => $fresh?->trial_ends_at?->toIso8601String(),
-                'status' => $fresh?->status,
-                'via' => $action,
-            ],
-            reason: $reason,
-        );
-    }
-
-    public function recordPayment(Request $request, Organization $organization, PaymentProvider $provider, CurrentOrganization $current)
+    public function recordPayment(Request $request, Organization $organization, PaymentProvider $provider, CurrentOrganization $current, SubscriptionManager $subscriptions)
     {
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:0'],
@@ -537,23 +575,12 @@ class PlatformController extends Controller
             'reason' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $beforePlan = $organization->activePlan()?->key;
-
+        // Same single writer as the subscription panel. `force` because a
+        // payment is a RECORD of money already received for an agreed plan —
+        // refusing it over a seat count would leave the books wrong; the
+        // overage is still captured in the audit entry.
         if (! empty($data['plan'])) {
-            $plan = Plan::where('key', $data['plan'])->firstOrFail();
-            $current->runFor($organization, fn () => $organization->subscription?->update(['plan_id' => $plan->id]));
-
-            if ($plan->key !== $beforePlan) {
-                PlatformAuditLog::record(
-                    action: PlatformAuditLog::ACTION_TENANT_PLAN_CHANGED,
-                    organizationId: $organization->id,
-                    targetType: 'organization',
-                    targetId: $organization->id,
-                    before: ['plan' => $beforePlan],
-                    after: ['plan' => $plan->key],
-                    reason: $data['reason'] ?? null,
-                );
-            }
+            $subscriptions->apply($organization, ['plan' => $data['plan']], $data['reason'] ?? null, force: true);
         }
 
         $existingEnd = $current->runFor($organization, fn () => $organization->subscription?->current_period_end);

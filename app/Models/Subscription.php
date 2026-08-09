@@ -27,6 +27,41 @@ class Subscription extends Model
     /** The only cycles the pricing service knows how to derive a price for. */
     public const CYCLES = [self::CYCLE_MONTHLY, self::CYCLE_YEARLY];
 
+    /**
+     * The lifecycle states this table has always modelled (see the
+     * `create_billing_tables` migration). They are named here rather than
+     * scattered as string literals; nothing new was invented.
+     */
+    public const STATUS_TRIALING = 'trialing';
+
+    public const STATUS_ACTIVE = 'active';
+
+    public const STATUS_PAST_DUE = 'past_due';
+
+    /** Single "l" — the spelling the column has stored since day one. */
+    public const STATUS_CANCELED = 'canceled';
+
+    public const STATUSES = [
+        self::STATUS_TRIALING,
+        self::STATUS_ACTIVE,
+        self::STATUS_PAST_DUE,
+        self::STATUS_CANCELED,
+    ];
+
+    /**
+     * The states an operator may set from the status control.
+     *
+     * `trialing` is deliberately absent: a trial is a DATE as well as a state,
+     * so it is owned by the trial control (SubscriptionManager::setTrial()),
+     * which writes both. Offering it in two places is how a status and a trial
+     * date drift apart.
+     */
+    public const OPERATOR_SETTABLE_STATUSES = [
+        self::STATUS_ACTIVE,
+        self::STATUS_PAST_DUE,
+        self::STATUS_CANCELED,
+    ];
+
     protected $fillable = [
         'organization_id', 'plan_id', 'status', 'seats', 'billing_cycle',
         'trial_ends_at', 'current_period_start', 'current_period_end',
@@ -46,12 +81,12 @@ class Subscription extends Model
 
     public function onTrial(): bool
     {
-        return $this->status === 'trialing' && $this->trial_ends_at && $this->trial_ends_at->isFuture();
+        return $this->status === self::STATUS_TRIALING && $this->trial_ends_at && $this->trial_ends_at->isFuture();
     }
 
     public function hasExpired(): bool
     {
-        if ($this->status === 'trialing') {
+        if ($this->status === self::STATUS_TRIALING) {
             return ! $this->trial_ends_at || $this->trial_ends_at->isPast();
         }
         if ($this->status === 'active') {

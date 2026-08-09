@@ -6,6 +6,7 @@ use App\Models\AttendanceClockCheck;
 use App\Models\BillingProfile;
 use App\Models\Client;
 use App\Models\Designation;
+use App\Models\DesktopConsent;
 use App\Models\DesktopDiagnostic;
 use App\Models\Feedback;
 use App\Models\FeedbackMessage;
@@ -136,6 +137,14 @@ class DeleteTenant extends Command
         MachineBlocklistRule::class,
         Machine::class,
         DesktopDiagnostic::class,
+        // Monitoring-consent ledger. Purged rather than exempt: this is a
+        // GDPR ERASURE path, the rows carry personal data (user, device name,
+        // IP), and the monitoring data they were consent FOR is being destroyed
+        // in the same sweep — so retaining the proof buys nothing and keeps
+        // personal data about people whose records are otherwise gone. Note the
+        // consequence: erasing a tenant erases its ability to prove consent, so
+        // `tenant:delete` must stay a deliberate, confirmed action.
+        DesktopConsent::class,
         Payment::class,
         BillingProfile::class,
         Subscription::class,

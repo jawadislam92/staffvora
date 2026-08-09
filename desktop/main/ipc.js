@@ -1,7 +1,7 @@
 'use strict';
 
 const os = require('node:os');
-const { ipcMain, BrowserWindow, app, safeStorage } = require('electron');
+const { ipcMain, BrowserWindow, app, safeStorage, shell } = require('electron');
 const api = require('./api');
 const store = require('./store');
 const diag = require('./diag');
@@ -10,6 +10,7 @@ const tracker = require('./trackerService');
 const tray = require('./tray');
 const updater = require('./updater');
 const collector = require('./collector');
+const consent = require('./consent');
 
 // Levels the renderer is allowed to raise. The renderer is the least trusted
 // part of the agent, so its events are whitelisted and re-labelled here — it
@@ -70,6 +71,9 @@ function register() {
     // wait out the collector's quiet window. Fire-and-forget, off the login path.
     collector.onSignIn();
     setTimeout(() => { collector.run('login').catch(() => {}); }, 5_000).unref?.();
+    // A consent this employee gave while offline may still be waiting to reach
+    // the server. Signing in is the first moment we have a token to send it with.
+    try { consent.onSignIn(); } catch { /* never break sign-in */ }
     return user;
   });
   ipcMain.handle('auth:logout', async () => {
@@ -99,6 +103,53 @@ function register() {
 
   // Token rejected by the server → renderer drops to the login screen.
   api.authEvents.on('expired', () => broadcast('auth:expired'));
+
+  // ---- Monitoring consent (first-run gate) ----
+  // The renderer may ASK for the current document and REPORT an explicit tick.
+  // It cannot record a consent any other way, and there is deliberately no
+  // handler that marks someone as having consented without an accept() call.
+  ipcMain.handle('consent:status', async () => {
+    try {
+      return await consent.status();
+    } catch {
+      // The gate must fail CLOSED: an error here means "not accepted", never
+      // "carry on", because carrying on is monitoring somebody who was never
+      // asked.
+      return {
+        document: consent.BUNDLED_DOCUMENT,
+        accepted: false,
+        accepted_at: null,
+        offline: true,
+        pending_sync: false,
+      };
+    }
+  });
+
+  ipcMain.handle('consent:accept', async (_evt, version) => {
+    if (typeof version !== 'string' || !version.trim()) {
+      return { ok: false, synced: false, version: null, error: 'missing_version' };
+    }
+    try {
+      return await consent.accept(version.trim().slice(0, 40));
+    } catch {
+      return { ok: false, synced: false, version, error: 'accept_failed' };
+    }
+  });
+
+  // Opened by NAME, never by URL: the renderer picks 'terms' or 'privacy' and
+  // the main process resolves it against the document it last rendered. A
+  // renderer that has been compromised therefore cannot use the consent screen
+  // as a launcher for arbitrary external links.
+  ipcMain.handle('consent:openDocument', (_evt, kind) => {
+    const url = consent.documentUrl(kind === 'privacy' ? 'privacy' : 'terms');
+    if (!url) return { ok: false };
+    try {
+      shell.openExternal(url);
+      return { ok: true, url };
+    } catch {
+      return { ok: false };
+    }
+  });
 
   // ---- Updates ----
   ipcMain.handle('updates:check', () => updater.checkNow());

@@ -161,10 +161,36 @@ jitter, `Retry-After` honoured on 429; and no failure here can block or fail the
 clock/screenshot pipeline. Worst case from one agent is well under the ingest
 route's `throttle:6,1`.
 
+## Monitoring consent (0.5.0)
+
+Nothing is monitored until the person being monitored has read a plain-language
+summary and actively ticked an unticked box. The gate lives in the **first-run
+window, after sign-in** — not in the installer, which runs once per machine,
+usually under an IT account, with nobody signed in to attribute an acceptance to.
+The installer only shows a *notice* (skipped in silent mode so auto-update and IT
+rollouts are unaffected).
+
+- Screen: `renderer/src/views/Consent.jsx`, gated in `App.jsx`. Fails **closed** —
+  an error, a malformed payload or a missing preload bridge all read as "not
+  accepted".
+- State / offline record / link allow-list: `main/consent.js`. Consent is keyed by
+  **user id**, never by machine, so a shared PC asks the next person.
+- Recorded at `POST /api/desktop/consent`; the required version comes from
+  `GET /api/desktop/consent`, so **publishing new terms re-asks the whole
+  installed fleet with no new build**. The comparison is an exact string match.
+- Offline is not a bypass: the gate still shows (bundled fallback disclosure),
+  the acceptance is stored locally and uploaded later; a `409` discards it rather
+  than banking consent to terms nobody saw.
+
+When the terms change, bump `App\Models\DesktopConsent::CURRENT_VERSION` **and**
+`BUNDLED_DOCUMENT.version` in `main/consent.js` in the same commit — a server-side
+test fails if they drift. Full rationale and the owner's remaining blockers:
+`documents/DESKTOP_MONITORING_CONSENT.md`.
+
 ## Verification
 
 ```powershell
-npm test                 # reporter + collector regression checks (plain node, no Electron)
+npm test                 # reporter + collector + consent checks (plain node, no Electron)
 npm run build:renderer
 npm audit --omit=dev
 ```

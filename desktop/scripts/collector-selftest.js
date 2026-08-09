@@ -52,7 +52,15 @@ let apiCalls = 0;       // every attempt, successful or not
 let nextError = null;   // error the next send should reject with
 let mockToken = 'test-token';
 let events = [];
+let mockConsented = true;   // has the signed-in employee passed the consent gate?
 
+// The consent gate. Machine-compliance inventory is the one capture path that
+// runs on its own timer from app.whenReady(), so it — unlike screenshots and
+// activity — could otherwise collect from a machine whose user has not been
+// told anything. Mocked here; the real module is covered by consent-selftest.js.
+mockModule('consent', {
+  hasAccepted: () => mockConsented,
+});
 mockModule('store', {
   get: (key) => (key === 'token' ? mockToken : key === 'deviceName' ? 'TEST-PC' : null),
   set: () => {},
@@ -107,6 +115,7 @@ function reset(fixture) {
   nextError = null;
   events = [];
   mockToken = 'test-token';
+  mockConsented = true;
   setProbes(fixture || FIXTURE);
 }
 
@@ -124,6 +133,31 @@ function lastBody() {
 
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
+
+// ---- 0. NOTHING IS COLLECTED BEFORE THE EMPLOYEE HAS CONSENTED --------------
+test('no inventory is collected, or even probed, before the consent gate is passed', async () => {
+  reset();
+  mockConsented = false;
+  let probed = false;
+  collector._probes.extensions = async () => { probed = true; return []; };
+
+  const result = await collector.run('test');
+
+  assert.strictEqual(result, 'skip_no_consent');
+  assert.strictEqual(apiCalls, 0, 'inventory was uploaded from an unconsented machine');
+  assert.strictEqual(sent.length, 0);
+  assert.strictEqual(probed, false, 'the PC was inventoried before anyone was asked');
+});
+
+test('collection resumes once the employee has accepted', async () => {
+  reset();
+  mockConsented = false;
+  assert.strictEqual(await collector.run('test'), 'skip_no_consent');
+
+  reset();                       // fresh state, consent granted
+  await collector.run('test');
+  assert.strictEqual(apiCalls, 1);
+});
 
 // ---- 1. THE WAF KILLER: no field named `profile` ----------------------------
 test('no key named "profile" ever appears in the payload', async () => {

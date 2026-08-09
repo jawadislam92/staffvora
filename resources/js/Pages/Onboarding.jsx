@@ -17,11 +17,24 @@ import {
 } from 'lucide-react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 
+/**
+ * The workspace-type HINT.
+ *
+ * ⚠️ It grants nothing — it decides wording, starter work categories and which
+ * optional modules are worth offering. Access is resolved by the entitlement
+ * engine alone (see OnboardingController::workspaceType).
+ *
+ * The agency card used to advertise "optional marketplace/account profiles",
+ * which put marketplace vocabulary in front of every in-house team that ever
+ * opened the wizard. The hints below are business-model descriptions only; the
+ * Upwork/Agency-toolkit detail renders under the grid, and only once "Client
+ * services agency" is actually the selected type.
+ */
 const WORKSPACE_TYPES = [
-    { value: 'general', label: 'In-house team / company', hint: 'Track your own employees. A clean tracker, no agency jargon.', icon: Building2 },
-    { value: 'agency', label: 'Client services agency', hint: 'Adds clients, billable work types, and optional marketplace/account profiles.', icon: Briefcase },
+    { value: 'general', label: 'In-house team / company', hint: 'Track your own employees. Work is filed under Projects.', icon: Building2 },
+    { value: 'agency', label: 'Client services agency', hint: 'Deliver and bill work for external clients. Work is filed under Clients.', icon: Briefcase },
     { value: 'bpo', label: 'BPO / Call center', hint: 'Shift-based attendance for large operational teams.', icon: Users },
-    { value: 'freelancer', label: 'Freelancer', hint: 'Just you — track time against your own projects.', icon: UserPlus },
+    { value: 'freelancer', label: 'Freelancer', hint: 'Just you — track time against your own clients.', icon: UserPlus },
 ];
 
 // A compact, themed text field that matches the app's surface tokens.
@@ -244,6 +257,27 @@ export default function Onboarding({ workspaceType, clientTerm, usesProfiles, wo
                                     );
                                 })}
                             </div>
+
+                            {/* Agency-only. `usesProfiles` is the resolved
+                                ENTITLEMENT from the server, so this tells the
+                                truth about what the workspace actually has —
+                                picking "agency" never switches it on. */}
+                            {typeForm.data.workspace_type === 'agency' && (
+                                <div className="mt-4 rounded-xl border border-line bg-surface-2 px-4 py-3 text-xs leading-5 text-muted">
+                                    <span className="mb-1 block font-semibold text-body">Agency toolkit</span>
+                                    {usesProfiles ? (
+                                        <>Included in your workspace. <strong className="text-body">Upwork Profiles</strong> is
+                                        switched on — attribute clients and tracked hours to the seller account they were
+                                        earned on.</>
+                                    ) : (
+                                        <>Choosing an agency workspace changes the wording here — it does not switch
+                                        anything on. <strong className="text-body">Upwork Profiles</strong> and Machine
+                                        compliance come with the Agency toolkit, a paid add-on you can request from
+                                        Billing whenever you need it.</>
+                                    )}
+                                </div>
+                            )}
+
                             <NavRow><NextButton /></NavRow>
                         </div>
                     )}

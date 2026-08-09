@@ -13,6 +13,7 @@ use App\Tenancy\CurrentOrganization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Unique;
@@ -29,6 +30,23 @@ class SettingsController extends Controller
      * from growing an unbounded per-tenant table.
      */
     private const MAX_WORK_CATEGORIES = 200;
+
+    /**
+     * The workspace-type HINT values a customer may choose between.
+     *
+     * ⚠️ READ THIS BEFORE TOUCHING IT. `organizations.workspace_type` is a
+     * BUSINESS-MODEL HINT and nothing else. It shapes wording (client vs project
+     * vs account), which starter work categories get seeded, and which optional
+     * modules are worth OFFERING. It has never been, and must never become, an
+     * access decision — access resolves in exactly one place
+     * (`Organization::can()`: per-company override → active add-ons → plan →
+     * catalogue default = deny).
+     *
+     * Deliberately duplicated from {@see OnboardingController} rather than
+     * shared: both lists are validation allow-lists on independent HTTP
+     * endpoints, and one shared list is a single edit away from widening both.
+     */
+    private const WORKSPACE_TYPES = ['general', 'agency', 'bpo', 'freelancer'];
 
     private const CATEGORIES = [
         'screenshots',
@@ -67,11 +85,77 @@ class SettingsController extends Controller
             'overrides' => $this->serializeOverride($overrides->get($u->id)),
         ]);
 
+        $org = $this->currentOrganization();
+
         return Inertia::render('Settings/Index', [
             'team' => $team->teamPayload(),
             'users' => $perUser,
             'payPeriod' => $this->payPeriodPayload(),
+            // The workspace-type HINT, so the owner can change their business
+            // model after signup. Named `workspaceType`, NOT `workspace`: a page
+            // prop of that name would shadow the SHARED `workspace` prop
+            // (client_term / profile_term / timezone) that the layout and the
+            // formatters read on every page.
+            //
+            // NOTE what is NOT here: any capability flag. Whether this workspace
+            // may use the Agency toolkit is answered by the shared `entitlements`
+            // map alone — the same resolution the server gates on.
+            'workspaceType' => $org?->workspace_type ?: 'general',
         ]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // WORKSPACE TYPE — the business-model hint, changeable after signup.
+    //
+    // The owner's complaint that produced this endpoint: "Upwork should not be
+    // part of default. It should be either selected when someone starts their
+    // own organization, or if they change their organization to an Upwork-based
+    // agency." Before this, the only place the type could be chosen was the
+    // first-run wizard, so a workspace that signed up General and later started
+    // taking marketplace work had no path at all.
+    //
+    // ⚠️ THIS ENDPOINT GRANTS NOTHING. It writes one string column. It does not
+    // attach an add-on, does not touch `entitlement_overrides`, and does not
+    // bump a plan. If it ever did, a customer could hand themselves a paid
+    // feature by picking an option in a dropdown — which is precisely the hole
+    // the entitlement engine exists to close. The UI says so out loud, and
+    // WorkspaceTypeSwitchTest is the guardrail.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function updateWorkspaceType(Request $request): RedirectResponse|JsonResponse
+    {
+        $validated = $request->validate([
+            'workspace_type' => ['required', Rule::in(self::WORKSPACE_TYPES)],
+        ]);
+
+        // The org comes from the resolved tenant context, NEVER from the
+        // request: a request-supplied organization id is exactly how a
+        // cross-tenant write gets in.
+        $org = $this->currentOrganization();
+
+        abort_if($org === null, 403);
+
+        $org->update(['workspace_type' => $validated['workspace_type']]);
+
+        // Terminology is cached per org for 5 minutes (see
+        // HandleInertiaRequests::share); drop it so the nav and every
+        // "Client/Project/Account" label re-render on the next request instead
+        // of lying for up to five minutes. Same key the wizard busts.
+        Cache::forget('workspace.shared.'.$org->id);
+
+        if ($request->wantsJson()) {
+            return response()->json(['ok' => true, 'workspace_type' => $org->workspace_type]);
+        }
+
+        return back()->with('success', 'Workspace type updated.');
+    }
+
+    /** The tenant this request belongs to, from the bound context only. */
+    private function currentOrganization(): ?Organization
+    {
+        $id = app(CurrentOrganization::class)->id();
+
+        return $id ? Organization::find($id) : null;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

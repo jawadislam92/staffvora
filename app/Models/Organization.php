@@ -223,8 +223,17 @@ class Organization extends Model
     /** @return array{value:int|bool|null, source:string} */
     private function resolveEntitlement(string $key): array
     {
-        $plan = $this->activePlan();
+        return $this->resolveEntitlementUnder($this->activePlan(), $key);
+    }
 
+    /**
+     * The same resolution against an ARBITRARY plan — everything else about the
+     * company (its overrides, its live add-ons) held constant.
+     *
+     * @return array{value:int|bool|null, source:string}
+     */
+    private function resolveEntitlementUnder(?Plan $plan, string $key): array
+    {
         return Entitlements::resolveWithSource(
             $key,
             $plan !== null,
@@ -232,6 +241,30 @@ class Organization extends Model
             data_get($this->entitlement_overrides, $key),
             $this->addonEntitlementMaps(),
         );
+    }
+
+    /**
+     * "What would this workspace be able to do if it were on THIS plan?" —
+     * the full resolved map with provenance, exactly as `entitlementsWithSources()`
+     * returns it for the live plan.
+     *
+     * This exists so the operator console can show what a plan switch will
+     * change BEFORE it is applied, WITHOUT a second copy of the resolution
+     * rules. It is a pure read: nothing is written and the company's real
+     * entitlements are untouched. Because per-company overrides and active
+     * add-ons are held constant, a capability an override grants correctly does
+     * NOT show up as something the switch takes away.
+     *
+     * @return array<string, array{value:int|bool|null, source:string}>
+     */
+    public function entitlementsUnderPlan(?Plan $plan): array
+    {
+        $out = [];
+        foreach (Entitlements::keys() as $key) {
+            $out[$key] = $this->resolveEntitlementUnder($plan, $key);
+        }
+
+        return $out;
     }
 
     /**

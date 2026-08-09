@@ -10,9 +10,12 @@ import {
 import {
     Activity,
     Bell,
+    Briefcase,
+    Building2,
     Calendar,
     CalendarDays,
     Camera,
+    CheckCircle2,
     ChevronRight,
     Clock,
     DollarSign,
@@ -23,6 +26,8 @@ import {
     Tags,
     Timer,
     Clock3,
+    UserPlus,
+    Users,
     Wallet,
 } from 'lucide-react';
 
@@ -66,6 +71,7 @@ const SECTION_LOCK_BLURBS = {
  * super-admin. Live behavior is unchanged.
  */
 const DEV_SAMPLE = {
+    workspaceType: 'agency',
     auth: {
         user: {
             id: 1,
@@ -139,7 +145,55 @@ const TIMEZONES = [
     'America/Los_Angeles', 'Australia/Sydney', 'UTC',
 ];
 
+// ---------------------------------------------------------------------------
+// WORKSPACE TYPE — the business-model hint, and the only place a customer can
+// change it after the first-run wizard.
+//
+// ⚠️ NOTHING HERE IS A CAPABILITY. Picking a type changes vocabulary and which
+// optional modules are worth OFFERING. It grants no feature — the server
+// endpoint writes one string column and nothing else. That is stated on screen
+// in as many words, because a control that looks like it unlocks something and
+// doesn't is worse than no control at all.
+//
+// Note what these descriptions deliberately do NOT say: no "Upwork", no
+// "marketplace". A workspace that tracks its own employees should never meet
+// that vocabulary — it is somebody else's business model, not a feature they
+// forgot to buy. It appears once "Client services agency" is the SELECTED type,
+// in the panel below, which is exactly the moment it becomes relevant.
+// ---------------------------------------------------------------------------
+const WORKSPACE_TYPES = [
+    {
+        value: 'general',
+        label: 'In-house team / company',
+        icon: Building2,
+        blurb: 'You track your own employees against internal work.',
+        term: 'Work is filed under Projects.',
+    },
+    {
+        value: 'agency',
+        label: 'Client services agency',
+        icon: Briefcase,
+        blurb: 'You deliver work to external clients and bill against it.',
+        term: 'Work is filed under Clients.',
+    },
+    {
+        value: 'bpo',
+        label: 'BPO / Call center',
+        icon: Users,
+        blurb: 'Shift-based attendance for large operational teams.',
+        term: 'Work is filed under Accounts.',
+    },
+    {
+        value: 'freelancer',
+        label: 'Freelancer',
+        icon: UserPlus,
+        blurb: 'Just you, tracking against your own clients.',
+        term: 'Work is filed under Clients.',
+    },
+];
+
 const CATEGORIES = [
+    { key: 'workspace_type', label: 'Workspace type', icon: Building2, summary: (t, pp, wt) => (WORKSPACE_TYPES.find((o) => o.value === wt) || WORKSPACE_TYPES[0]).label.split(' /')[0] },
     { key: 'display', label: 'Time zone & format', icon: Clock3, summary: (t) => `${(t.display_timezone || 'Asia/Karachi').split('/').pop()} · ${t.time_format === '24' ? '24h' : '12h'}` },
     { key: 'screenshots', label: 'Screenshots', icon: Camera, summary: (t) => `${t.screenshots_per_hour}/hr` },
     { key: 'activity', label: 'Activity Level tracking', icon: Activity, summary: (t) => (t.activity_tracking_enabled ? 'Yes' : 'No') },
@@ -697,6 +751,125 @@ function DisplaySection({ team, users, setTeam }) {
     );
 }
 
+/**
+ * WORKSPACE TYPE — change the business model after signup.
+ *
+ * The gap this closes: `workspace_type` could only ever be chosen in the
+ * first-run wizard. A workspace that signed up as an in-house team and later
+ * started taking client work through a marketplace had no way to say so.
+ *
+ * ⚠️ THE HONESTY CONTRACT. Selecting "Client services agency" changes wording
+ * and makes the Agency toolkit relevant enough to show. It does NOT switch the
+ * toolkit on, and the panel says that in plain words with the price path next
+ * to it. If this control silently granted a paid add-on, every customer could
+ * help themselves to one from a settings screen.
+ *
+ * @param {string} value              Current workspace_type.
+ * @param {Function} onChange         Persist a new type.
+ * @param {boolean} entitled          Whether `upwork_profiles` is actually on.
+ * @param {boolean} preview           Offline design-QA mode: no network.
+ */
+function WorkspaceTypeSection({ value, onChange, entitled, preview }) {
+    const [saving, setSaving] = useState(null);
+
+    const pick = (next) => {
+        if (next === value) return;
+        setSaving(next);
+        onChange(next, () => setSaving(null));
+    };
+
+    return (
+        <SectionShell
+            title="Workspace type"
+            blurb="What kind of team this workspace is for. It sets the wording used across the app — Projects, Clients or Accounts — and which optional modules are offered to you. Change it whenever your business does; nothing is deleted."
+        >
+            <div className="grid gap-3 sm:grid-cols-2">
+                {WORKSPACE_TYPES.map((t) => {
+                    const Icon = t.icon;
+                    const selected = value === t.value;
+                    const busy = saving === t.value;
+                    return (
+                        <button
+                            key={t.value}
+                            type="button"
+                            onClick={() => pick(t.value)}
+                            aria-pressed={selected}
+                            disabled={!!saving}
+                            className={cx(
+                                'flex items-start gap-3 rounded-xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-app disabled:opacity-70',
+                                selected
+                                    ? 'border-accent bg-accent/10 ring-1 ring-accent'
+                                    : 'border-line bg-surface-2 hover:border-accent/50'
+                            )}
+                        >
+                            <span className={cx(
+                                'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+                                selected ? 'bg-accent text-white' : 'bg-surface text-muted'
+                            )}
+                            >
+                                <Icon className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0">
+                                <span className="flex items-center gap-1.5 text-sm font-semibold text-body">
+                                    {t.label}
+                                    {selected && <CheckCircle2 className="h-4 w-4 text-accent" />}
+                                    {busy && <span className="text-xs font-normal text-subtle">saving…</span>}
+                                </span>
+                                <span className="mt-0.5 block text-xs text-subtle">{t.blurb}</span>
+                                <span className="mt-1 block text-xs text-muted">{t.term}</span>
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Agency-only. Marketplace vocabulary appears here and nowhere else
+                in a workspace that has not chosen to be an agency. */}
+            {value === 'agency' && (
+                <div className="rounded-xl border border-line bg-surface-2 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-sm font-semibold text-body">Agency toolkit</h3>
+                        <Badge tone={entitled ? 'success' : 'neutral'} dot>
+                            {entitled ? 'Active' : 'Not included'}
+                        </Badge>
+                    </div>
+
+                    {entitled ? (
+                        <p className="mt-2 max-w-prose text-xs leading-5 text-muted">
+                            Your workspace has the Agency toolkit. <strong className="text-body">Upwork Profiles</strong> is
+                            switched on — it appears in the main menu, and you can attribute every client and every
+                            tracked hour to the seller account it was earned on.
+                        </p>
+                    ) : (
+                        <>
+                            <p className="mt-2 max-w-prose text-xs leading-5 text-muted">
+                                Calling yourself an agency changes the wording on this screen.{' '}
+                                <strong className="text-body">It does not switch anything on.</strong> The Agency toolkit
+                                is a paid add-on: it adds <strong className="text-body">Upwork Profiles</strong> (attribute
+                                clients and tracked hours to the seller account they were earned on) and{' '}
+                                <strong className="text-body">Machine compliance</strong>.
+                            </p>
+                            <p className="mt-2 max-w-prose text-xs leading-5 text-subtle">
+                                Billing shows the price for your current seat count, prorated to your renewal date,
+                                before you confirm anything. Nothing is charged from here.
+                            </p>
+                            <div className="mt-3">
+                                <Button
+                                    as={Link}
+                                    href={preview ? '#' : safeRoute('billing.index', '/billing')}
+                                    size="sm"
+                                >
+                                    See the Agency toolkit in Billing
+                                </Button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
+        </SectionShell>
+    );
+}
+
 function WeekStartsSection({ team, setTeam }) {
     const { saveTeam } = useContext(SaveContext);
     return (
@@ -1196,13 +1369,38 @@ function PayPeriodSection({ payPeriod, setPayPeriod, preview }) {
  * @param {boolean} [props.preview=false] - Render fully from DEV_SAMPLE (offline QA),
  *        skipping all real props/network. Non-preview behavior is unchanged.
  */
-export default function SettingsIndex({ auth, team: initialTeam, users: initialUsers, payPeriod: initialPayPeriod, preview = false }) {
+export default function SettingsIndex({ auth, team: initialTeam, users: initialUsers, payPeriod: initialPayPeriod, workspaceType: initialWorkspaceType = 'general', preview = false }) {
     const pageEntitlements = usePage().props?.entitlements || {};
 
     const [team, setTeam] = useState(preview ? DEV_SAMPLE.team : initialTeam);
     const [users, setUsers] = useState(preview ? DEV_SAMPLE.users : initialUsers);
     const [payPeriod, setPayPeriod] = useState(preview ? DEV_SAMPLE.payPeriod : initialPayPeriod);
+    const [workspaceType, setWorkspaceType] = useState(preview ? DEV_SAMPLE.workspaceType : initialWorkspaceType);
     const [active, setActive] = useState('screenshots');
+
+    // Persist the workspace-type HINT. A full Inertia visit (not a background
+    // axios PUT like the tracker toggles) is deliberate: this changes the SHARED
+    // `workspace` prop — the Clients/Projects/Accounts wording in the top nav and
+    // on every other screen — so the whole page's props have to come back.
+    const saveWorkspaceType = useCallback((next, done) => {
+        if (preview) {
+            setWorkspaceType(next);
+            toast.success('Workspace type updated.');
+            done?.();
+            return;
+        }
+
+        router.put(
+            safeRoute('settings.workspace-type.update', '/settings/workspace-type'),
+            { workspace_type: next },
+            {
+                preserveScroll: true,
+                onSuccess: () => { setWorkspaceType(next); toast.success('Workspace type updated.'); },
+                onError: () => toast.error('Could not change the workspace type.'),
+                onFinish: () => done?.(),
+            }
+        );
+    }, [preview]);
 
     const user = preview ? DEV_SAMPLE.auth.user : auth.user;
 
@@ -1231,9 +1429,10 @@ export default function SettingsIndex({ auth, team: initialTeam, users: initialU
 
     const items = useMemo(() => CATEGORIES.map((cat) => ({
         ...cat,
-        // The pay-period row summarises its own prop, not the tracker payload.
-        summary: cat.summary(team, payPeriod),
-    })), [team, payPeriod]);
+        // The pay-period and workspace-type rows summarise their own props, not
+        // the tracker payload.
+        summary: cat.summary(team, payPeriod, workspaceType),
+    })), [team, payPeriod, workspaceType]);
 
     const activeLabel = (CATEGORIES.find((c) => c.key === active) || {}).label || 'This feature';
 
@@ -1308,6 +1507,14 @@ export default function SettingsIndex({ auth, team: initialTeam, users: initialU
                                 minHeight={280}
                             >
                                 <>
+                                {active === 'workspace_type' && (
+                                    <WorkspaceTypeSection
+                                        value={workspaceType}
+                                        onChange={saveWorkspaceType}
+                                        entitled={entitlements.upwork_profiles === true}
+                                        preview={preview}
+                                    />
+                                )}
                                 {active === 'screenshots' && <ScreenshotsSection team={team} users={users} setTeam={setTeam} maxShots={maxShots} />}
                                 {active === 'activity' && (
                                     <BooleanSection

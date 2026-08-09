@@ -97,6 +97,35 @@ async function me() {
   return res.data;
 }
 
+// ---- Monitoring consent ----------------------------------------------------
+// The SERVER decides which version of the terms is currently required, so
+// publishing new terms makes every installed agent re-ask on its next launch
+// without shipping a new build. The agent's bundled copy of the disclosure is
+// only an offline fallback.
+//
+// Short timeouts on both: the consent gate runs on the launch path, and an
+// unreachable server must fall back to the offline flow in seconds rather than
+// leave an employee staring at a spinner.
+async function getConsent() {
+  const res = await client().get('/consent', { timeout: 12000 });
+  return res.data;
+}
+
+// The user and the tenant are resolved server-side from the Sanctum token — the
+// agent sends no user_id/organization_id and the server must not accept one.
+// `at` is the employee's clock and is treated as a claim, not a fact.
+async function sendConsent(payload) {
+  const res = await client().post('/consent', {
+    accepted: true,
+    version: payload.version,
+    device_name: payload.device_name ? String(payload.device_name).slice(0, 120) : null,
+    platform: payload.platform ? String(payload.platform).slice(0, 32) : null,
+    app_version: payload.app_version ? String(payload.app_version).slice(0, 32) : null,
+    at: payload.at || null,
+  }, { timeout: 15000 });
+  return res.data;
+}
+
 async function getClients() {
   const res = await client().get('/clients');
   return res.data.clients;
@@ -243,6 +272,8 @@ module.exports = {
   login,
   logout,
   me,
+  getConsent,
+  sendConsent,
   getClients,
   getWorkTypes,
   getUpworkProfiles,

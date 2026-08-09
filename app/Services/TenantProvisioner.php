@@ -162,6 +162,23 @@ class TenantProvisioner
      * add-on, move `upwork_profiles` onto a plan, or grant it to a General
      * workspace — and the customer's `workspace_type` never changes anything.
      *
+     * ⚠️ THE GRANT IS TRIAL-SCOPED, AND THAT IS THE POINT.
+     *
+     * It used to be attached with a NULL `ends_at`, i.e. forever. That made the
+     * signup form a self-service checkout: anybody who picked "Client services
+     * agency" in a dropdown on the public register page walked away with a PAID
+     * add-on (`agency_toolkit` → `upwork_profiles`, `machine_compliance`) for
+     * free, permanently, with no operator ever involved. A customer must not be
+     * able to grant themselves a paid feature by ticking a box — the whole
+     * reason the entitlement engine exists.
+     *
+     * Pinning `ends_at` to the workspace's own trial end makes it what everyone
+     * assumed it already was: part of the free trial. The new agency sees the
+     * toolkit while they are evaluating (nothing about day-one behaviour
+     * changes), and when the trial lapses the add-on lapses with it —
+     * `Organization::activeAddons()` filters on this exact window — so keeping
+     * it means buying it through the normal add-on path or an operator grant.
+     *
      * A missing add-on row (a checkout that has not migrated yet) is not fatal:
      * the workspace simply starts without it, which is the deny direction.
      */
@@ -177,11 +194,21 @@ class TenantProvisioner
             return;
         }
 
+        // No trial (an operator-provisioned tenant with trialDays 0, say) means
+        // no free window to ride on: fall through to deny rather than inventing
+        // one. `trial_ends_at` in the past is treated the same way by
+        // activeAddons(), so this is belt and braces.
+        $trialEndsAt = $org->trial_ends_at;
+
+        if ($trialEndsAt === null || $trialEndsAt->isPast()) {
+            return;
+        }
+
         try {
             Addon::whereIn('key', $keys)
                 ->whereNull('archived_at')
                 ->get()
-                ->each(fn (Addon $addon) => $org->grantAddon($addon));
+                ->each(fn (Addon $addon) => $org->grantAddon($addon, null, $trialEndsAt));
         } catch (\Throwable $e) {
             // Never let a missing catalogue table fail a signup.
         }

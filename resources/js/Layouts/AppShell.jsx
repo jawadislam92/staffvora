@@ -106,6 +106,12 @@ export default function AppShell({ user, header, subnav, children }) {
     const usesProfiles = entitlements.upwork_profiles === true;
     const clientTerm = workspace.client_term || "Client";
     const clientLabel = clientTerm.endsWith("s") ? clientTerm : `${clientTerm}s`;
+    // Terminology, not capability: an agency that HAS the module calls it
+    // "Upwork Profiles", an entitled in-house workspace just calls it
+    // "Profiles". Whether the item renders at all is decided by the entitlement
+    // below, never by this label.
+    const profileTerm = workspace.profile_term || "Profile";
+    const profileLabel = profileTerm.endsWith("s") ? profileTerm : `${profileTerm}s`;
     const brandName = page.props?.branding?.name || "Staffvora";
     const impersonating = page.props?.impersonating;
 
@@ -217,8 +223,30 @@ export default function AppShell({ user, header, subnav, children }) {
                     active: ["monitoring.compliance"],
                     locked: entitlements.machine_compliance === false,
                 },
-                can("profiles.view") && {
-                    label: "Profiles",
+                // ── THE ONE EXCEPTION TO "SHOWN, NOT HIDDEN" ────────────────
+                // Profiles is DOMAIN-SPECIFIC, not universal. Everything above
+                // it (Insights, Approvals, Compliance) is something any team —
+                // in-house, BPO, freelancer — could plausibly want, so showing
+                // it locked is a fair upsell. Profiles is Upwork/marketplace
+                // seller-account attribution: to a workspace that tracks its own
+                // employees it is not a feature they haven't bought, it is
+                // vocabulary from somebody else's business. A permanent locked
+                // row advertising a marketplace they don't sell on is noise, and
+                // the owner called it out as wrong.
+                //
+                // So the rule is: universal module → show locked; module that
+                // introduces a business model the workspace has not opted into →
+                // show only when ENTITLED. The upsell for it lives where it is
+                // relevant instead — Settings → Workspace type (pick "Client
+                // services agency" and the Agency toolkit is explained there)
+                // and the Billing add-on store.
+                //
+                // `=== true` (not `!== false`) is deliberate: a missing or
+                // still-loading entitlement map must not flash the module in.
+                // This is presentation only — every `upwork-profiles.*` route is
+                // independently gated by `entitlement:upwork_profiles`.
+                can("profiles.view") && usesProfiles && {
+                    label: profileLabel,
                     href: route("upwork-profiles.index"),
                     icon: UserCircle,
                     active: [
@@ -226,11 +254,10 @@ export default function AppShell({ user, header, subnav, children }) {
                         "upwork-profiles.create",
                         "upwork-profiles.edit",
                     ],
-                    locked: !usesProfiles,
                 },
             ].filter(Boolean),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [user?.is_super_admin, user?.permissions, usesProfiles, clientLabel]
+        [user?.is_super_admin, user?.permissions, usesProfiles, clientLabel, profileLabel]
     );
 
     // On wide screens we show the first N inline and fold the rest into "More".

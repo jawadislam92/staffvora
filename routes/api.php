@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Desktop\ActivityController as DesktopActivityController;
 use App\Http\Controllers\Api\Desktop\AuthController as DesktopAuthController;
+use App\Http\Controllers\Api\Desktop\ConsentController as DesktopConsentController;
 use App\Http\Controllers\Api\Desktop\DiagnosticsController as DesktopDiagnosticsController;
 use App\Http\Controllers\Api\Desktop\MachineReportController as DesktopMachineReportController;
 use App\Http\Controllers\Api\Desktop\MetaController as DesktopMetaController;
@@ -51,6 +52,29 @@ Route::prefix('desktop')->group(function () {
     Route::middleware(['auth:sanctum', 'tenant.usable'])->group(function () {
         Route::get('/me', [DesktopAuthController::class, 'me'])->name('desktop.me');
         Route::post('/logout', [DesktopAuthController::class, 'logout'])->name('desktop.logout');
+
+        // Monitoring consent. The agent asks on every launch which document
+        // version is required and whether THIS user has accepted it, and posts
+        // the acceptance when they tick the box.
+        //
+        // Deliberately NOT entitlement-gated: consent is a legal precondition of
+        // using the product, not a paid feature, so a workspace on any plan must
+        // be able to obtain and prove it.
+        //
+        // THE THIRD THROTTLE ARGUMENT IS LOAD-BEARING. Laravel's inline
+        // `throttle:max,decay` keys on sha1(user id) and NOTHING ELSE — not the
+        // route — so every inline-throttled route a given user touches shares
+        // ONE counter, and the effective ceiling becomes the smallest `max`
+        // among them. Without a prefix, an agent asking about consent on launch
+        // would be spending the same budget its screenshot uploads need, and the
+        // 6/min write limit here would silently become the ceiling for the whole
+        // desktop API. The prefix gives each of these its own bucket. Inline
+        // rather than a named limiter because the deploy script runs
+        // `route:cache`, where a limiter declared in a route file is absent.
+        Route::get('/consent', [DesktopConsentController::class, 'show'])
+            ->middleware('throttle:20,1,consent-read')->name('desktop.consent.show');
+        Route::post('/consent', [DesktopConsentController::class, 'store'])
+            ->middleware('throttle:6,1,consent-write')->name('desktop.consent.store');
 
         Route::get('/clients', [DesktopMetaController::class, 'clients'])->name('desktop.clients');
         Route::get('/work-types', [DesktopMetaController::class, 'workTypes'])->name('desktop.work-types');

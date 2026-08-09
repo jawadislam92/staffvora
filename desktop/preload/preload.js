@@ -15,6 +15,15 @@ const api = {
       return () => ipcRenderer.removeListener('auth:expired', listener);
     },
   },
+  // Monitoring consent. `accept` is the ONLY way an acceptance is ever
+  // recorded, and it is called from exactly one place: the user clicking
+  // "Agree and continue" with the box actively ticked.
+  consent: {
+    status: () => ipcRenderer.invoke('consent:status'),
+    accept: (version) => ipcRenderer.invoke('consent:accept', version),
+    // By name, not by URL — the main process holds the allow-list.
+    openDocument: (kind) => ipcRenderer.invoke('consent:openDocument', kind),
+  },
   updates: {
     check: () => ipcRenderer.invoke('updates:check'),
     install: () => ipcRenderer.invoke('updates:install'),

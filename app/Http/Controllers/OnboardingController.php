@@ -66,7 +66,20 @@ class OnboardingController extends Controller
         ]);
     }
 
-    /** Step 1 — confirm/change the workspace type (re-presets the UI). */
+    /**
+     * Step 1 — confirm/change the workspace type (re-presets the UI).
+     *
+     * ⚠️ THIS GRANTS NOTHING. It writes one string column that decides wording
+     * and which optional modules are worth OFFERING. It does not attach an
+     * add-on, does not write `entitlement_overrides` and does not move a plan —
+     * otherwise picking "agency" in a self-serve wizard would hand the customer
+     * `upwork_profiles`, a paid entitlement, for free.
+     *
+     * The same choice is available after onboarding at
+     * {@see SettingsController::updateWorkspaceType()} — a workspace that signs
+     * up General and later starts taking marketplace work needs a way in, and
+     * before that endpoint existed this wizard was the only one.
+     */
     public function workspaceType(Request $request): RedirectResponse
     {
         $this->authorizeOnboarding($request);

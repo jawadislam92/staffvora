@@ -133,6 +133,10 @@ Route::domain(config('platform.host'))->group(function () {
         Route::middleware('platform.role:admin')->group(function () {
             Route::post('/tenants/{organization}/suspend', [PlatformController::class, 'suspend'])->name('platform.suspend');
             Route::post('/tenants/{organization}/trial', [PlatformController::class, 'setTrial'])->name('platform.trial');
+            // Move a company between plans / billing cycles / statuses. All
+            // subscription writes funnel through App\Services\SubscriptionManager
+            // so there is one seat guard, one audit shape and one cache bust.
+            Route::put('/tenants/{organization}/subscription', [PlatformController::class, 'updateSubscription'])->name('platform.subscription.update');
             Route::post('/tenants/{organization}/payment', [PlatformController::class, 'recordPayment'])->name('platform.payment');
             Route::put('/tenants/{organization}/entitlements', [PlatformController::class, 'updateTenant'])->name('platform.tenant.update');
 
@@ -546,6 +550,10 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/team', [SettingsController::class, 'updateTeam'])->name('settings.team.update');
         Route::put('/attendance', [SettingsController::class, 'updateAttendance'])->name('settings.attendance.update');
         Route::put('/pay-period', [SettingsController::class, 'updatePayPeriod'])->name('settings.pay-period.update');
+        // The business-model HINT (Projects vs Clients vs Accounts), changeable
+        // after signup. Writes one string column and GRANTS NOTHING — see
+        // SettingsController::updateWorkspaceType().
+        Route::put('/workspace-type', [SettingsController::class, 'updateWorkspaceType'])->name('settings.workspace-type.update');
         Route::put('/users/{user}', [SettingsController::class, 'updateUser'])->name('settings.user.update');
 
         // Work categories — the workspace's own editable "what the work was"

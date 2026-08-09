@@ -1388,3 +1388,179 @@ input, textarea, select { user-select: text; }
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
   transition: width 0.4s ease;
 }
+
+/* ---- Monitoring consent gate --------------------------------------------
+   Wider than the login card on purpose: the disclosure has to be READ, and a
+   380px column turns seven short paragraphs into a wall. The card scrolls
+   internally rather than the page, so the checkbox and the two buttons stay
+   visible while the list is being read — a consent control that scrolls out of
+   sight is how people end up clicking without reading.
+   ------------------------------------------------------------------------- */
+.consent-wrapper {
+  align-items: flex-start;
+  padding: 28px 20px;
+}
+
+.consent-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 56px);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 30px 60px -28px var(--shadow);
+  padding: 28px 30px;
+}
+
+.consent-head h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-strong);
+}
+
+.consent-head .subtitle {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.consent-notice { margin-bottom: 14px; line-height: 1.5; font-weight: 600; }
+
+.consent-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--surface-2);
+  padding: 16px 18px;
+}
+
+.consent-h2 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-strong);
+}
+
+.consent-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.consent-list li {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.consent-list li:last-child { border-bottom: 0; }
+
+.consent-item-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-strong);
+  margin-bottom: 2px;
+}
+
+.consent-item-body {
+  display: block;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.consent-docs {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.consent-docs a {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.consent-version { color: var(--faint); }
+
+/* The checkbox is large and the whole row is clickable — this is the one
+   control in the app that must never be a fiddly 13px target. */
+.consent-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 16px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
+.consent-check:hover { background: var(--hover); }
+
+.consent-check input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.consent-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.consent-agree { flex: 1; }
+
+/* A disabled primary must LOOK unavailable — a bright, clickable-looking
+   button that silently does nothing reads as a broken app and invites
+   repeated clicking on the one screen where confusion is most costly. */
+.consent-agree:disabled {
+  cursor: not-allowed;
+  filter: none;
+  opacity: 0.45;
+}
+
+.consent-decline {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 11px 14px;
+  font-weight: 700;
+}
+
+.consent-decline:hover { background: var(--hover); color: var(--text); }
+
+.consent-foot {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--faint);
+}
+
+@media (max-height: 680px) {
+  .consent-card { padding: 20px 22px; }
+  .consent-head .subtitle { margin-bottom: 12px; }
+}

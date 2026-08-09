@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { ArrowLeft, CalendarClock, CircleDollarSign, Clock, Info, Layers, Plus, ShieldCheck, Trash2, Users } from 'lucide-react';
+import {
+    AlertTriangle, ArrowLeft, ArrowRight, CalendarClock, Check, CircleDollarSign, Clock,
+    Info, Layers, Plus, Repeat, ShieldCheck, Trash2, TrendingDown, Users, X,
+} from 'lucide-react';
 import PlatformLayout, { PlatformPageHeader } from '@/Layouts/PlatformLayout';
 import {
     Button, Card, KpiCard, Badge, Table, THead, TBody, Tr, Th, Td,
@@ -13,7 +16,7 @@ import { UNLIMITED, SOURCE_META, formatValue, groupRegistry, money, rt } from '.
 // ─────────────────────────────────────────────────────────────────────────────
 // ONE CUSTOMER — everything the operator can do to a single company.
 //
-//   Overview  who they are, their subscription, trial controls
+//   Overview  who they are, their SUBSCRIPTION (plan / cycle / status / trial)
 //   Access    the EFFECTIVE entitlement map with provenance (override / add-on /
 //             plan / default) plus the per-company override editor
 //   Add-ons   grant or revoke a bought bundle, optionally time-boxed
@@ -28,6 +31,23 @@ import { UNLIMITED, SOURCE_META, formatValue, groupRegistry, money, rt } from '.
 const STATUS_TONE = { trial: 'warning', active: 'success', past_due: 'danger', suspended: 'neutral' };
 const STATUS_LABEL = { trial: 'Trialing', active: 'Active', past_due: 'Past due', suspended: 'Suspended' };
 
+// The SUBSCRIPTION's own states (subscriptions.status) — a different column from
+// the organization's, and deliberately not merged with it.
+const SUB_STATUS_TONE = { trialing: 'warning', active: 'success', past_due: 'danger', canceled: 'neutral' };
+const SUB_STATUS_LABEL = { trialing: 'Trialing', active: 'Active', past_due: 'Past due', canceled: 'Cancelled' };
+const SUB_STATUS_HELP = {
+    active: 'Paying and in good standing.',
+    past_due: 'Payment is overdue — the workspace is refused until it is settled or the trial/period is extended.',
+    canceled: 'The subscription has ended. The workspace is refused, but nothing is deleted and the plan is remembered.',
+};
+
+const VISIBILITY_NOTE = {
+    public: null,
+    hidden: 'hidden',
+    custom: 'custom',
+    legacy: 'legacy',
+};
+
 // ── Offline preview fixtures ────────────────────────────────────────────────
 const DEV_SAMPLE = {
     organization: {
@@ -35,13 +55,60 @@ const DEV_SAMPLE = {
         users: 5, owner: { name: 'Mara Quist', email: 'mara@blueharbor.co' }, trial_ends_at: '2026-08-05',
         discount_percent: 15, base_price_cents: 4900, effective_price_cents: 4165, currency: 'USD',
     },
-    subscription: { plan_key: 'pro', plan_name: 'Growth', status: 'trialing', trial_ends_at: '2026-08-05', current_period_end: '2026-08-05' },
+    subscription: {
+        plan_key: 'pro', plan_name: 'Growth', status: 'trialing', billing_cycle: 'monthly',
+        trial_ends_at: '2026-08-05', current_period_start: '2026-07-05', current_period_end: '2026-08-05',
+        on_trial: true, usable: true,
+        settable_statuses: ['active', 'past_due', 'canceled'],
+        cycles: ['monthly', 'yearly'],
+    },
     plans: [
-        { key: 'free', name: 'Free', price_cents: 0, price_cents_yearly: 0, currency: 'USD', visibility: 'public', archived: false },
-        { key: 'starter', name: 'Starter', price_cents: 500, price_cents_yearly: 5000, currency: 'USD', visibility: 'public', archived: false },
-        { key: 'pro', name: 'Growth', price_cents: 900, price_cents_yearly: 9000, currency: 'USD', visibility: 'public', archived: false },
-        { key: 'enterprise', name: 'Enterprise', price_cents: 1800, price_cents_yearly: null, currency: 'USD', visibility: 'custom', archived: false },
+        { key: 'free', name: 'Free', price_cents: 0, price_cents_yearly: 0, currency: 'USD', visibility: 'public', archived: false, max_users: 2 },
+        { key: 'starter', name: 'Starter', price_cents: 500, price_cents_yearly: 5000, currency: 'USD', visibility: 'public', archived: false, max_users: 10 },
+        { key: 'pro', name: 'Growth', price_cents: 900, price_cents_yearly: 9000, currency: 'USD', visibility: 'public', archived: false, max_users: 50 },
+        { key: 'enterprise', name: 'Enterprise', price_cents: 1800, price_cents_yearly: null, currency: 'USD', visibility: 'custom', archived: false, max_users: null },
+        { key: 'pro_2025', name: 'Growth (2025)', price_cents: 700, price_cents_yearly: 7000, currency: 'USD', visibility: 'legacy', archived: true, max_users: 50 },
     ],
+    planImpact: {
+        free: {
+            plan_key: 'free', plan_name: 'Free', archived: false, visibility: 'public', is_current: false,
+            price_cents: 0, price_cents_yearly: 0, currency: 'USD',
+            seat_limit_now: 80, seat_limit: 80, retention_days_now: 365, retention_days: 7, active_users: 5,
+            gains: [],
+            losses: [{ key: 'monitoring', label: 'Screenshot monitoring', help: 'Capture screenshots.', source_now: 'plan' }, { key: 'white_label', label: 'White-label branding', help: 'Custom brand.', source_now: 'plan' }],
+            limits: [{ key: 'max_retention_days', label: 'Screenshot retention (max days)', unit: 'days', kind: 'max', from: 365, to: 7, tightens: true }],
+            seat_overage: null,
+        },
+        starter: {
+            plan_key: 'starter', plan_name: 'Starter', archived: false, visibility: 'public', is_current: false,
+            price_cents: 500, price_cents_yearly: 5000, currency: 'USD',
+            seat_limit_now: 80, seat_limit: 4, retention_days_now: 365, retention_days: 90, active_users: 5,
+            gains: [],
+            losses: [{ key: 'white_label', label: 'White-label branding', help: 'Custom brand.', source_now: 'plan' }],
+            limits: [{ key: 'max_users', label: 'User seats', unit: 'seats', kind: 'max', from: 80, to: 4, tightens: true }],
+            seat_overage: { users: 5, limit: 4, excess: 1 },
+        },
+        pro: {
+            plan_key: 'pro', plan_name: 'Growth', archived: false, visibility: 'public', is_current: true,
+            price_cents: 900, price_cents_yearly: 9000, currency: 'USD',
+            seat_limit_now: 80, seat_limit: 80, retention_days_now: 365, retention_days: 365, active_users: 5,
+            gains: [], losses: [], limits: [], seat_overage: null,
+        },
+        enterprise: {
+            plan_key: 'enterprise', plan_name: 'Enterprise', archived: false, visibility: 'custom', is_current: false,
+            price_cents: 1800, price_cents_yearly: null, currency: 'USD',
+            seat_limit_now: 80, seat_limit: 80, retention_days_now: 365, retention_days: null, active_users: 5,
+            gains: [{ key: 'api', label: 'API access' }],
+            losses: [], limits: [{ key: 'max_retention_days', label: 'Screenshot retention (max days)', unit: 'days', kind: 'max', from: 365, to: null, tightens: false }],
+            seat_overage: null,
+        },
+        pro_2025: {
+            plan_key: 'pro_2025', plan_name: 'Growth (2025)', archived: true, visibility: 'legacy', is_current: false,
+            price_cents: 700, price_cents_yearly: 7000, currency: 'USD',
+            seat_limit_now: 80, seat_limit: 80, retention_days_now: 365, retention_days: 365, active_users: 5,
+            gains: [], losses: [], limits: [], seat_overage: null,
+        },
+    },
     payments: [
         { amount_cents: 4165, currency: 'USD', reference: 'BANK-2026-0043', paid_at: '2026-06-05', period_end: '2026-07-05' },
         { amount_cents: 4165, currency: 'USD', reference: 'BANK-2026-0031', paid_at: '2026-05-05', period_end: '2026-06-05' },
@@ -121,8 +188,10 @@ function ConfirmModal({ open, title, description, confirmLabel, tone = 'primary'
     );
 }
 
-export default function PlatformShow({ organization, subscription, plans, payments, addons, entitlements, history, preview = false }) {
-    const data = preview ? DEV_SAMPLE : { organization, subscription, plans, payments, addons, entitlements, history };
+export default function PlatformShow({ organization, subscription, plans, planImpact, payments, addons, entitlements, history, preview = false }) {
+    const data = preview
+        ? DEV_SAMPLE
+        : { organization, subscription, plans, planImpact, payments, addons, entitlements, history };
     const org = data.organization;
     const sub = data.subscription;
     const planList = data.plans || [];
@@ -229,11 +298,12 @@ export default function PlatformShow({ organization, subscription, plans, paymen
                                 </dl>
                             </Card>
 
-                            <Card title="Subscription">
+                            <Card title="Subscription" actions={sub && !sub.usable ? <Badge tone="danger" dot>Not usable</Badge> : null}>
                                 {sub ? (
                                     <dl className="space-y-2.5 text-sm">
                                         <Row label="Plan" value={<Badge tone="accent">{sub.plan_name}</Badge>} />
-                                        <Row label="Status" value={<span className="capitalize text-body">{sub.status}</span>} />
+                                        <Row label="Status" value={<Badge tone={SUB_STATUS_TONE[sub.status] || 'neutral'} dot>{SUB_STATUS_LABEL[sub.status] || sub.status}</Badge>} />
+                                        <Row label="Billing cycle" value={<span className="capitalize text-body">{sub.billing_cycle || 'monthly'}</span>} />
                                         <Row label="Trial ends" value={sub.trial_ends_at || '—'} />
                                         <Row label="Period ends" value={sub.current_period_end || '—'} />
                                         <Row
@@ -252,9 +322,20 @@ export default function PlatformShow({ organization, subscription, plans, paymen
                             </Card>
                         </div>
 
+                        {canManage && sub && (
+                            <SubscriptionPanel
+                                organization={org}
+                                sub={sub}
+                                plans={planList}
+                                impact={data.planImpact || {}}
+                                preview={preview}
+                            />
+                        )}
+
                         {canManage && (
                             <Card
                                 title="Trial"
+                                description="The same subscription, in its trialing state — starting or extending a trial puts the subscription back on “Trialing”, and ending one converts it to “Active”."
                                 actions={<span className="text-sm text-muted">Ends: <span className="font-semibold text-body">{org.trial_ends_at || '—'}</span></span>}
                             >
                                 <div className="flex flex-wrap items-end gap-2">
@@ -280,6 +361,7 @@ export default function PlatformShow({ organization, subscription, plans, paymen
                         <AccessTab
                             organization={org}
                             plans={planList}
+                            currentPlanKey={sub?.plan_key}
                             entitlements={data.entitlements}
                             canManage={canManage}
                             preview={preview}
@@ -377,6 +459,352 @@ function Row({ label, value }) {
     );
 }
 
+// ─── Subscription management ────────────────────────────────────────────────
+// The control the console was missing: move a company between plans, flip the
+// billing cycle, and set the subscription's state.
+//
+// Nothing here decides access. It changes the SUBSCRIPTION; the server still
+// resolves every capability through the one engine (per-company override →
+// add-on → plan → deny), which is also what produced the preview below — so a
+// capability an override grants is correctly NOT listed as something the switch
+// takes away.
+//
+// The preview is the point. Losing a feature the customer is using is exactly
+// the surprise that generates support tickets, so the losses are shown in full,
+// in the destructive tone, before anything is applied.
+
+/** A resolved limit rendered for reading: "Unlimited" / "Not included" / "90 days". */
+const limitText = (value, unit) => {
+    if (value === null || value === undefined) return 'Unlimited';
+    if (value === 0) return 'Not included';
+    return unit ? `${value} ${unit}` : String(value);
+};
+
+function DeltaRow({ label, from, to, unit, tightens }) {
+    const same = from === to;
+    return (
+        <div className="flex items-center justify-between gap-3 py-1.5 text-sm">
+            <span className="text-muted">{label}</span>
+            <span className="flex items-center gap-1.5 tabular-nums">
+                <span className={same ? 'text-body' : 'text-subtle line-through'}>{limitText(from, unit)}</span>
+                {!same && (
+                    <>
+                        <ArrowRight className="h-3.5 w-3.5 text-subtle" aria-hidden="true" />
+                        <span className={tightens ? 'font-semibold text-warning' : 'font-semibold text-body'}>
+                            {limitText(to, unit)}
+                        </span>
+                    </>
+                )}
+            </span>
+        </div>
+    );
+}
+
+function SubscriptionPanel({ organization, sub, plans, impact, preview }) {
+    const cycles = sub.cycles || ['monthly', 'yearly'];
+    const statuses = sub.settable_statuses || ['active', 'past_due', 'canceled'];
+
+    const form = useForm({
+        plan: sub.plan_key || '',
+        billing_cycle: sub.billing_cycle || 'monthly',
+        status: sub.status,
+        acknowledge_seat_overage: false,
+        reason: '',
+    });
+
+    const [confirming, setConfirming] = useState(false);
+
+    const selected = plans.find((p) => p.key === form.data.plan) || null;
+    const preview_ = impact?.[form.data.plan] || null;
+
+    const planMoved = form.data.plan !== sub.plan_key;
+    const cycleMoved = form.data.billing_cycle !== (sub.billing_cycle || 'monthly');
+    // `trialing` is not offered here, so a trialing subscription only counts as
+    // "moved" once the operator actually picks one of the settable states.
+    const statusMoved = form.data.status !== sub.status && statuses.includes(form.data.status);
+    const dirty = planMoved || cycleMoved || statusMoved;
+
+    // A downgrade past the seat count is refused server-side unless it is
+    // acknowledged; mirror that here so the button explains itself.
+    const overage = planMoved ? preview_?.seat_overage : null;
+    const blocked = !!overage && !form.data.acknowledge_seat_overage;
+
+    const apply = () => {
+        setConfirming(false);
+        if (preview) return;
+        form.transform((d) => ({
+            plan: d.plan !== sub.plan_key ? d.plan : null,
+            billing_cycle: d.billing_cycle !== (sub.billing_cycle || 'monthly') ? d.billing_cycle : null,
+            status: statusMoved ? d.status : null,
+            acknowledge_seat_overage: d.acknowledge_seat_overage,
+            reason: d.reason || null,
+        })).put(rt('platform.subscription.update', organization.id), {
+            preserveScroll: true,
+            onSuccess: () => form.setData({
+                ...form.data,
+                acknowledge_seat_overage: false,
+                reason: '',
+            }),
+        });
+    };
+
+    const summary = [
+        planMoved && `plan → ${selected?.name || form.data.plan}`,
+        cycleMoved && `billed ${form.data.billing_cycle}`,
+        statusMoved && `status → ${SUB_STATUS_LABEL[form.data.status] || form.data.status}`,
+    ].filter(Boolean).join(', ');
+
+    return (
+        <Card
+            title="Manage subscription"
+            description="Change the plan, the billing cycle or the subscription's state. Every change is recorded against this company with your name, the time and the before → after values."
+            actions={dirty ? <Badge tone="warning" dot>Unsaved</Badge> : <Badge tone="neutral">In sync</Badge>}
+        >
+            <div className="space-y-5">
+                <div className="grid gap-4 lg:grid-cols-3">
+                    {/* ── Plan ─────────────────────────────────────────────── */}
+                    <Field
+                        label="Plan"
+                        htmlFor="sub-plan"
+                        hint="Archived and legacy plans are listed too — a customer may legitimately sit on one."
+                        error={form.errors.plan}
+                    >
+                        <Select id="sub-plan" value={form.data.plan} onChange={(e) => form.setData({ ...form.data, plan: e.target.value, acknowledge_seat_overage: false })}>
+                            {plans.map((p) => (
+                                <option key={p.key} value={p.key}>
+                                    {p.name}
+                                    {p.archived ? ' · archived' : VISIBILITY_NOTE[p.visibility] ? ` · ${VISIBILITY_NOTE[p.visibility]}` : ''}
+                                    {' — '}{money(p.price_cents, p.currency)}/mo
+                                    {p.key === sub.plan_key ? ' (current)' : ''}
+                                </option>
+                            ))}
+                        </Select>
+                    </Field>
+
+                    {/* ── Billing cycle ────────────────────────────────────── */}
+                    <Field
+                        label="Billing cycle"
+                        htmlFor="sub-cycle"
+                        hint="Which price this company is billed on. It is never an access decision."
+                        error={form.errors.billing_cycle}
+                    >
+                        <div id="sub-cycle" className="flex gap-2" role="group" aria-label="Billing cycle">
+                            {cycles.map((c) => {
+                                const on = form.data.billing_cycle === c;
+                                const price = c === 'yearly' ? selected?.price_cents_yearly : selected?.price_cents;
+                                return (
+                                    <button
+                                        key={c}
+                                        type="button"
+                                        aria-pressed={on}
+                                        onClick={() => form.setData('billing_cycle', c)}
+                                        className={`flex-1 rounded-md border px-3 py-2 text-sm capitalize transition ${
+                                            on
+                                                ? 'border-accent bg-accent text-white'
+                                                : 'border-line bg-surface text-muted hover:text-body'
+                                        }`}
+                                    >
+                                        <span className="flex items-center justify-center gap-1.5">
+                                            {on && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
+                                            {c}
+                                        </span>
+                                        <span className={`block text-xs ${on ? 'text-white/80' : 'text-subtle'}`}>
+                                            {price === null || price === undefined
+                                                ? 'by negotiation'
+                                                : `${money(price, selected?.currency)}/seat`}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </Field>
+
+                    {/* ── Status ───────────────────────────────────────────── */}
+                    <Field
+                        label="Subscription status"
+                        htmlFor="sub-status"
+                        hint={SUB_STATUS_HELP[form.data.status] || 'Use the Trial controls below to put a company back on trial.'}
+                        error={form.errors.status}
+                    >
+                        <Select id="sub-status" value={form.data.status} onChange={(e) => form.setData('status', e.target.value)}>
+                            {!statuses.includes(sub.status) && (
+                                <option value={sub.status}>{SUB_STATUS_LABEL[sub.status] || sub.status} (current)</option>
+                            )}
+                            {statuses.map((s) => (
+                                <option key={s} value={s}>
+                                    {SUB_STATUS_LABEL[s] || s}{s === sub.status ? ' (current)' : ''}
+                                </option>
+                            ))}
+                        </Select>
+                    </Field>
+                </div>
+
+                {/* ── The before-you-apply preview ─────────────────────────── */}
+                {planMoved && preview_ && (
+                    <div className="rounded-lg border border-line bg-surface-2">
+                        <div className="flex items-center gap-2 border-b border-line px-4 py-2.5 text-sm font-semibold text-body">
+                            <Repeat className="h-4 w-4 text-info" aria-hidden="true" />
+                            What changes when you apply {sub.plan_name} → {preview_.plan_name}
+                        </div>
+
+                        <div className="grid gap-x-6 px-4 py-3 sm:grid-cols-2">
+                            <DeltaRow
+                                label="User seats"
+                                from={preview_.seat_limit_now}
+                                to={preview_.seat_limit}
+                                unit="seats"
+                                tightens={preview_.seat_limit !== null && (preview_.seat_limit_now === null || preview_.seat_limit < preview_.seat_limit_now)}
+                            />
+                            <DeltaRow
+                                label="Screenshot retention"
+                                from={preview_.retention_days_now}
+                                to={preview_.retention_days}
+                                unit="days"
+                                tightens={preview_.retention_days !== null && (preview_.retention_days_now === null || preview_.retention_days < preview_.retention_days_now)}
+                            />
+                            {(preview_.limits || [])
+                                .filter((l) => l.key !== 'max_users' && l.key !== 'max_retention_days')
+                                .map((l) => (
+                                    <DeltaRow key={l.key} label={l.label} from={l.from} to={l.to} unit={l.unit} tightens={l.tightens} />
+                                ))}
+                        </div>
+
+                        {preview_.losses?.length > 0 && (
+                            <div className="border-t border-line px-4 py-3">
+                                <div className="flex items-center gap-1.5 text-sm font-semibold text-danger">
+                                    <TrendingDown className="h-4 w-4" aria-hidden="true" />
+                                    {preview_.losses.length === 1
+                                        ? '1 capability stops working immediately'
+                                        : `${preview_.losses.length} capabilities stop working immediately`}
+                                </div>
+                                <p className="mt-1 text-xs text-muted">
+                                    These are on today and off on {preview_.plan_name}. If the customer is using one, tell them
+                                    first — or grant it back as a per-company override on the Access tab, which outranks the plan.
+                                </p>
+                                <ul className="mt-2 space-y-1">
+                                    {preview_.losses.map((l) => (
+                                        <li key={l.key} className="flex items-start gap-2 rounded-md bg-danger-soft px-2.5 py-1.5 text-sm">
+                                            <X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" aria-hidden="true" />
+                                            <span>
+                                                <span className="font-medium text-body">{l.label}</span>
+                                                {l.help && <span className="block text-xs text-muted">{l.help}</span>}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+
+                        {preview_.gains?.length > 0 && (
+                            <div className="border-t border-line px-4 py-3">
+                                <div className="text-sm font-semibold text-success">
+                                    {preview_.gains.length} {preview_.gains.length === 1 ? 'capability' : 'capabilities'} unlocked
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {preview_.gains.map((g) => (
+                                        <Badge key={g.key} tone="success">{g.label}</Badge>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {preview_.losses?.length === 0 && preview_.gains?.length === 0 && (
+                            <div className="border-t border-line px-4 py-3 text-sm text-muted">
+                                No capability is gained or lost — only the limits above and the price change.
+                            </div>
+                        )}
+
+                        {/* ── Seat safety ──────────────────────────────────── */}
+                        {overage && (
+                            <div className="border-t border-line px-4 py-3">
+                                <div className="flex items-start gap-2 rounded-md bg-warning-soft p-3">
+                                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+                                    <div className="space-y-2 text-sm">
+                                        <p className="font-semibold text-body">
+                                            {organization.name} has {overage.users} active user{overage.users === 1 ? '' : 's'} but{' '}
+                                            {preview_.plan_name} allows {overage.limit}.
+                                        </p>
+                                        <p className="text-muted">
+                                            Nobody is signed out and no user is deactivated — the ceiling only applies when a seat is
+                                            claimed. They keep all {overage.users}, and simply cannot add or reactivate anyone until they
+                                            are back under {overage.limit}. Your acknowledgement is stored in the activity log.
+                                        </p>
+                                        <label className="flex cursor-pointer items-center gap-2 font-medium text-body">
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 rounded border-line text-accent focus:ring-accent"
+                                                checked={form.data.acknowledge_seat_overage}
+                                                onChange={(e) => form.setData('acknowledge_seat_overage', e.target.checked)}
+                                            />
+                                            I understand — apply the downgrade anyway
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <Field
+                    label="Why are you changing this?"
+                    htmlFor="sub-reason"
+                    hint="Stored on the activity-log entry, so the History tab explains itself later."
+                    error={form.errors.reason}
+                >
+                    <Input id="sub-reason" value={form.data.reason} onChange={(e) => form.setData('reason', e.target.value)} placeholder="e.g. Downgraded at renewal, agreed with Mara on 3 Aug" />
+                </Field>
+
+                <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                        type="button"
+                        variant="primary"
+                        loading={form.processing}
+                        disabled={form.processing || !dirty || blocked}
+                        onClick={() => setConfirming(true)}
+                    >
+                        {form.recentlySuccessful ? 'Applied' : form.processing ? 'Applying…' : 'Apply changes'}
+                    </Button>
+                    {dirty && (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => form.setData({
+                                plan: sub.plan_key || '',
+                                billing_cycle: sub.billing_cycle || 'monthly',
+                                status: sub.status,
+                                acknowledge_seat_overage: false,
+                                reason: form.data.reason,
+                            })}
+                        >
+                            Reset
+                        </Button>
+                    )}
+                    {blocked && <span className="text-sm text-warning">Acknowledge the seat overage to continue.</span>}
+                    {!dirty && <span className="text-sm text-subtle">Nothing selected has changed yet.</span>}
+                </div>
+            </div>
+
+            <ConfirmModal
+                open={confirming}
+                title="Apply this subscription change?"
+                description={
+                    `${organization.name}: ${summary}. `
+                    + (planMoved && preview_?.losses?.length
+                        ? (preview_.losses.length === 1
+                            ? '1 capability stops working immediately. '
+                            : `${preview_.losses.length} capabilities stop working immediately. `)
+                        : '')
+                    + 'Entitlements re-resolve on their very next request, and this is recorded in the activity log.'
+                }
+                confirmLabel="Apply"
+                tone={planMoved && preview_?.losses?.length ? 'danger' : 'primary'}
+                onConfirm={apply}
+                onClose={() => setConfirming(false)}
+            />
+        </Card>
+    );
+}
+
 // ─── Billing: record a bank-transfer payment ────────────────────────────────
 function PaymentForm({ org, sub, plans, preview }) {
     const form = useForm({ amount: '', currency: 'USD', months: 1, plan: sub?.plan_key || '', reference: '', reason: '' });
@@ -433,7 +861,7 @@ function PaymentForm({ org, sub, plans, preview }) {
 //   revoke    (off / a lower number)  take something the plan grants away
 //   unlimited (the sentinel)   lift a ceiling entirely — distinct from blank
 // and it may carry a REASON and an EXPIRY, so a sales trial switches itself off.
-function AccessTab({ organization, plans, entitlements, canManage, preview }) {
+function AccessTab({ organization, plans, currentPlanKey, entitlements, canManage, preview }) {
     const { registry, plan_defaults: planDefaults, overrides, layers, effective } = entitlements;
     const groups = useMemo(() => groupRegistry(registry), [registry]);
 
@@ -448,11 +876,12 @@ function AccessTab({ organization, plans, entitlements, canManage, preview }) {
         };
     });
 
+    // No `plan` field: the plan switcher lives on the Overview tab and is the
+    // single place a company is moved between plans.
     const form = useForm({
         overrides: initial,
         custom_price_cents: entitlements.custom_price_cents ?? '',
         discount_percent: organization.discount_percent ?? '',
-        plan: '',
         reason: '',
     });
 
@@ -489,16 +918,19 @@ function AccessTab({ organization, plans, entitlements, canManage, preview }) {
                         <Input id="tc-discount" type="number" min="0" max="100" placeholder="0" disabled={!canManage}
                             value={form.data.discount_percent} onChange={(e) => form.setData('discount_percent', e.target.value)} />
                     </Field>
-                    <Field label="Switch plan" htmlFor="tc-plan" hint="Takes effect immediately." error={form.errors.plan}>
-                        <Select id="tc-plan" value={form.data.plan} disabled={!canManage} onChange={(e) => form.setData('plan', e.target.value)}>
-                            <option value="">Keep current</option>
-                            {plans.map((p) => (
-                                <option key={p.key} value={p.key}>
-                                    {p.name}{p.archived ? ' (archived)' : ''} — {money(p.price_cents, p.currency)}/mo
-                                </option>
-                            ))}
-                        </Select>
-                    </Field>
+                    {/* The plan lives on the Overview tab's subscription panel —
+                        ONE place to move a company between plans, with the
+                        gains/losses preview and the seat guard. Duplicating the
+                        control here is how two switchers drift apart. */}
+                    <div className="text-sm">
+                        <div className="mb-1.5 font-medium text-body">Plan</div>
+                        <div className="rounded-md border border-line bg-surface-2 px-3 py-2 text-muted">
+                            {plans.find((p) => p.key === currentPlanKey)?.name || '—'}
+                            <span className="block text-xs text-subtle">
+                                Change it on the Overview tab, where you can see what the company gains and loses first.
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </Card>
 
