@@ -1,6 +1,6 @@
 import React, { useCallback, useRef } from "react";
 import { Link } from "@inertiajs/react";
-import Button from "./Button";
+import Button from './button';
 
 const cx = (...a) => a.filter(Boolean).join(" ");
 

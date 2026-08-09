@@ -3,7 +3,7 @@
 // All components are theme-aware (dark / light / black) via the semantic tokens
 // in resources/css/app.css. Electric-blue accent = bg-accent / text-accent.
 export { default as Spinner } from './Spinner';
-export { default as Button } from './Button';
+export { default as Button } from './button';
 export { default as Card, CardHeader } from './Card';
 export { default as Badge } from './Badge';
 export { default as StatCard, DeltaChip } from './StatCard';
