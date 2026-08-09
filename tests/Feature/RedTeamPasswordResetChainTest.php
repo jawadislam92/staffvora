@@ -9,7 +9,10 @@ use App\Models\MonitoringSetting;
 use App\Models\User;
 use App\Services\TenantProvisioner;
 use App\Tenancy\CurrentOrganization;
-use Illuminate\Auth\Notifications\ResetPassword;
+// Staffvora sends its own branded subclass (App\Models\User::
+// sendPasswordResetNotification()) instead of the framework default —
+// assert against that concrete class. Same ->token, same toMail() shape.
+use App\Notifications\ResetPasswordNotification as ResetPassword;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;

@@ -45,8 +45,17 @@ class BigOrgSeederBenchmarkTest extends TestCase
         $exit = Artisan::call('staffvora:seed-big-org', [
             '--users' => 4,
             '--months' => 1,
-            '--screenshot-days' => 2,
-            '--sample-days' => 1,
+            // 8, not 2: the seeder emits almost no screenshots on weekends, so a
+            // 2-day window that happens to land entirely on Sat+Sun (i.e. any
+            // time this test runs on a weekend) seeded ZERO screenshots and the
+            // "tracking_screenshots is empty" assertion failed purely because of
+            // the day of the week. An 8-day window always spans a full Mon–Fri,
+            // so at least one business day's screenshots exist regardless of when
+            // the suite runs. On a 4-user tiny seed the extra rows are trivial.
+            '--screenshot-days' => 8,
+            // Same weekend fragility as screenshot-days above: a 1-day sample
+            // window landing on a Sunday seeded zero activity samples.
+            '--sample-days' => 8,
             '--slug' => 'test-big',
             '--empty-slug' => 'test-empty',
             '--name' => 'Test Big',

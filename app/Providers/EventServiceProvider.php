@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Listeners\SendWorkspaceWelcomeEmail;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
@@ -17,6 +18,12 @@ class EventServiceProvider extends ServiceProvider
     protected $listen = [
         Registered::class => [
             SendEmailVerificationNotification::class,
+            // Branded "workspace created" welcome email — see the listener's
+            // docblock for why this event (fired at the end of self-serve
+            // signup) is the right hook. Wrapped internally in try/catch so
+            // a mail failure can never fail the signup that already
+            // succeeded by the time this event fires.
+            SendWorkspaceWelcomeEmail::class,
         ],
     ];
 

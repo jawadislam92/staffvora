@@ -825,4 +825,16 @@ class User extends Authenticatable
             ? $localTimestamp->copy()->subDay()->toDateString()
             : $calendarDate;
     }
+
+    /**
+     * Send the branded password-reset mail instead of the framework's plain
+     * default. The token/broker machinery — the part the security audit
+     * hardened — is completely untouched: this only swaps which Notification
+     * class renders the mail. See {@see \App\Notifications\ResetPasswordNotification}
+     * for why that class stays synchronous (never queued).
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new \App\Notifications\ResetPasswordNotification($token));
+    }
 }

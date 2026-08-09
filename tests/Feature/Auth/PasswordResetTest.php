@@ -3,7 +3,12 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
+// Staffvora sends its own branded subclass (see App\Models\User::
+// sendPasswordResetNotification()) instead of the framework's plain
+// default — assert against that concrete class. It extends
+// Illuminate\Auth\Notifications\ResetPassword and carries the exact same
+// ->token, so every assertion below is otherwise unchanged.
+use App\Notifications\ResetPasswordNotification as ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;

@@ -7,6 +7,8 @@ import {
     CalendarDays,
     CalendarRange,
     ChevronDown,
+    ChevronLeft,
+    ChevronRight,
     ChevronUp,
     Clock,
     Coffee,
@@ -51,6 +53,36 @@ import { showError, showExportSuccess, showLoading } from '@/Utils/notifications
 import { formatHours } from '@/Utils/timeUtils';
 
 const cx = (...a) => a.filter(Boolean).join(' ');
+
+// --- Week-window date helpers (local time; the server re-snaps to the org's
+// business timezone from the anchor date we send, so display-only math here is
+// safe). Weeks run Monday..Sunday to match the server.
+const pad2 = (n) => String(n).padStart(2, '0');
+const toISODate = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const mondayOf = (dateStr) => {
+    const base = dateStr ? new Date(`${dateStr}T00:00:00`) : new Date();
+    if (Number.isNaN(base.getTime())) return toISODate(new Date());
+    const dow = base.getDay(); // 0 Sun .. 6 Sat
+    base.setDate(base.getDate() + (dow === 0 ? -6 : 1 - dow));
+    return toISODate(base);
+};
+
+const addDaysISO = (dateStr, n) => {
+    const base = new Date(`${dateStr}T00:00:00`);
+    base.setDate(base.getDate() + n);
+    return toISODate(base);
+};
+
+const formatWeekLabel = (startStr) => {
+    const s = new Date(`${startStr}T00:00:00`);
+    const e = new Date(`${addDaysISO(startStr, 6)}T00:00:00`);
+    if (Number.isNaN(s.getTime())) return '';
+    return s.getMonth() === e.getMonth()
+        ? `${MONTHS_SHORT[s.getMonth()]} ${s.getDate()} – ${e.getDate()}`
+        : `${MONTHS_SHORT[s.getMonth()]} ${s.getDate()} – ${MONTHS_SHORT[e.getMonth()]} ${e.getDate()}`;
+};
 
 const TABS = [
     { id: 'monthly', label: 'Monthly Grid', icon: CalendarDays },
@@ -421,6 +453,10 @@ export default function EmployeeAttendance({
     const [manualHistory, setManualHistory] = useState(preview ? DEV_SAMPLE.history : []);
     const [selectedDate, setSelectedDate] = useState(serverDate || new Date().toISOString().split('T')[0]);
     const [selectedMonth, setSelectedMonth] = useState((serverDate || new Date().toISOString().split('T')[0]).slice(0, 7));
+    // The grid defaults to a WEEKLY window (7 columns, phone-friendly, ~4x
+    // smaller payload). Month stays reachable via the toggle for the full view.
+    const [gridRange, setGridRange] = useState('week');
+    const [weekStart, setWeekStart] = useState(() => mondayOf(serverDate || new Date().toISOString().split('T')[0]));
     const [showCalendarDialog, setShowCalendarDialog] = useState(false);
     const [isUpdatingCalendar, setIsUpdatingCalendar] = useState(false);
     const [calendarOperation, setCalendarOperation] = useState('apply');
@@ -450,6 +486,11 @@ export default function EmployeeAttendance({
 
     const canManualMark = preview || canManuallyMarkAttendance || monthlyGridData.canManualMark;
 
+    // The month the month-oriented dialogs (Slack, audit history, calendar
+    // default range) operate on. In week mode it follows the visible week, so
+    // those tools always reference the month the viewer is actually looking at.
+    const contextMonth = gridRange === 'week' ? weekStart.slice(0, 7) : selectedMonth;
+
     const statusLabelFor = (code) => {
         if (!code) return 'Auto';
         const match = monthlyGridData.statusOptions?.find((option) => option.code === code);
@@ -461,7 +502,10 @@ export default function EmployeeAttendance({
 
         try {
             if (activeTab === 'monthly') {
-                const response = await axios.get('/employee-attendance/monthly', { params: { month: selectedMonth } });
+                const params = gridRange === 'week'
+                    ? { range: 'week', date: weekStart }
+                    : { range: 'month', month: selectedMonth };
+                const response = await axios.get('/employee-attendance/monthly', { params });
                 setMonthlyGridData({
                     days: response.data.days || [],
                     employees: response.data.employees || [],
@@ -495,7 +539,7 @@ export default function EmployeeAttendance({
         if (preview) return;
         fetchAttendanceData();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedDate, selectedMonth, activeTab]);
+    }, [selectedDate, selectedMonth, activeTab, gridRange, weekStart]);
 
     const updateManualStatus = async (userId, date, statusCode) => {
         // Preview: mutate the in-memory grid so the manual-mark menu visibly works
@@ -671,14 +715,15 @@ export default function EmployeeAttendance({
     };
 
     const openCalendarDialog = () => {
-        const defaultDate = selectedMonth === selectedDate.slice(0, 7)
-            ? selectedDate
-            : `${selectedMonth}-01`;
+        // Default the range to the window currently on screen: the visible week in
+        // week mode, otherwise the selected month's first day.
+        const defaultStart = gridRange === 'week' ? weekStart : `${selectedMonth}-01`;
+        const defaultEnd = gridRange === 'week' ? addDaysISO(weekStart, 6) : `${selectedMonth}-01`;
         setCalendarOperation('apply');
         setCalendarScope('company');
         setCalendarUserIds(monthlyGridData.employees.map((employee) => String(employee.user_id)));
-        setCalendarStartDate(defaultDate);
-        setCalendarEndDate(defaultDate);
+        setCalendarStartDate(defaultStart);
+        setCalendarEndDate(defaultEnd);
         setCalendarStatus('L');
         setCalendarNote('');
         setShowCalendarDialog(true);
@@ -761,7 +806,7 @@ export default function EmployeeAttendance({
 
         try {
             const response = await axios.get('/employee-attendance/manual-history', {
-                params: { month: selectedMonth },
+                params: { month: contextMonth },
             });
             setManualHistory(response.data.history || []);
         } catch (error) {
@@ -780,7 +825,7 @@ export default function EmployeeAttendance({
     useEffect(() => {
         if (showHistoryDialog && !preview) fetchManualHistory();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedMonth]);
+    }, [contextMonth]);
 
     const openSlackDialog = () => {
         setSlackUserIds(monthlyGridData.employees.map((employee) => String(employee.user_id)));
@@ -815,7 +860,7 @@ export default function EmployeeAttendance({
 
         try {
             const response = await axios.post('/employee-attendance/slack', {
-                month: selectedMonth,
+                month: contextMonth,
                 user_ids: slackUserIds,
                 include_fields: slackFields,
             });
@@ -977,7 +1022,7 @@ export default function EmployeeAttendance({
                 { label: 'Present Days', value: totals.present, icon: PlayCircle, accent: 3 },
                 { label: 'Absent Days', value: totals.absent, icon: Square, accent: 4 },
                 { label: 'Leave Days', value: totals.leave, icon: Coffee, accent: 4 },
-                { label: 'Month Hours', value: formatHours(totals.hours), icon: Timer, accent: 1 },
+                { label: gridRange === 'week' ? 'Week Hours' : 'Month Hours', value: formatHours(totals.hours), icon: Timer, accent: 1 },
             ];
         }
 
@@ -994,7 +1039,7 @@ export default function EmployeeAttendance({
             { label: 'Clocked Out', value: clockedOut, icon: Square, accent: 4 },
             { label: 'Team Hours', value: formatHours(workHours), icon: Timer, accent: 1 },
         ];
-    }, [activeTab, employeesData, monthlyGridData.employees]);
+    }, [activeTab, employeesData, monthlyGridData.employees, gridRange]);
 
     const toggleEmployee = (employeeId) => {
         setExpandedEmployees((current) => ({ ...current, [employeeId]: !current[employeeId] }));
@@ -1025,18 +1070,77 @@ export default function EmployeeAttendance({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                        <label className="relative">
-                            <span className="sr-only">{isMonthly ? 'Month' : 'Date'}</span>
-                            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                            {isMonthly ? (
-                                <Input
-                                    type="month"
-                                    value={selectedMonth}
-                                    onChange={(event) => setSelectedMonth(event.target.value)}
-                                    className="w-auto pl-9"
-                                    style={{ colorScheme }}
-                                />
-                            ) : (
+                        {isMonthly ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                                {/* Week / Month window toggle. Week is the default. */}
+                                <div className="inline-flex rounded-lg border border-line bg-surface-2/40 p-0.5">
+                                    {['week', 'month'].map((range) => (
+                                        <button
+                                            key={range}
+                                            type="button"
+                                            onClick={() => setGridRange(range)}
+                                            aria-pressed={gridRange === range}
+                                            className={cx(
+                                                'rounded-md px-3 py-1.5 text-sm font-medium capitalize transition',
+                                                gridRange === range
+                                                    ? 'bg-surface text-body shadow-sm'
+                                                    : 'text-muted hover:text-body'
+                                            )}
+                                        >
+                                            {range}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {gridRange === 'week' ? (
+                                    <div className="inline-flex items-center gap-1">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            icon={<ChevronLeft className="h-4 w-4" />}
+                                            aria-label="Previous week"
+                                            onClick={() => setWeekStart((current) => addDaysISO(current, -7))}
+                                        />
+                                        <label className="relative">
+                                            <span className="sr-only">Week of</span>
+                                            <Input
+                                                type="date"
+                                                value={weekStart}
+                                                onChange={(event) => event.target.value && setWeekStart(mondayOf(event.target.value))}
+                                                className="w-auto"
+                                                style={{ colorScheme }}
+                                                aria-label={`Week of ${formatWeekLabel(weekStart)}`}
+                                            />
+                                        </label>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            icon={<ChevronRight className="h-4 w-4" />}
+                                            aria-label="Next week"
+                                            onClick={() => setWeekStart((current) => addDaysISO(current, 7))}
+                                        />
+                                        <span className="ml-1 hidden whitespace-nowrap text-sm font-medium text-muted sm:inline">
+                                            {formatWeekLabel(weekStart)}
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <label className="relative">
+                                        <span className="sr-only">Month</span>
+                                        <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                                        <Input
+                                            type="month"
+                                            value={selectedMonth}
+                                            onChange={(event) => setSelectedMonth(event.target.value)}
+                                            className="w-auto pl-9"
+                                            style={{ colorScheme }}
+                                        />
+                                    </label>
+                                )}
+                            </div>
+                        ) : (
+                            <label className="relative">
+                                <span className="sr-only">Date</span>
+                                <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                                 <Input
                                     type="date"
                                     value={selectedDate}
@@ -1044,8 +1148,8 @@ export default function EmployeeAttendance({
                                     className="w-auto pl-9"
                                     style={{ colorScheme }}
                                 />
-                            )}
-                        </label>
+                            </label>
+                        )}
 
                         {canManualMark && isMonthly && (
                             <>
@@ -1146,8 +1250,12 @@ export default function EmployeeAttendance({
                                             description: 'This grid gives you a month at a glance — one row per person, one column per day, present / absent / leave marked automatically from their clock-ins. It fills as your team starts using the tracker.',
                                         },
                                         quiet: {
-                                            title: `Nobody has attendance in ${selectedMonth}`,
-                                            description: 'Your team has attendance on record, just not in this month. Pick another month above.',
+                                            title: gridRange === 'week'
+                                                ? `Nobody has attendance in ${formatWeekLabel(weekStart)}`
+                                                : `Nobody has attendance in ${selectedMonth}`,
+                                            description: gridRange === 'week'
+                                                ? 'Your team has attendance on record, just not this week. Step through the weeks or switch to Month above.'
+                                                : 'Your team has attendance on record, just not in this month. Pick another month above.',
                                         },
                                     })
                                     : (
@@ -1155,6 +1263,7 @@ export default function EmployeeAttendance({
                                             days={monthlyGridData.days}
                                             employees={filteredMonthlyEmployees}
                                             statusOptions={monthlyGridData.statusOptions}
+                                            range={gridRange}
                                             canManualMark={canManualMark}
                                             markingCell={markingCell}
                                             onStatusChange={updateManualStatus}
@@ -1479,7 +1588,7 @@ export default function EmployeeAttendance({
                 show={showHistoryDialog}
                 onClose={() => setShowHistoryDialog(false)}
                 title="Manual attendance audit"
-                description={`Latest manual changes for ${selectedMonth}.`}
+                description={`Latest manual changes for ${contextMonth}.`}
                 footer={<Button variant="ghost" onClick={() => setShowHistoryDialog(false)}>Close</Button>}
             >
                 {historyLoading ? (
@@ -1538,7 +1647,7 @@ export default function EmployeeAttendance({
                 show={showSlackDialog}
                 onClose={() => setShowSlackDialog(false)}
                 title="Send attendance to Slack"
-                description={`Choose users and summary columns for ${selectedMonth}.`}
+                description={`Choose users and summary columns for ${contextMonth}.`}
                 footer={(
                     <>
                         <Button variant="ghost" onClick={() => setShowSlackDialog(false)}>Cancel</Button>
@@ -1901,18 +2010,38 @@ function AccordionList({ items, expandedEmployees, toggleEmployee, setAllExpande
     );
 }
 
+// Compact status codes shown under each mobile card. A phone can't hold the
+// nine summary columns the desktop grid has, so it carries the ones a manager
+// scans for; the full breakdown stays on the desktop grid and in the Slack export.
+const MOBILE_SUMMARY = [
+    { key: 'present', label: 'Present' },
+    { key: 'absent', label: 'Absent' },
+    { key: 'leave', label: 'Leave' },
+    { key: 'work_from_home', label: 'WFH' },
+    { key: 'half_day', label: 'Half day' },
+    { key: 'late_coming', label: 'Late' },
+];
+
 function MonthlyAttendanceGrid({
     days,
     employees,
     statusOptions,
+    range = 'month',
     canManualMark,
     markingCell,
     onStatusChange,
     canEditTimes = false,
     onEditTimes,
 }) {
-    const [openCell, setOpenCell] = useState(null);
+    // ONE shared status menu for both layouts (desktop grid + mobile cards).
+    // openTarget carries the {employee, cell} the menu is acting on, so the
+    // portal is rendered once at the component root instead of once per cell.
+    const [openKey, setOpenKey] = useState(null);
+    const [openTarget, setOpenTarget] = useState(null);
     const [menuPosition, setMenuPosition] = useState(null);
+
+    const cellInteractive = canManualMark || canEditTimes;
+
     const summaryColumns = [
         { key: 'holidays', label: 'Holidays' },
         { key: 'present', label: 'Present' },
@@ -1925,40 +2054,54 @@ function MonthlyAttendanceGrid({
         { key: 'total_work_hours', label: 'Hours', format: (value) => formatHours(value) },
     ];
 
-    useEffect(() => {
-        if (!openCell) return undefined;
+    // Day metadata (weekday, day number, weekend) keyed by date, so the mobile
+    // cards — which iterate each person's cells, not the shared day header — can
+    // label each chip without recomputing anything.
+    const dayMeta = useMemo(() => {
+        const map = {};
+        days.forEach((day) => { map[day.date] = day; });
+        return map;
+    }, [days]);
 
-        const closeMenu = (event) => {
+    const closeMenu = () => {
+        setOpenKey(null);
+        setOpenTarget(null);
+        setMenuPosition(null);
+    };
+
+    useEffect(() => {
+        if (!openKey) return undefined;
+
+        const onOutside = (event) => {
             if (
                 event?.target?.closest?.('[data-attendance-menu]')
                 || event?.target?.closest?.('[data-attendance-trigger]')
             ) {
                 return;
             }
-            setOpenCell(null);
-            setMenuPosition(null);
+            closeMenu();
         };
-        const closeOnEscape = (event) => {
+        const onEscape = (event) => {
             if (event.key === 'Escape') closeMenu();
         };
 
-        document.addEventListener('pointerdown', closeMenu);
-        document.addEventListener('scroll', closeMenu, true);
-        window.addEventListener('resize', closeMenu);
-        document.addEventListener('keydown', closeOnEscape);
+        document.addEventListener('pointerdown', onOutside);
+        document.addEventListener('scroll', onOutside, true);
+        window.addEventListener('resize', onOutside);
+        document.addEventListener('keydown', onEscape);
 
         return () => {
-            document.removeEventListener('pointerdown', closeMenu);
-            document.removeEventListener('scroll', closeMenu, true);
-            window.removeEventListener('resize', closeMenu);
-            document.removeEventListener('keydown', closeOnEscape);
+            document.removeEventListener('pointerdown', onOutside);
+            document.removeEventListener('scroll', onOutside, true);
+            window.removeEventListener('resize', onOutside);
+            document.removeEventListener('keydown', onEscape);
         };
-    }, [openCell]);
+    }, [openKey]);
 
-    const toggleCellMenu = (event, cellKey) => {
-        if (openCell === cellKey) {
-            setOpenCell(null);
-            setMenuPosition(null);
+    const toggleCellMenu = (event, employee, cell) => {
+        const cellKey = `${employee.user_id}-${cell.date}`;
+        if (openKey === cellKey) {
+            closeMenu();
             return;
         }
 
@@ -1978,7 +2121,56 @@ function MonthlyAttendanceGrid({
         setMenuPosition(openAbove
             ? { left, bottom: window.innerHeight - rect.top + 6 }
             : { left, top: rect.bottom + 6 });
-        setOpenCell(cellKey);
+        setOpenTarget({ employee, cell });
+        setOpenKey(cellKey);
+    };
+
+    // One status chip, shared by the desktop table cell and the mobile card.
+    // `block` makes it fill its slot (mobile); the default is the fixed-size
+    // grid chip (desktop). The interaction, tone, manual-mark dot, tooltip and
+    // loading state are identical between the two.
+    const renderChip = (employee, cell, { block = false } = {}) => {
+        const cellKey = `${employee.user_id}-${cell.date}`;
+        const statusCode = cell.status_code || '';
+        const toneClass = GRID_TONE[statusCode] || GRID_TONE.empty;
+        const isManual = cell.source === 'manual';
+        const isLoading = markingCell === cellKey;
+        const open = openKey === cellKey;
+        const titleParts = [
+            cell.status_label,
+            cell.work_hours ? `${formatHours(cell.work_hours)} worked` : null,
+            cell.first_clock_in ? `First in ${cell.first_clock_in}` : null,
+            isManual ? 'Manual mark' : null,
+        ].filter(Boolean);
+
+        return (
+            <div
+                className={cx(
+                    'relative flex items-center justify-center rounded-md text-sm font-bold',
+                    block ? 'h-9 w-full' : 'mx-auto h-11 min-w-11',
+                    toneClass
+                )}
+                title={titleParts.join(' | ')}
+            >
+                {cellInteractive ? (
+                    <button
+                        type="button"
+                        disabled={isLoading}
+                        onClick={(event) => toggleCellMenu(event, employee, cell)}
+                        className="h-full w-full rounded-md px-1 text-sm font-bold text-inherit outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-app disabled:cursor-wait disabled:opacity-60"
+                        aria-label={`Attendance for ${employee.user_name} on ${cell.date}`}
+                        aria-expanded={open}
+                        aria-haspopup="menu"
+                        data-attendance-trigger
+                    >
+                        {isLoading ? '...' : statusCode || '-'}
+                    </button>
+                ) : (
+                    <span>{statusCode || '-'}</span>
+                )}
+                {isManual && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-current opacity-70" />}
+            </div>
+        );
     };
 
     return (
@@ -1994,7 +2186,10 @@ function MonthlyAttendanceGrid({
                 ))}
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-line">
+            {/* DESKTOP: the wide grid — one row per person, one column per day.
+                Weekly by default (7 columns), so it fits without scrolling; a
+                month still scrolls horizontally inside its own container. */}
+            <div className="hidden overflow-x-auto rounded-lg border border-line sm:block">
                 <table className="min-w-max border-separate border-spacing-0 text-sm">
                     <thead>
                         <tr>
@@ -2026,117 +2221,11 @@ function MonthlyAttendanceGrid({
                                 <td className="sticky left-0 z-10 border-b border-r border-line bg-surface px-4 py-2.5 group-hover:bg-surface-2/60">
                                     <EmployeeIdentity employee={employee} />
                                 </td>
-                                {employee.days.map((cell) => {
-                                    const cellKey = `${employee.user_id}-${cell.date}`;
-                                    const statusCode = cell.status_code || '';
-                                    const toneClass = GRID_TONE[statusCode] || GRID_TONE.empty;
-                                    const isManual = cell.source === 'manual';
-                                    const isLoading = markingCell === cellKey;
-                                    const open = openCell === cellKey;
-                                    // The cell menu is offered to anyone who can act on the day —
-                                    // marking status manually, editing clock times, or both.
-                                    const cellInteractive = canManualMark || canEditTimes;
-                                    const titleParts = [
-                                        cell.status_label,
-                                        cell.work_hours ? `${formatHours(cell.work_hours)} worked` : null,
-                                        cell.first_clock_in ? `First in ${cell.first_clock_in}` : null,
-                                        isManual ? 'Manual mark' : null,
-                                    ].filter(Boolean);
-
-                                    return (
-                                        <td key={cell.date} className="relative border-b border-r border-line p-1.5 text-center">
-                                            <div
-                                                className={cx('relative mx-auto flex h-11 min-w-11 items-center justify-center rounded-md text-sm font-bold', toneClass)}
-                                                title={titleParts.join(' | ')}
-                                            >
-                                                {cellInteractive ? (
-                                                    <button
-                                                        type="button"
-                                                        disabled={isLoading}
-                                                        onClick={(event) => toggleCellMenu(event, cellKey)}
-                                                        className="h-full w-full rounded-md px-1 text-sm font-bold text-inherit outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-app disabled:cursor-wait disabled:opacity-60"
-                                                        aria-label={`Attendance for ${employee.user_name} on ${cell.date}`}
-                                                        aria-expanded={open}
-                                                        aria-haspopup="menu"
-                                                        data-attendance-trigger
-                                                    >
-                                                        {isLoading ? '...' : statusCode || '-'}
-                                                    </button>
-                                                ) : (
-                                                    <span>{statusCode || '-'}</span>
-                                                )}
-                                                {isManual && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-current opacity-70" />}
-                                            </div>
-                                            {cellInteractive && open && menuPosition && typeof document !== 'undefined' && createPortal(
-                                                <div
-                                                    className="fixed z-[100] max-h-[calc(100vh-1rem)] w-52 overflow-y-auto rounded-lg border border-line bg-surface p-2 text-left shadow-xl"
-                                                    style={menuPosition}
-                                                    role="menu"
-                                                    data-attendance-menu
-                                                >
-                                                    <div className="mb-1 px-2 text-xs font-medium text-subtle">{cell.date}</div>
-
-                                                    {canEditTimes && (
-                                                        <>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setOpenCell(null);
-                                                                    setMenuPosition(null);
-                                                                    onEditTimes?.(employee, cell.date);
-                                                                }}
-                                                                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold text-body transition hover:bg-accent/10 hover:text-accent"
-                                                                role="menuitem"
-                                                            >
-                                                                <Clock className="h-4 w-4" />
-                                                                <span>Clock times…</span>
-                                                            </button>
-                                                            {canManualMark && <div className="my-1 border-t border-line" />}
-                                                        </>
-                                                    )}
-
-                                                    {canManualMark && (
-                                                        <>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    onStatusChange(employee.user_id, cell.date, '');
-                                                                    setOpenCell(null);
-                                                                    setMenuPosition(null);
-                                                                }}
-                                                                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm font-semibold text-body transition hover:bg-surface-2"
-                                                                role="menuitem"
-                                                            >
-                                                                <span>Auto</span>
-                                                                <span className="text-muted">{statusCode || '-'}</span>
-                                                            </button>
-                                                            <div className="my-1 border-t border-line" />
-                                                            {statusOptions.map((option) => (
-                                                                <button
-                                                                    key={option.code}
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        onStatusChange(employee.user_id, cell.date, option.code);
-                                                                        setOpenCell(null);
-                                                                        setMenuPosition(null);
-                                                                    }}
-                                                                    className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm text-muted transition hover:bg-accent/10 hover:text-accent"
-                                                                    role="menuitem"
-                                                                >
-                                                                    <span>{option.label}</span>
-                                                                    <span className={cx('inline-flex min-w-8 items-center justify-center rounded px-1.5 py-0.5 text-xs font-bold', GRID_TONE[option.code] || GRID_TONE.empty)}>
-                                                                        {option.code}
-                                                                    </span>
-                                                                </button>
-                                                            ))}
-                                                        </>
-                                                    )}
-                                                </div>,
-                                                document.body
-                                            )}
-                                        </td>
-                                    );
-                                })}
+                                {employee.days.map((cell) => (
+                                    <td key={cell.date} className="relative border-b border-r border-line p-1.5 text-center">
+                                        {renderChip(employee, cell)}
+                                    </td>
+                                ))}
                                 {summaryColumns.map((column) => (
                                     <td key={column.key} className="border-b border-r border-line bg-surface px-3 py-2.5 text-center font-semibold text-body tabular-nums group-hover:bg-surface-2/60">
                                         {column.format
@@ -2149,6 +2238,122 @@ function MonthlyAttendanceGrid({
                     </tbody>
                 </table>
             </div>
+
+            {/* MOBILE: one card per person. The week (or month) is a 7-column
+                chip strip that WRAPS — never scrolls sideways — so a 375px phone
+                reads who was present, their hours and their status with no
+                pinch-zoom and no horizontal scroll. */}
+            <div className="space-y-3 sm:hidden">
+                {employees.map((employee) => (
+                    <div key={employee.user_id} className="rounded-xl border border-line bg-surface p-3">
+                        <div className="flex items-center justify-between gap-3">
+                            <EmployeeIdentity employee={employee} />
+                            <div className="shrink-0 text-right">
+                                <div className="text-sm font-bold text-body tabular-nums">{formatHours(employee.summary?.total_work_hours || 0)}</div>
+                                <div className="text-[10px] uppercase tracking-wide text-subtle">hours</div>
+                            </div>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-7 gap-1.5">
+                            {employee.days.map((cell) => {
+                                const meta = dayMeta[cell.date] || {};
+                                return (
+                                    <div key={cell.date} className="flex flex-col items-center gap-1">
+                                        <span className={cx(
+                                            'text-[10px] font-semibold uppercase leading-none',
+                                            meta.is_weekend ? 'text-accent' : 'text-subtle'
+                                        )}>
+                                            {range === 'week' ? meta.weekday : meta.day}
+                                        </span>
+                                        {range === 'week' && (
+                                            <span className="text-[11px] font-semibold leading-none text-muted">{meta.day}</span>
+                                        )}
+                                        {renderChip(employee, cell, { block: true })}
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-t border-line pt-2.5 text-xs text-muted">
+                            {MOBILE_SUMMARY.map((item) => (
+                                <span key={item.key}>
+                                    {item.label} <b className="font-semibold text-body tabular-nums">{employee.summary?.[item.key] || 0}</b>
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Shared status menu — rendered once, positioned over whichever chip
+                (grid or card) is open. */}
+            {cellInteractive && openKey && openTarget && menuPosition && typeof document !== 'undefined' && createPortal(
+                <div
+                    className="fixed z-[100] max-h-[calc(100vh-1rem)] w-52 overflow-y-auto rounded-lg border border-line bg-surface p-2 text-left shadow-xl"
+                    style={menuPosition}
+                    role="menu"
+                    data-attendance-menu
+                >
+                    <div className="mb-1 px-2 text-xs font-medium text-subtle">{openTarget.cell.date}</div>
+
+                    {canEditTimes && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const { employee, cell } = openTarget;
+                                    closeMenu();
+                                    onEditTimes?.(employee, cell.date);
+                                }}
+                                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold text-body transition hover:bg-accent/10 hover:text-accent"
+                                role="menuitem"
+                            >
+                                <Clock className="h-4 w-4" />
+                                <span>Clock times…</span>
+                            </button>
+                            {canManualMark && <div className="my-1 border-t border-line" />}
+                        </>
+                    )}
+
+                    {canManualMark && (
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const { employee, cell } = openTarget;
+                                    onStatusChange(employee.user_id, cell.date, '');
+                                    closeMenu();
+                                }}
+                                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm font-semibold text-body transition hover:bg-surface-2"
+                                role="menuitem"
+                            >
+                                <span>Auto</span>
+                                <span className="text-muted">{openTarget.cell.status_code || '-'}</span>
+                            </button>
+                            <div className="my-1 border-t border-line" />
+                            {statusOptions.map((option) => (
+                                <button
+                                    key={option.code}
+                                    type="button"
+                                    onClick={() => {
+                                        const { employee, cell } = openTarget;
+                                        onStatusChange(employee.user_id, cell.date, option.code);
+                                        closeMenu();
+                                    }}
+                                    className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm text-muted transition hover:bg-accent/10 hover:text-accent"
+                                    role="menuitem"
+                                >
+                                    <span>{option.label}</span>
+                                    <span className={cx('inline-flex min-w-8 items-center justify-center rounded px-1.5 py-0.5 text-xs font-bold', GRID_TONE[option.code] || GRID_TONE.empty)}>
+                                        {option.code}
+                                    </span>
+                                </button>
+                            ))}
+                        </>
+                    )}
+                </div>,
+                document.body
+            )}
         </div>
     );
 }

@@ -455,36 +455,62 @@ class EmployeeAttendanceController extends Controller
     public function getMonthlyGrid(Request $request)
     {
         $validated = $request->validate([
+            'range' => ['nullable', Rule::in(['week', 'month'])],
             'month' => ['nullable', 'date_format:Y-m'],
+            'date' => ['nullable', 'date_format:Y-m-d'],
         ]);
 
         $tz = BusinessTime::tz();
-        $month = $validated['month'] ?? Carbon::today($tz)->format('Y-m');
-        $startDate = Carbon::createFromFormat('Y-m-d', "{$month}-01", $tz)->startOfDay();
-        $endDate = $startDate->copy()->endOfMonth();
+
+        // DEFAULT to a WEEKLY window. A week is 7 columns instead of 28-31, so
+        // the payload scales with the window the viewer is actually looking at
+        // rather than the whole calendar — the biggest single payload in the app
+        // (~770 KB on a large tenant) drops ~4x, and the page fits a phone.
+        //
+        // Backwards-compatible fallback: a caller that passes only `month` (every
+        // pre-existing bookmark, the Slack/report internals, and the page's own
+        // "Month" toggle) still gets the full month, so nothing that relied on the
+        // old contract changes. An explicit `range` always wins.
+        $range = $validated['range'] ?? (! empty($validated['month']) ? 'month' : 'week');
+
+        if ($range === 'month') {
+            $month = $validated['month'] ?? Carbon::today($tz)->format('Y-m');
+            $startDate = Carbon::createFromFormat('Y-m-d', "{$month}-01", $tz)->startOfDay();
+            $lastDay = $startDate->copy()->endOfMonth()->startOfDay();
+        } else {
+            // A Monday..Sunday week around the anchored day (defaults to today).
+            // Monday start keeps the Sunday weekly-off at the END of the row, which
+            // reads naturally on both the desktop grid and the phone card strip.
+            $anchor = ! empty($validated['date'])
+                ? Carbon::createFromFormat('Y-m-d', $validated['date'], $tz)->startOfDay()
+                : Carbon::today($tz);
+            $startDate = $anchor->copy()->startOfWeek(Carbon::MONDAY);
+            $lastDay = $startDate->copy()->addDays(6);
+        }
+
         $now = Carbon::now($tz);
         $today = $now->copy()->startOfDay();
 
         // Half-open bounds on the raw DATE columns. whereBetween with a bare
         // 'Y-m-d' upper bound is both non-sargable-adjacent and WRONG on
         // SQLite, where the `date` cast persists "Y-m-d 00:00:00" — the last
-        // day of the month sorts after the bound and its punches/marks were
-        // silently dropped from the grid. `>= first` / `< first + 1 month`
+        // day of the window sorts after the bound and its punches/marks were
+        // silently dropped from the grid. `>= first` / `< last + 1 day`
         // matches both textual forms and lets the (organization_id,
         // action_date) composite range-scan one tenant's slice.
         $rangeStart = $startDate->toDateString();
-        $rangeEndExclusive = $startDate->copy()->addMonth()->toDateString();
+        $rangeEndExclusive = $lastDay->copy()->addDay()->toDateString();
 
-        $days = collect(range(1, $endDate->day))->map(function (int $day) use ($startDate) {
-            $date = $startDate->copy()->day($day);
-
+        // One row per day in the visible window (7 for a week, 28-31 for a month).
+        // Same per-day shape the grid has always rendered.
+        $days = collect(CarbonPeriod::create($startDate, $lastDay))->map(function (Carbon $date) {
             return [
                 'date' => $date->toDateString(),
                 'day' => $date->day,
                 'weekday' => $date->format('D'),
                 'is_weekend' => $date->isSunday(),
             ];
-        });
+        })->values();
 
         // Parsed once per day here rather than once per employee-day cell —
         // with a full team this loop body otherwise runs ~700 times a month.
@@ -673,7 +699,13 @@ class EmployeeAttendanceController extends Controller
             ->values();
 
         return response()->json([
-            'month' => $month,
+            // Window metadata: the client uses these to label and page the view.
+            // `month` is kept (the month the window opens in) so any caller that
+            // still reads it keeps working.
+            'range' => $range,
+            'start' => $rangeStart,
+            'end' => $lastDay->toDateString(),
+            'month' => $startDate->format('Y-m'),
             'days' => $days->values(),
             'employees' => $employees,
             'statusOptions' => collect(self::ATTENDANCE_STATUSES)

@@ -5,12 +5,16 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Models\Organization;
 use App\Models\User;
+use App\Notifications\TeamInvitationNotification;
 use App\Services\DemoDataService;
 use App\Tenancy\CurrentOrganization;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -108,11 +112,13 @@ class OnboardingController extends Controller
         // The check and the INSERT share one transaction and one lock: reading
         // the count and creating the row as two separate steps is the race that
         // let concurrent invites all pass the same stale count.
-        User::withSeatGuard(
+        $email = strtolower(trim($validated['email']));
+
+        $invitee = User::withSeatGuard(
             $this->organization(),
             fn () => User::create([
                 'name' => $validated['name'],
-                'email' => strtolower(trim($validated['email'])),
+                'email' => $email,
                 'password' => Hash::make($tempPassword),
                 'role' => 'member',
                 'permissions' => [],
@@ -120,11 +126,70 @@ class OnboardingController extends Controller
             'Your plan includes up to :limit users. Upgrade to add more.',
         );
 
+        // ADDITIVE: on top of the temp-password fallback above (which always
+        // happens — the account exists and the admin sees the flash message
+        // below either way), also try to email the new teammate a branded
+        // "set your password" link. This reuses the framework's own
+        // password-reset token/broker — the same audited primitive behind
+        // Auth\PasswordResetLinkController — not a new token surface.
+        $this->sendInvitationEmail($invitee, $request->user());
+
         return back()->with('invited', [
             'name' => $validated['name'],
-            'email' => strtolower(trim($validated['email'])),
+            'email' => $email,
             'password' => $tempPassword,
         ]);
+    }
+
+    /**
+     * Best-effort branded invite email. Never allowed to fail the invite
+     * itself — the account is already created and the admin already has the
+     * temp-password fallback in the 'invited' flash payload by the time this
+     * runs, so a broken mail transport degrades to "admin hands over the
+     * temp password" rather than a 500.
+     *
+     * The link is built the same defensive way as
+     * Auth\PasswordResetLinkController::store(): the root is pinned to the
+     * configured APP_URL for the duration of the call rather than trusted
+     * from the current request, so this endpoint (also mailing a working
+     * credential to a human) can't be steered by a spoofed Host/forwarded
+     * header either.
+     */
+    private function sendInvitationEmail(User $invitee, ?User $inviter): void
+    {
+        $pinnedRoot = rtrim(trim((string) config('app.url')), '/');
+
+        try {
+            if ($pinnedRoot !== '') {
+                URL::forceRootUrl($pinnedRoot);
+                URL::forceScheme(parse_url($pinnedRoot, PHP_URL_SCHEME) ?: null);
+            }
+
+            $token = Password::broker()->createToken($invitee);
+
+            $setPasswordUrl = url(route('password.reset', [
+                'token' => $token,
+                'email' => $invitee->email,
+            ], false));
+
+            $invitee->notify(new TeamInvitationNotification(
+                inviterName: $inviter?->name ?? 'A workspace admin',
+                organizationName: $this->organization()?->name ?? 'your workspace',
+                setPasswordUrl: $setPasswordUrl,
+            ));
+        } catch (\Throwable $e) {
+            // Log the failure, never the token or URL — those are live
+            // credentials for this account.
+            Log::warning('Team invitation email failed to send.', [
+                'user_id' => $invitee->id,
+                'error' => $e->getMessage(),
+            ]);
+        } finally {
+            if ($pinnedRoot !== '') {
+                URL::forceRootUrl(null);
+                URL::forceScheme(null);
+            }
+        }
     }
 
     /** Step 4 — create the first client/project. */

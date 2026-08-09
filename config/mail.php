@@ -124,7 +124,10 @@ return [
     */
 
     'markdown' => [
-        'theme' => 'default',
+        // Staffvora's branded theme (resources/views/vendor/mail/html/themes/
+        // staffvora.css) — every Markdown Mailable/notification in the app
+        // inherits it automatically via this single default.
+        'theme' => 'staffvora',
 
         'paths' => [
             resource_path('views/vendor/mail'),
