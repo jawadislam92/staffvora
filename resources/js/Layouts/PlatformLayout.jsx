@@ -1,8 +1,51 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
+import { Sun, Moon, MoonStar } from 'lucide-react';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 
 const cx = (...a) => a.filter(Boolean).join(' ');
+
+const THEMES = [
+    { key: 'light', label: 'Light', Icon: Sun },
+    { key: 'dark', label: 'Dark', Icon: Moon },
+    { key: 'black', label: 'Black', Icon: MoonStar },
+];
+
+// Operator theme switch. The platform host has no customer `web` user, so the
+// choice is persisted purely in the tt_theme cookie: applied instantly here
+// (data-theme + cookie), read back server-side by SharePlatformUser so every
+// navigation re-resolves to the same value (dark / black stay put).
+function ThemeToggle() {
+    const [active, setActive] = useState(usePage().props?.theme || 'light');
+
+    const pick = (theme) => {
+        setActive(theme);
+        document.documentElement.dataset.theme = theme;
+        document.cookie = `tt_theme=${theme};path=/;max-age=31536000;samesite=lax`;
+    };
+
+    return (
+        <div role="group" aria-label="Theme" className="inline-flex items-center gap-0.5 rounded-lg border border-line bg-surface-2 p-0.5">
+            {THEMES.map(({ key, label, Icon }) => (
+                <button
+                    key={key}
+                    type="button"
+                    onClick={() => pick(key)}
+                    title={`${label} theme`}
+                    aria-pressed={active === key}
+                    className={cx(
+                        'flex h-7 w-7 items-center justify-center rounded-md transition',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                        active === key ? 'bg-accent text-white' : 'text-muted hover:bg-surface hover:text-body',
+                    )}
+                >
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                    <span className="sr-only">{label} theme</span>
+                </button>
+            ))}
+        </div>
+    );
+}
 
 // Operator shell for the Staffvora landlord/operator portal (platform guard).
 // DISTINCT from the customer AppShell — its own sidebar + user menu — but fully
@@ -166,6 +209,10 @@ function UserMenu({ user, align = 'up' }) {
                     <div className="border-b border-line px-3 py-2">
                         <div className="truncate text-sm font-medium text-body">{user?.name || 'Operator'}</div>
                         {user?.email && <div className="truncate text-xs text-subtle">{user.email}</div>}
+                    </div>
+                    <div className="border-b border-line px-3 py-2.5">
+                        <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-subtle">Theme</div>
+                        <ThemeToggle />
                     </div>
                     <button
                         type="button"

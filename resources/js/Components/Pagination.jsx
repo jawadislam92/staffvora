@@ -1,309 +1,167 @@
-import React, { useState } from 'react';
-import { Link, router } from '@inertiajs/react';
+import { Link } from '@inertiajs/react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-// Load More Button Pagination Component
-export const LoadMorePagination = ({ 
-    items = [], 
-    hasMore = false, 
-    loading = false, 
-    onLoadMore, 
-    itemsPerPage = 10,
-    className = "" 
-}) => {
-    return (
-        <div className={`space-y-4 ${className}`}>
-            {/* Render items */}
-            <div className="space-y-2">
-                {items.map((item, index) => (
-                    <div key={item.id || index}>
-                        {/* Items will be rendered by parent component */}
-                        {item}
-                    </div>
-                ))}
-            </div>
-            
-            {/* Load More Button */}
-            {hasMore && (
-                <div className="text-center pt-8">
-                    <button 
-                        onClick={onLoadMore}
-                        disabled={loading}
-                        className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 disabled:from-gray-500 disabled:to-gray-600 text-white px-8 py-3 rounded-xl font-medium transition-all duration-300 hover:shadow-lg hover:shadow-green-500/25 disabled:opacity-50 disabled:cursor-not-allowed backdrop-blur-xl border border-white/20"
-                    >
-                        {loading ? (
-                            <div className="flex items-center">
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                Loading...
-                            </div>
-                        ) : (
-                            <div className="flex items-center">
-                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                                </svg>
-                                Load More
-                            </div>
-                        )}
-                    </button>
-                </div>
-            )}
-            
-            {!hasMore && items.length > itemsPerPage && (
-                <div className="text-center pt-4">
-                    <p className="text-white/60 text-sm">
-                        You've reached the end of the list
-                    </p>
-                </div>
-            )}
-        </div>
-    );
-};
+// Build a compact, windowed list of page numbers with ellipsis gaps, so a
+// paginator with hundreds of pages never renders hundreds of controls.
+function buildWindow(current, last, delta) {
+    const shown = [];
+    for (let i = 1; i <= last; i += 1) {
+        if (i === 1 || i === last || (i >= current - delta && i <= current + delta)) {
+            shown.push(i);
+        }
+    }
+    const out = [];
+    let prev = 0;
+    for (const p of shown) {
+        if (prev && p - prev > 1) out.push('…');
+        out.push(p);
+        prev = p;
+    }
+    return out;
+}
 
-// Traditional Pagination Component
-export const TraditionalPagination = ({
+const cellBase =
+    'inline-flex h-10 min-w-10 items-center justify-center rounded-lg px-3 text-sm font-medium ' +
+    'transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
+
+/**
+ * TraditionalPagination — token-themed, responsive paginator.
+ *
+ * - Uses the app's semantic tokens (bg-surface / border-line / text-* /
+ *   bg-accent), so it re-themes from `data-theme` and no longer needs the old
+ *   hand-switched `dark` palette prop (still accepted and ignored for callers
+ *   that pass it).
+ * - Below `sm` it renders a compact "‹ Prev · Page X of Y · Next ›" row whose
+ *   controls are all ≥40px and always on-screen — the previous numbered row was
+ *   773px wide and ran off the left edge of a phone.
+ * - The numbered row is windowed with ellipses and wraps, so it can never push
+ *   the page into horizontal scroll regardless of page count.
+ */
+export function TraditionalPagination({
     pagination,
-    className = "",
+    className = '',
     preserveState = true,
     preserveScroll = false,
+    // Legacy prop — the component is now fully token-driven. Accepted so existing
+    // call sites don't spread it onto the DOM, but intentionally unused.
+    // eslint-disable-next-line no-unused-vars
     dark = false,
-}) => {
+}) {
     if (!pagination) return null;
 
-    const { links, from, to, total } = pagination;
-    // Theme-aware: this component is used on both dark data pages (Report,
-    // Work Diary, Clients) and the light Users page, so colors switch on `dark`.
-    const labelCls = dark ? 'text-slate-400' : 'text-slate-600';
-    const numCls = dark ? 'text-slate-100' : 'text-slate-950';
-    const disabledCls = dark ? 'text-slate-600' : 'text-slate-400';
-    const activeCls = dark ? 'bg-orange-500 text-white' : 'bg-slate-900 text-white';
-    const linkCls = dark
-        ? 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white hover:border-slate-600 focus:ring-orange-500'
-        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-950 hover:border-slate-300 focus:ring-blue-500 focus:ring-offset-2';
+    const { links = [], from, to, total } = pagination;
+
+    // Numeric page links carry the canonical URLs (with any appended filters).
+    const numeric = links.filter((l) => /^\d+$/.test(String(l.label).trim()));
+    const urlByPage = new Map(numeric.map((l) => [Number(l.label), l.url]));
+
+    const current =
+        pagination.current_page ??
+        Number(numeric.find((l) => l.active)?.label) ??
+        1;
+    const last =
+        pagination.last_page ??
+        (numeric.length ? Number(numeric[numeric.length - 1].label) : 1);
+
+    const prevUrl = pagination.prev_page_url ?? links[0]?.url ?? null;
+    const nextUrl = pagination.next_page_url ?? links[links.length - 1]?.url ?? null;
+
+    const NavArrow = ({ url, label, children }) =>
+        url ? (
+            <Link
+                href={url}
+                preserveState={preserveState}
+                preserveScroll={preserveScroll}
+                aria-label={label}
+                className={`${cellBase} border border-line bg-surface text-muted hover:bg-surface-2 hover:text-body`}
+            >
+                {children}
+            </Link>
+        ) : (
+            <span
+                aria-disabled="true"
+                aria-label={label}
+                className={`${cellBase} border border-line bg-surface text-subtle opacity-60`}
+            >
+                {children}
+            </span>
+        );
 
     return (
-        <div className={`flex flex-col sm:flex-row justify-between items-center gap-4 ${className}`}>
-            {/* Results Info */}
-            <div className={`text-sm font-medium ${labelCls}`}>
-                Showing <span className={`font-semibold ${numCls}`}>{from}</span> to{' '}
-                <span className={`font-semibold ${numCls}`}>{to}</span> of{' '}
-                <span className={`font-semibold ${numCls}`}>{total}</span> results
+        <div
+            className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${className}`}
+        >
+            {/* Results info */}
+            <div className="text-sm font-medium text-muted">
+                Showing <span className="font-semibold text-body">{from ?? 0}</span> to{' '}
+                <span className="font-semibold text-body">{to ?? 0}</span> of{' '}
+                <span className="font-semibold text-body">{total ?? 0}</span> results
             </div>
 
-            {/* Pagination Links */}
-            <div className="flex items-center space-x-1">
-                {links?.map((link, index) => {
-                    if (!link.url && !link.active) {
+            {/* Compact mobile pager (< sm): always reachable, ≥40px targets. */}
+            <div className="flex items-center justify-between gap-3 sm:hidden">
+                <NavArrow url={prevUrl} label="Previous page">
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                    <span className="ml-1">Prev</span>
+                </NavArrow>
+                <span className="text-sm font-medium text-muted">
+                    Page <span className="font-semibold text-body">{current}</span> of{' '}
+                    <span className="font-semibold text-body">{last}</span>
+                </span>
+                <NavArrow url={nextUrl} label="Next page">
+                    <span className="mr-1">Next</span>
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </NavArrow>
+            </div>
+
+            {/* Numbered pager (sm+): windowed + wraps, never overflows. */}
+            <div className="hidden flex-wrap items-center justify-end gap-1 sm:flex">
+                <NavArrow url={prevUrl} label="Previous page">
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                </NavArrow>
+
+                {buildWindow(current, last, 2).map((p, i) => {
+                    if (p === '…') {
                         return (
                             <span
-                                key={index}
-                                className={`px-3 py-2 cursor-not-allowed ${disabledCls}`}
-                                dangerouslySetInnerHTML={{ __html: link.label }}
-                            />
+                                key={`gap-${i}`}
+                                className="inline-flex h-10 min-w-10 items-center justify-center px-2 text-sm text-subtle"
+                            >
+                                …
+                            </span>
                         );
                     }
-
-                    if (link.active) {
+                    if (p === current) {
                         return (
                             <span
-                                key={index}
-                                className={`px-4 py-2 rounded-lg font-semibold shadow-sm ${activeCls}`}
-                                dangerouslySetInnerHTML={{ __html: link.label }}
-                            />
+                                key={p}
+                                aria-current="page"
+                                className={`${cellBase} bg-accent font-semibold text-white shadow-sm`}
+                            >
+                                {p}
+                            </span>
                         );
                     }
-
                     return (
                         <Link
-                            key={index}
-                            href={link.url}
+                            key={p}
+                            href={urlByPage.get(p) ?? '#'}
                             preserveState={preserveState}
                             preserveScroll={preserveScroll}
-                            className={`px-4 py-2 rounded-lg border font-medium transition focus:outline-none focus:ring-2 ${linkCls}`}
-                            dangerouslySetInnerHTML={{ __html: link.label }}
-                        />
+                            aria-label={`Go to page ${p}`}
+                            className={`${cellBase} border border-line bg-surface text-muted hover:bg-surface-2 hover:text-body`}
+                        >
+                            {p}
+                        </Link>
                     );
                 })}
+
+                <NavArrow url={nextUrl} label="Next page">
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </NavArrow>
             </div>
         </div>
     );
-};
-
-// Infinite Scroll Hook
-export const useInfiniteScroll = (callback, hasMore) => {
-    React.useEffect(() => {
-        const handleScroll = () => {
-            if (window.innerHeight + document.documentElement.scrollTop 
-                !== document.documentElement.offsetHeight || !hasMore) {
-                return;
-            }
-            callback();
-        };
-
-        window.addEventListener('scroll', handleScroll);
-        return () => window.removeEventListener('scroll', handleScroll);
-    }, [callback, hasMore]);
-};
-
-// Virtual Scroll Component for large datasets
-export const VirtualScrollPagination = ({ 
-    items = [], 
-    itemHeight = 60, 
-    containerHeight = 400,
-    renderItem,
-    className = "" 
-}) => {
-    const [scrollTop, setScrollTop] = useState(0);
-    const [containerRef, setContainerRef] = useState(null);
-    
-    const visibleItems = React.useMemo(() => {
-        if (!items.length) return [];
-        
-        const startIndex = Math.floor(scrollTop / itemHeight);
-        const endIndex = Math.min(
-            startIndex + Math.ceil(containerHeight / itemHeight) + 1,
-            items.length
-        );
-        
-        return items.slice(startIndex, endIndex).map((item, index) => ({
-            ...item,
-            index: startIndex + index
-        }));
-    }, [items, scrollTop, itemHeight, containerHeight]);
-    
-    const totalHeight = items.length * itemHeight;
-    const offsetY = Math.floor(scrollTop / itemHeight) * itemHeight;
-    
-    return (
-        <div className={className}>
-            <div
-                ref={setContainerRef}
-                style={{ height: containerHeight, overflow: 'auto' }}
-                onScroll={(e) => setScrollTop(e.target.scrollTop)}
-                className="bg-white/5 backdrop-blur-xl rounded-xl border border-white/10"
-            >
-                <div style={{ height: totalHeight, position: 'relative' }}>
-                    <div style={{ transform: `translateY(${offsetY}px)` }}>
-                        {visibleItems.map((item) => (
-                            <div
-                                key={item.id || item.index}
-                                style={{ height: itemHeight }}
-                                className="flex items-center"
-                            >
-                                {renderItem(item, item.index)}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-            
-            <div className="mt-4 text-center text-white/60 text-sm">
-                Showing {visibleItems.length} of {items.length} items
-            </div>
-        </div>
-    );
-};
-
-// Cursor-based Pagination Component
-export const CursorPagination = ({ 
-    hasNextPage = false, 
-    hasPreviousPage = false,
-    nextCursor = null,
-    previousCursor = null,
-    onNext,
-    onPrevious,
-    loading = false,
-    className = "" 
-}) => {
-    return (
-        <div className={`flex justify-between items-center ${className}`}>
-            <button
-                onClick={onPrevious}
-                disabled={!hasPreviousPage || loading}
-                className="flex items-center px-6 py-3 bg-white/10 hover:bg-white/20 disabled:bg-white/5 text-white disabled:text-white/40 rounded-xl font-medium transition-all duration-300 disabled:cursor-not-allowed backdrop-blur-xl border border-white/20 disabled:border-white/10"
-            >
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Previous
-            </button>
-            
-            <div className="text-white/60 text-sm">
-                {loading && (
-                    <div className="flex items-center">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Loading...
-                    </div>
-                )}
-            </div>
-            
-            <button
-                onClick={onNext}
-                disabled={!hasNextPage || loading}
-                className="flex items-center px-6 py-3 bg-white/10 hover:bg-white/20 disabled:bg-white/5 text-white disabled:text-white/40 rounded-xl font-medium transition-all duration-300 disabled:cursor-not-allowed backdrop-blur-xl border border-white/20 disabled:border-white/10"
-            >
-                Next
-                <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-            </button>
-        </div>
-    );
-};
-
-// Main Pagination Component that can switch between types
-export default function Pagination({ 
-    type = 'traditional', 
-    data = {},
-    onLoadMore,
-    loading = false,
-    className = "",
-    ...props 
-}) {
-    switch (type) {
-        case 'loadMore':
-            return (
-                <LoadMorePagination 
-                    items={data.items || []}
-                    hasMore={data.hasMore || false}
-                    loading={loading}
-                    onLoadMore={onLoadMore}
-                    className={className}
-                    {...props}
-                />
-            );
-            
-        case 'virtual':
-            return (
-                <VirtualScrollPagination 
-                    items={data.items || []}
-                    renderItem={data.renderItem}
-                    className={className}
-                    {...props}
-                />
-            );
-            
-        case 'cursor':
-            return (
-                <CursorPagination 
-                    hasNextPage={data.hasNextPage || false}
-                    hasPreviousPage={data.hasPreviousPage || false}
-                    nextCursor={data.nextCursor}
-                    previousCursor={data.previousCursor}
-                    onNext={data.onNext}
-                    onPrevious={data.onPrevious}
-                    loading={loading}
-                    className={className}
-                    {...props}
-                />
-            );
-            
-        case 'traditional':
-        default:
-            return (
-                <TraditionalPagination 
-                    pagination={data}
-                    className={className}
-                    {...props}
-                />
-            );
-    }
 }
+
+export default TraditionalPagination;

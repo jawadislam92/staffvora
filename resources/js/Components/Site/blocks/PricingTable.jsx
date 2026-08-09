@@ -132,19 +132,19 @@ export default function PricingTable({ data, brand, plans = [], addons = [] }) {
 
                 {/* toggles */}
                 <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-                    <div className="inline-flex rounded-full border border-[var(--line)] bg-[var(--surface)] p-1 text-sm">
+                    <div role="group" aria-label="Billing period" className="inline-flex rounded-full border border-[var(--line)] bg-[var(--surface)] p-1 text-sm">
                         {[['Monthly', false], ['Annual · save 17%', true]].map(([label, val]) => (
-                            <button key={label} type="button" onClick={() => setAnnual(val)}
-                                className={`rounded-full px-4 py-1.5 font-semibold transition ${annual === val ? 'text-white' : 'text-[var(--muted)]'}`}
+                            <button key={label} type="button" onClick={() => setAnnual(val)} aria-pressed={annual === val}
+                                className={`rounded-full px-4 py-2.5 font-semibold transition ${annual === val ? 'text-white' : 'text-[var(--muted)]'}`}
                                 style={annual === val ? { background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' } : undefined}>
                                 {label}
                             </button>
                         ))}
                     </div>
-                    <div className="inline-flex rounded-full border border-[var(--line)] bg-[var(--surface)] p-1 text-sm">
+                    <div role="group" aria-label="Currency" className="inline-flex rounded-full border border-[var(--line)] bg-[var(--surface)] p-1 text-sm">
                         {['USD', 'PKR'].map((c) => (
-                            <button key={c} type="button" onClick={() => setCur(c)}
-                                className={`rounded-full px-4 py-1.5 font-semibold transition ${cur === c ? 'text-white' : 'text-[var(--muted)]'}`}
+                            <button key={c} type="button" onClick={() => setCur(c)} aria-pressed={cur === c}
+                                className={`rounded-full px-4 py-2.5 font-semibold transition ${cur === c ? 'text-white' : 'text-[var(--muted)]'}`}
                                 style={cur === c ? { background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' } : undefined}>
                                 {c}
                             </button>

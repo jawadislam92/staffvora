@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import PlatformLayout from '@/Layouts/PlatformLayout';
+import PlatformLayout, { PlatformPageHeader } from '@/Layouts/PlatformLayout';
+import { Badge } from '@/Components/ui';
 
 const input = 'w-full rounded-lg border-line bg-surface-2 text-body text-sm focus:border-accent focus:ring-accent';
 const lbl = 'block text-xs font-semibold text-muted mb-1';
@@ -14,9 +15,9 @@ function LinkListEditor({ value, onChange }) {
         <div className="space-y-2">
             {arr.map((l, i) => (
                 <div key={i} className="flex gap-2">
-                    <input className={input} placeholder="Label" value={l.label || ''} onChange={(e) => { const n = [...arr]; n[i] = { ...l, label: e.target.value }; onChange(n); }} />
-                    <input className={input} placeholder="/pricing or https://…" value={l.url || ''} onChange={(e) => { const n = [...arr]; n[i] = { ...l, url: e.target.value }; onChange(n); }} />
-                    <button type="button" onClick={() => onChange(arr.filter((_, j) => j !== i))} className="px-2 text-rose-400">✕</button>
+                    <input aria-label="Link label" className={input} placeholder="Label" value={l.label || ''} onChange={(e) => { const n = [...arr]; n[i] = { ...l, label: e.target.value }; onChange(n); }} />
+                    <input aria-label="Link URL" className={input} placeholder="/pricing or https://…" value={l.url || ''} onChange={(e) => { const n = [...arr]; n[i] = { ...l, url: e.target.value }; onChange(n); }} />
+                    <button type="button" aria-label="Remove link" onClick={() => onChange(arr.filter((_, j) => j !== i))} className="px-2 text-danger hover:underline">✕</button>
                 </div>
             ))}
             <button type="button" onClick={() => onChange([...arr, { label: '', url: '' }])} className="text-xs font-semibold text-accent">+ Add link</button>
@@ -27,9 +28,9 @@ function LinkListEditor({ value, onChange }) {
 function ColorRow({ label, value, onChange }) {
     return (
         <div className="mb-2 flex items-center gap-2">
-            <input type="color" value={value || '#888888'} onChange={(e) => onChange(e.target.value)} className="h-8 w-9 shrink-0 rounded border border-line bg-surface-2" />
-            <input className={input} placeholder={label} value={value || ''} onChange={(e) => onChange(e.target.value)} />
-            {value && <button type="button" onClick={() => onChange('')} className="shrink-0 px-1 text-xs text-subtle hover:text-rose-400">✕</button>}
+            <input type="color" aria-label={`${label} colour picker`} value={value || '#888888'} onChange={(e) => onChange(e.target.value)} className="h-8 w-9 shrink-0 rounded border border-line bg-surface-2" />
+            <input aria-label={label} className={input} placeholder={label} value={value || ''} onChange={(e) => onChange(e.target.value)} />
+            {value && <button type="button" aria-label={`Clear ${label}`} onClick={() => onChange('')} className="shrink-0 px-1 text-xs text-muted hover:text-danger">✕</button>}
         </div>
     );
 }
@@ -63,10 +64,12 @@ export default function Index({ pages, theme, palettes = [], fonts = [], editabl
     const deletePage = (p) => { if (confirm(`Delete the “${p.title}” page?`)) router.delete(route('platform.site.pages.destroy', p.id)); };
 
     return (
-        <PlatformLayout title="Website builder" header={<h2 className="text-xl font-semibold text-white">Website</h2>}>
+        <PlatformLayout
+            title="Website builder"
+            header={<PlatformPageHeader title="Website" description="Edit your public marketing site — pages, text, images, colours, links and contact details — without touching code. Changes go live when you Publish." />}
+        >
             <Head title="Website builder" />
-            <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-6">
-                <p className="text-sm text-muted">Edit your public marketing site — pages, text, images, colours, links and contact details — without touching code. Changes go live when you <span className="font-semibold text-body">Publish</span>.</p>
+            <div className="w-full max-w-5xl space-y-6">
 
                 {/* Pages */}
                 <div className={card}>
@@ -76,12 +79,12 @@ export default function Index({ pages, theme, palettes = [], fonts = [], editabl
                             <div key={p.id} className="flex items-center justify-between py-2.5">
                                 <div className="min-w-0">
                                     <span className="font-medium text-body">{p.title}</span>
-                                    <span className="ml-2 text-xs text-subtle">/{p.slug === 'home' ? '' : p.slug}</span>
-                                    <span className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${p.status === 'published' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'}`}>{p.status}</span>
+                                    <span className="ml-2 text-xs text-muted">/{p.slug === 'home' ? '' : p.slug}</span>
+                                    <Badge tone={p.status === 'published' ? 'success' : 'warning'} className="ml-2 uppercase">{p.status}</Badge>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Link href={route('platform.site.edit', p.id)} className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90">Edit</Link>
-                                    {p.slug !== 'home' && <button type="button" onClick={() => deletePage(p)} className="text-xs text-rose-400 hover:text-rose-300">Delete</button>}
+                                    {p.slug !== 'home' && <button type="button" onClick={() => deletePage(p)} className="text-xs font-medium text-danger hover:underline">Delete</button>}
                                 </div>
                             </div>
                         ))}
@@ -91,7 +94,7 @@ export default function Index({ pages, theme, palettes = [], fonts = [], editabl
                         <div className="flex-1"><span className={lbl}>URL slug</span><input className={input} value={newPage.data.slug} onChange={(e) => newPage.setData('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} placeholder="pricing" /></div>
                         <button type="submit" disabled={newPage.processing} className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-body hover:bg-surface-2">Create</button>
                     </form>
-                    {newPage.errors.slug && <p className="mt-1 text-xs text-rose-400">{newPage.errors.slug}</p>}
+                    {newPage.errors.slug && <p className="mt-1 text-xs text-danger">{newPage.errors.slug}</p>}
                 </div>
 
                 {/* Brand */}
@@ -166,8 +169,8 @@ export default function Index({ pages, theme, palettes = [], fonts = [], editabl
                         {(t.footer_columns || []).map((col, i) => (
                             <div key={i} className="rounded-lg border border-line bg-surface-2 p-3">
                                 <div className="mb-2 flex gap-2">
-                                    <input className={input} placeholder="Column title" value={col.title || ''} onChange={(e) => { const n = [...t.footer_columns]; n[i] = { ...col, title: e.target.value }; set('footer_columns', n); }} />
-                                    <button type="button" onClick={() => set('footer_columns', t.footer_columns.filter((_, j) => j !== i))} className="px-2 text-rose-400">✕</button>
+                                    <input aria-label="Footer column title" className={input} placeholder="Column title" value={col.title || ''} onChange={(e) => { const n = [...t.footer_columns]; n[i] = { ...col, title: e.target.value }; set('footer_columns', n); }} />
+                                    <button type="button" aria-label="Remove footer column" onClick={() => set('footer_columns', t.footer_columns.filter((_, j) => j !== i))} className="px-2 text-danger hover:underline">✕</button>
                                 </div>
                                 <LinkListEditor value={col.links} onChange={(links) => { const n = [...t.footer_columns]; n[i] = { ...col, links }; set('footer_columns', n); }} />
                             </div>

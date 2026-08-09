@@ -1,39 +1,54 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import ApplicationLogo from '@/Components/ApplicationLogo';
 
-// Operator portal sign-in. Fixed dark (zinc isn't remapped) — a deliberately
-// plain, internal-tool look, distinct from the customer glass login.
+const input = 'w-full rounded-lg border-line bg-surface-2 text-sm text-body focus:border-accent focus:ring-accent';
+const label = 'mb-1 block text-xs font-semibold text-muted';
+
+// Operator portal sign-in — tokenized so it matches the console (light default,
+// dark + black both work) and shares its electric-blue accent.
 export default function Login() {
     const { data, setData, post, processing, errors } = useForm({ email: '', password: '', remember: false });
+    const flash = usePage().props?.flash || {};
     const submit = (e) => { e.preventDefault(); post('/login'); };
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
+        <div className="flex min-h-screen items-center justify-center bg-app px-4">
             <Head title="Operator sign in" />
             <div className="w-full max-w-sm">
                 <div className="mb-6 text-center">
-                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-orange-500 text-xl font-black text-white">T</div>
-                    <h1 className="text-lg font-bold text-white">Staffvora Operations</h1>
-                    <p className="text-sm text-zinc-500">Operator portal — staff only</p>
+                    <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10 ring-1 ring-accent/20">
+                        <ApplicationLogo size="32" />
+                    </span>
+                    <h1 className="text-lg font-bold text-body">Staffvora Operations</h1>
+                    <p className="text-sm text-muted">Operator portal — staff only</p>
                 </div>
-                <form onSubmit={submit} className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-6">
+
+                {flash.success && (
+                    <div role="status" className="mb-4 rounded-lg border border-line bg-success-soft px-3 py-2 text-sm text-success">{flash.success}</div>
+                )}
+
+                <form onSubmit={submit} className="space-y-4 rounded-2xl border border-line bg-surface p-6">
                     <div>
-                        <label className="mb-1 block text-xs font-semibold text-zinc-400">Email</label>
-                        <input type="email" value={data.email} onChange={(e) => setData('email', e.target.value)} autoFocus
-                            className="w-full rounded-lg border-zinc-700 bg-zinc-800 text-sm text-white focus:border-orange-500 focus:ring-orange-500" />
-                        {errors.email && <p className="mt-1 text-xs text-rose-400">{errors.email}</p>}
+                        <label htmlFor="op-email" className={label}>Email</label>
+                        <input id="op-email" name="email" type="email" autoComplete="email" value={data.email} onChange={(e) => setData('email', e.target.value)} autoFocus
+                            className={input} aria-invalid={errors.email ? 'true' : undefined} aria-describedby={errors.email ? 'op-email-error' : undefined} />
+                        {errors.email && <p id="op-email-error" role="alert" className="mt-1 text-xs text-danger">{errors.email}</p>}
                     </div>
                     <div>
-                        <label className="mb-1 block text-xs font-semibold text-zinc-400">Password</label>
-                        <input type="password" value={data.password} onChange={(e) => setData('password', e.target.value)}
-                            className="w-full rounded-lg border-zinc-700 bg-zinc-800 text-sm text-white focus:border-orange-500 focus:ring-orange-500" />
+                        <div className="mb-1 flex items-center justify-between">
+                            <label htmlFor="op-password" className={label + ' mb-0'}>Password</label>
+                            <Link href={route('platform.password.request')} className="text-xs font-medium text-accent hover:underline">Forgot password?</Link>
+                        </div>
+                        <input id="op-password" name="password" type="password" autoComplete="current-password" value={data.password} onChange={(e) => setData('password', e.target.value)}
+                            className={input} />
                     </div>
-                    <label className="flex items-center gap-2 text-sm text-zinc-400">
+                    <label className="flex items-center gap-2 text-sm text-muted">
                         <input type="checkbox" checked={data.remember} onChange={(e) => setData('remember', e.target.checked)}
-                            className="rounded border-zinc-700 bg-zinc-800 text-orange-500 focus:ring-orange-500" />
+                            className="rounded border-line bg-surface-2 text-accent focus:ring-accent" />
                         Remember me
                     </label>
                     <button type="submit" disabled={processing}
-                        className="w-full rounded-lg bg-orange-500 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-50">
+                        className="w-full rounded-lg bg-accent py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50">
                         {processing ? 'Signing in…' : 'Sign in'}
                     </button>
                 </form>

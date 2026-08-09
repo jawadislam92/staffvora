@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import axios from 'axios';
-import PlatformLayout from '@/Layouts/PlatformLayout';
+import PlatformLayout, { PlatformPageHeader } from '@/Layouts/PlatformLayout';
 
 const input = 'w-full rounded-lg border-line bg-surface-2 text-body text-sm focus:border-accent focus:ring-accent';
 const label = 'block text-xs font-semibold text-muted mb-1';
@@ -47,9 +47,12 @@ export default function BlogEditor({ post }) {
     const remove = () => { if (confirm('Delete this post?')) router.delete(route('platform.blog.destroy', post.id)); };
 
     return (
-        <PlatformLayout title={isNew ? 'New post' : 'Edit post'} header={<h2 className="text-xl font-semibold text-white">{isNew ? 'New post' : 'Edit post'}</h2>}>
+        <PlatformLayout
+            title={isNew ? 'New post' : 'Edit post'}
+            header={<PlatformPageHeader title={isNew ? 'New post' : 'Edit post'} description="Draft, publish and manage a marketing blog article." />}
+        >
             <Head title={isNew ? 'New post' : 'Edit post'} />
-            <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
+            <div className="w-full">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                     <Link href={route('platform.blog.index')} className="text-sm text-muted hover:text-body">← All posts</Link>
                     <div className="flex items-center gap-2">
@@ -61,14 +64,14 @@ export default function BlogEditor({ post }) {
                 </div>
 
                 <div className="space-y-4 rounded-xl border border-line bg-surface p-5">
-                    <div><span className={label}>Title</span><input className={input} value={form.data.title} onChange={(e) => setTitle(e.target.value)} /></div>
-                    {form.errors.title && <p className="-mt-2 text-xs text-rose-400">{form.errors.title}</p>}
+                    <div><label className={label} htmlFor="post-title">Title</label><input id="post-title" className={input} value={form.data.title} onChange={(e) => setTitle(e.target.value)} /></div>
+                    {form.errors.title && <p className="-mt-2 text-xs text-danger">{form.errors.title}</p>}
                     <div className="grid gap-4 sm:grid-cols-2">
-                        <div><span className={label}>URL slug</span><input className={input} value={form.data.slug} onChange={(e) => { setTouchedSlug(true); form.setData('slug', slugify(e.target.value)); }} /></div>
-                        <div><span className={label}>Category</span><input className={input} value={form.data.category} onChange={(e) => form.setData('category', e.target.value)} placeholder="Guides" /></div>
+                        <div><label className={label} htmlFor="post-slug">URL slug</label><input id="post-slug" className={input} value={form.data.slug} onChange={(e) => { setTouchedSlug(true); form.setData('slug', slugify(e.target.value)); }} /></div>
+                        <div><label className={label} htmlFor="post-category">Category</label><input id="post-category" className={input} value={form.data.category} onChange={(e) => form.setData('category', e.target.value)} placeholder="Guides" /></div>
                     </div>
-                    {form.errors.slug && <p className="-mt-2 text-xs text-rose-400">{form.errors.slug}</p>}
-                    <div><span className={label}>Author</span><input className={input} value={form.data.author_name} onChange={(e) => form.setData('author_name', e.target.value)} /></div>
+                    {form.errors.slug && <p className="-mt-2 text-xs text-danger">{form.errors.slug}</p>}
+                    <div><label className={label} htmlFor="post-author">Author</label><input id="post-author" className={input} value={form.data.author_name} onChange={(e) => form.setData('author_name', e.target.value)} /></div>
                     <div>
                         <span className={label}>Cover image</span>
                         <div className="flex items-center gap-3">
@@ -77,18 +80,18 @@ export default function BlogEditor({ post }) {
                                 {busy ? 'Uploading…' : form.data.cover_path ? 'Replace' : 'Upload'}
                                 <input type="file" accept="image/*" className="hidden" onChange={(e) => uploadCover(e.target.files?.[0])} />
                             </label>
-                            {form.data.cover_path && <button type="button" onClick={() => form.setData('cover_path', '')} className="text-xs text-rose-400">Remove</button>}
+                            {form.data.cover_path && <button type="button" onClick={() => form.setData('cover_path', '')} className="text-xs font-medium text-danger hover:underline">Remove</button>}
                         </div>
                     </div>
-                    <div><span className={label}>Excerpt (shown on cards + search results)</span><textarea rows={2} className={input} value={form.data.excerpt} onChange={(e) => form.setData('excerpt', e.target.value)} /></div>
-                    <div><span className={label}>Body — HTML (headings, paragraphs, links, lists, images)</span><textarea rows={16} className={`${input} font-mono text-xs`} value={form.data.body} onChange={(e) => form.setData('body', e.target.value)} /></div>
+                    <div><label className={label} htmlFor="post-excerpt">Excerpt (shown on cards + search results)</label><textarea id="post-excerpt" rows={2} className={input} value={form.data.excerpt} onChange={(e) => form.setData('excerpt', e.target.value)} /></div>
+                    <div><label className={label} htmlFor="post-body">Body — HTML (headings, paragraphs, links, lists, images)</label><textarea id="post-body" rows={16} className={`${input} font-mono text-xs`} value={form.data.body} onChange={(e) => form.setData('body', e.target.value)} /></div>
                     <div className="grid gap-4 border-t border-line pt-4 sm:grid-cols-2">
-                        <div><span className={label}>SEO title</span><input className={input} value={form.data.meta_title} onChange={(e) => form.setData('meta_title', e.target.value)} /></div>
-                        <div><span className={label}>SEO description</span><input className={input} value={form.data.meta_description} onChange={(e) => form.setData('meta_description', e.target.value)} /></div>
+                        <div><label className={label} htmlFor="post-meta-title">SEO title</label><input id="post-meta-title" className={input} value={form.data.meta_title} onChange={(e) => form.setData('meta_title', e.target.value)} /></div>
+                        <div><label className={label} htmlFor="post-meta-description">SEO description</label><input id="post-meta-description" className={input} value={form.data.meta_description} onChange={(e) => form.setData('meta_description', e.target.value)} /></div>
                     </div>
                 </div>
 
-                {!isNew && <button type="button" onClick={remove} className="mt-4 text-sm text-rose-400 hover:text-rose-300">Delete post</button>}
+                {!isNew && <button type="button" onClick={remove} className="mt-4 text-sm font-medium text-danger hover:underline">Delete post</button>}
             </div>
         </PlatformLayout>
     );

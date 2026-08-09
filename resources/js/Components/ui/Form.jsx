@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { Children, cloneElement, isValidElement, useId } from "react";
 
 const cx = (...a) => a.filter(Boolean).join(" ");
 
@@ -27,6 +27,35 @@ export function Field({
   className,
   ...rest
 }) {
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const hintId = `${reactId}-hint`;
+  const hasError = error != null && error !== false;
+  const showHint = !hasError && hint != null;
+
+  // Programmatically tie the control to its error/hint text so screen readers
+  // announce the failure and can jump to it. The control is passed as children,
+  // so we clone the single control element to inject the ARIA wiring; when a
+  // caller passes multiple children (e.g. a select plus a conditional input)
+  // we skip cloning rather than guess which one is the field.
+  const describedBy =
+    [hasError ? errorId : null, showHint ? hintId : null]
+      .filter(Boolean)
+      .join(" ") || undefined;
+
+  let control = children;
+  const onlyChild =
+    Children.count(children) === 1 ? Children.only(children) : null;
+  if (isValidElement(onlyChild)) {
+    const existingDescribedBy = onlyChild.props["aria-describedby"];
+    control = cloneElement(onlyChild, {
+      "aria-invalid": hasError ? true : onlyChild.props["aria-invalid"],
+      "aria-describedby":
+        [existingDescribedBy, describedBy].filter(Boolean).join(" ") ||
+        undefined,
+    });
+  }
+
   return (
     <div className={cx("w-full", className)} {...rest}>
       {label != null && (
@@ -35,14 +64,24 @@ export function Field({
           className="block text-sm font-medium text-body mb-1.5"
         >
           {label}
-          {required && <span className="text-danger ml-0.5">*</span>}
+          {required && (
+            <span className="text-danger ml-0.5" aria-hidden="true">
+              *
+            </span>
+          )}
         </label>
       )}
-      {children}
-      {error != null ? (
-        <p className="text-xs text-danger mt-1">{error}</p>
+      {control}
+      {hasError ? (
+        <p id={errorId} role="alert" className="text-xs text-danger mt-1">
+          {error}
+        </p>
       ) : (
-        hint != null && <p className="text-xs text-subtle mt-1">{hint}</p>
+        showHint && (
+          <p id={hintId} className="text-xs text-subtle mt-1">
+            {hint}
+          </p>
+        )
       )}
     </div>
   );
@@ -139,6 +178,25 @@ export function Toggle({
 }) {
   const autoId = useId();
   const fieldId = id || autoId;
+  const labelId = `${fieldId}-label`;
+
+  // A <button> is NOT a labelable element, so the wrapping <label htmlFor> does
+  // nothing for its accessible name — the sibling text span was invisible to
+  // screen readers. Point the switch at that span with aria-labelledby when a
+  // label is given; otherwise fall back to whatever aria-label the caller
+  // spread in via {...rest}. In dev, warn when a switch would ship nameless.
+  const hasSpreadAriaLabel = rest["aria-label"] != null;
+  if (
+    import.meta.env?.DEV &&
+    label == null &&
+    !hasSpreadAriaLabel
+  ) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "Toggle: no accessible name — pass a `label` or an `aria-label`."
+    );
+  }
+
   return (
     <label
       htmlFor={fieldId}
@@ -153,6 +211,7 @@ export function Toggle({
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-labelledby={label != null ? labelId : undefined}
         disabled={disabled}
         onClick={() => onChange && onChange(!checked)}
         className={cx(
@@ -168,7 +227,7 @@ export function Toggle({
           )}
         />
       </button>
-      {label != null && <span>{label}</span>}
+      {label != null && <span id={labelId}>{label}</span>}
     </label>
   );
 }

@@ -23,9 +23,10 @@ return [
 
     'header' => [
         ['label' => 'Features', 'url' => '/features', 'page' => 'features'],
+        ['label' => 'How it works', 'url' => '/how-it-works', 'page' => 'how-it-works'],
         ['label' => 'Solutions', 'url' => '/solutions', 'page' => 'solutions', 'children' => [
             ['label' => 'Agencies', 'url' => '/solutions/agencies', 'page' => 'solutions/agencies'],
-            ['label' => 'BPOs & Call Centers', 'url' => '/solutions/bpos', 'page' => 'solutions/bpos'],
+            ['label' => 'BPOs & Call Centres', 'url' => '/solutions/bpos', 'page' => 'solutions/bpos'],
             ['label' => 'Software Houses', 'url' => '/solutions/software-houses', 'page' => 'solutions/software-houses'],
             ['label' => 'Remote Teams', 'url' => '/solutions/remote-teams', 'page' => 'solutions/remote-teams'],
             ['label' => 'Freelancers', 'url' => '/solutions/freelancers', 'page' => 'solutions/freelancers'],
@@ -51,7 +52,7 @@ return [
         ]],
         ['title' => 'Solutions', 'links' => [
             ['label' => 'Agencies', 'url' => '/solutions/agencies', 'page' => 'solutions/agencies'],
-            ['label' => 'BPOs & Call Centers', 'url' => '/solutions/bpos', 'page' => 'solutions/bpos'],
+            ['label' => 'BPOs & Call Centres', 'url' => '/solutions/bpos', 'page' => 'solutions/bpos'],
             ['label' => 'Software Houses', 'url' => '/solutions/software-houses', 'page' => 'solutions/software-houses'],
             ['label' => 'Remote Teams', 'url' => '/solutions/remote-teams', 'page' => 'solutions/remote-teams'],
             ['label' => 'Freelancers', 'url' => '/solutions/freelancers', 'page' => 'solutions/freelancers'],

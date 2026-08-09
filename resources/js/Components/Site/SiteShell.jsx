@@ -3,7 +3,10 @@ import { useCallback, useEffect, useState } from 'react';
 import SiteHeader from './SiteHeader';
 import SiteFooter from './SiteFooter';
 
-const STORAGE_KEY = 'tracksuite-site-theme';
+const STORAGE_KEY = 'staffvora-site-theme';
+// Pre-rename key ("Tracksuite" was the old product name). Migrated once on read
+// so a returning visitor keeps the light/dark choice they already made.
+const LEGACY_STORAGE_KEY = 'tracksuite-site-theme';
 
 // Light fallbacks — keep the page sane if config/brand.php omits a token.
 const FALLBACK = {
@@ -88,7 +91,16 @@ function jsonLdText(graph) {
 function initialMode() {
     if (typeof window === 'undefined') return 'light';
     try {
-        const saved = window.localStorage.getItem(STORAGE_KEY);
+        let saved = window.localStorage.getItem(STORAGE_KEY);
+        if (saved !== 'light' && saved !== 'dark') {
+            // One-time migration from the pre-rename key.
+            const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+            if (legacy === 'light' || legacy === 'dark') {
+                saved = legacy;
+                window.localStorage.setItem(STORAGE_KEY, legacy);
+                window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+            }
+        }
         if (saved === 'light' || saved === 'dark') return saved;
         if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
     } catch (e) { /* no storage */ }
@@ -169,7 +181,7 @@ export default function SiteShell({ brand, theme, nav, jsonLd, isAuthed, meta = 
             className="site-root min-h-screen"
             data-site-theme={mode}
             data-ready={ready ? '1' : undefined}
-            style={{ ...vars, background: 'var(--canvas)', color: 'var(--text)' }}
+            style={{ ...vars, background: 'var(--canvas)', color: 'var(--text)', colorScheme: mode }}
         >
             <Head>
                 <title>{meta.title || fallbackTitle}</title>
@@ -185,7 +197,10 @@ export default function SiteShell({ brand, theme, nav, jsonLd, isAuthed, meta = 
                 {meta.image && <meta property="og:image" content={meta.image} />}
                 <meta property="og:site_name" content={fallbackTitle} />
                 <meta property="og:type" content={meta.type || 'website'} />
-                <meta name="twitter:card" content="summary_large_image" />
+                {/* Only claim a large-image card when there actually is an image —
+                    otherwise every shared link rendered a blank large card. */}
+                <meta name="twitter:card" content={meta.image ? 'summary_large_image' : 'summary'} />
+                <meta name="color-scheme" content={mode} />
             </Head>
 
             {Array.isArray(jsonLd) && jsonLd.length > 0 && (

@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, router, usePage } from "@inertiajs/react";
 import {
     Activity,
     BarChart3,
-    Bell,
     Briefcase,
     CalendarDays,
     ClipboardCheck,
@@ -17,7 +16,6 @@ import {
     MessageSquare,
     MonitorDown,
     Plus,
-    Search,
     Settings as SettingsIcon,
     ShieldCheck,
     UserCircle,
@@ -85,9 +83,10 @@ function MenuItem({ icon: Icon, children, ...props }) {
 
 /**
  * AppShell — top-nav application layout for Staffvora.
- * Sticky translucent top bar with the brand, primary nav (overflow → More),
- * a search affordance, the ClockControl, notifications, theme switch and an
- * avatar menu. Below ~1080px the primary nav collapses into a hamburger drawer.
+ * Sticky translucent top bar with the brand, primary nav (measured overflow →
+ * More), the ClockControl, theme switch and an avatar menu. Below the `lg`
+ * breakpoint the primary nav collapses into a hamburger drawer; at and above it
+ * the inline item count is measured so the header always fits its container.
  *
  * @param {object} props.user       Auth user.
  * @param {React.ReactNode} [props.header]  Optional page header node.
@@ -118,6 +117,13 @@ export default function AppShell({ user, header, subnav, children }) {
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [moreOpen, setMoreOpen] = useState(false);
     const moreRef = useRef(null);
+
+    // Refs used to measure how many primary-nav items actually fit, so the
+    // header can never exceed its container width (see the overflow effect).
+    const barRef = useRef(null);
+    const brandRef = useRef(null);
+    const actionsRef = useRef(null);
+    const measureRef = useRef(null);
 
     // Close the mobile drawer on any navigation.
     useEffect(() => router.on("navigate", () => setDrawerOpen(false)), []);
@@ -260,11 +266,73 @@ export default function AppShell({ user, header, subnav, children }) {
         [user?.is_super_admin, user?.permissions, usesProfiles, clientLabel, profileLabel]
     );
 
-    // On wide screens we show the first N inline and fold the rest into "More".
-    // The overflow point is fixed (not measured) — deterministic and SSR-safe.
-    const INLINE_MAX = 6;
-    const inlineItems = navItems.slice(0, INLINE_MAX);
-    const overflowItems = navItems.slice(INLINE_MAX);
+    // How many primary-nav items are shown inline (the rest fold into "More").
+    // This is MEASURED, not a fixed count: a fixed count overflowed the header
+    // on 1024–1366px laptops (brand + 6 links + actions needed ~1386px). We
+    // start optimistic (show all) and the layout effect below trims to fit
+    // before the first paint, so the header always satisfies
+    // scrollWidth <= innerWidth at every width.
+    const [inlineCount, setInlineCount] = useState(navItems.length);
+
+    useLayoutEffect(() => {
+        const bar = barRef.current;
+        const measure = measureRef.current;
+        if (!bar || !measure) return undefined;
+
+        const recompute = () => {
+            const itemEls = Array.from(measure.querySelectorAll("[data-nav-item]"));
+            if (itemEls.length === 0) return;
+            const moreEl = measure.querySelector("[data-nav-more]");
+            const itemW = itemEls.map((el) => el.getBoundingClientRect().width);
+            const moreW = moreEl ? moreEl.getBoundingClientRect().width : 0;
+            const gap = 2; // nav uses gap-0.5 (0.125rem)
+
+            const barStyles = getComputedStyle(bar);
+            const padX =
+                parseFloat(barStyles.paddingLeft) + parseFloat(barStyles.paddingRight);
+            const brandW = brandRef.current?.getBoundingClientRect().width || 0;
+            const actionsW = actionsRef.current?.getBoundingClientRect().width || 0;
+            // bar is a flex row (gap-2 = 8px) of: [hamburger(hidden lg)] brand,
+            // nav, flex-1 spacer, actions. Reserve brand + actions + the two
+            // outer gaps + the nav's own left margin (ml-2 = 8px) + a small
+            // safety margin so we never round up into an overflow.
+            const available =
+                bar.clientWidth - padX - brandW - actionsW - 8 * 2 - 8 - 6;
+
+            let count = 0;
+            let used = 0;
+            for (let i = 0; i < itemW.length; i += 1) {
+                const w = itemW[i] + (i > 0 ? gap : 0);
+                if (used + w <= available) {
+                    used += w;
+                    count += 1;
+                } else {
+                    break;
+                }
+            }
+            // If anything folds, the "More" trigger needs room too — trim until
+            // it fits alongside the visible items.
+            if (count < itemW.length) {
+                while (count > 0 && used + gap + moreW > available) {
+                    count -= 1;
+                    used -= itemW[count] + (count > 0 ? gap : 0);
+                }
+            }
+            setInlineCount(count);
+        };
+
+        recompute();
+        const ro = new ResizeObserver(recompute);
+        ro.observe(bar);
+        window.addEventListener("resize", recompute);
+        return () => {
+            ro.disconnect();
+            window.removeEventListener("resize", recompute);
+        };
+    }, [navItems]);
+
+    const inlineItems = navItems.slice(0, inlineCount);
+    const overflowItems = navItems.slice(inlineCount);
     // If an active item lives in the overflow, surface it inline instead.
     const activeInOverflow = overflowItems.some((i) => isActive(i.active));
 
@@ -288,7 +356,40 @@ export default function AppShell({ user, header, subnav, children }) {
 
             {/* Sticky top bar */}
             <header className="sticky top-0 z-40 border-b border-line bg-app/80 backdrop-blur supports-[backdrop-filter]:bg-app/70">
-                <div className="mx-auto flex h-16 max-w-[1600px] items-center gap-2 px-4 sm:px-6 lg:px-8">
+                <div
+                    ref={barRef}
+                    className="mx-auto flex h-16 max-w-[1600px] items-center gap-2 px-4 sm:px-6 lg:px-8"
+                >
+                    {/* Hidden measurement copy of the full nav — never shown, used
+                        to size the overflow fold. It sits inside a 0×0
+                        overflow-hidden box so its (wide) natural content never
+                        adds to the document's scroll width; the inner row uses
+                        w-max so it keeps content width despite the 0-width box. */}
+                    <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute left-0 top-0 h-0 w-0 overflow-hidden"
+                    >
+                        <div ref={measureRef} className="inline-flex w-max items-center gap-0.5">
+                            {navItems.map((item) => (
+                                <span
+                                    key={item.label}
+                                    data-nav-item
+                                    className="relative inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-[13px] font-medium"
+                                >
+                                    {item.label}
+                                    {item.locked && <LockBadge />}
+                                </span>
+                            ))}
+                            <span
+                                data-nav-more
+                                className="relative flex items-center gap-1 whitespace-nowrap rounded-lg px-3 py-2 text-[13px] font-medium"
+                            >
+                                More
+                                <ChevronDown className="h-3.5 w-3.5" />
+                            </span>
+                        </div>
+                    </div>
+
                     {/* Hamburger (below lg) */}
                     <button
                         type="button"
@@ -301,7 +402,9 @@ export default function AppShell({ user, header, subnav, children }) {
 
                     {/* Brand */}
                     <Link
+                        ref={brandRef}
                         href={route("dashboard")}
+                        aria-label={brandName}
                         className="flex shrink-0 items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     >
                         <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-2 ring-1 ring-line">
@@ -312,8 +415,10 @@ export default function AppShell({ user, header, subnav, children }) {
                         </span>
                     </Link>
 
-                    {/* Primary nav (lg+) */}
-                    <nav className="ml-2 hidden items-center gap-0.5 lg:flex">
+                    {/* Primary nav (lg+). `min-w-0` lets it shrink rather than
+                        push the header wider than the viewport before the
+                        measurement effect trims the inline count. */}
+                    <nav className="ml-2 hidden min-w-0 items-center gap-0.5 lg:flex">
                         {inlineItems.map((item) => (
                             <NavLink key={item.label} item={item} />
                         ))}
@@ -374,27 +479,7 @@ export default function AppShell({ user, header, subnav, children }) {
                     <div className="flex-1" />
 
                     {/* Right cluster */}
-                    <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-                        {/* Search affordance (visual only) */}
-                        <button
-                            type="button"
-                            className="hidden h-9 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm text-subtle transition hover:border-line hover:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:flex"
-                            aria-label="Search"
-                        >
-                            <Search className="h-4 w-4" />
-                            <span className="hidden text-[13px] lg:inline">Search…</span>
-                            <kbd className="ml-2 hidden rounded border border-line px-1.5 py-0.5 font-mono text-[11px] text-subtle lg:inline">
-                                ⌘K
-                            </kbd>
-                        </button>
-                        <button
-                            type="button"
-                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-surface text-muted transition hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:hidden"
-                            aria-label="Search"
-                        >
-                            <Search className="h-4 w-4" />
-                        </button>
-
+                    <div ref={actionsRef} className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                         {/* Add manual time — compact primary quick action.
                             Hidden on very narrow widths. */}
                         {user?.can_create_manual_work_hour && (
@@ -409,15 +494,6 @@ export default function AppShell({ user, header, subnav, children }) {
                         )}
 
                         <ClockControl user={user} />
-
-                        {/* Notifications (static) */}
-                        <button
-                            type="button"
-                            className="relative hidden h-9 w-9 items-center justify-center rounded-lg border border-line bg-surface text-muted transition hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:flex"
-                            aria-label="Notifications"
-                        >
-                            <Bell className="h-[18px] w-[18px]" />
-                        </button>
 
                         <div className="hidden sm:block">
                             <ThemeSwitcher />

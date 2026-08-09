@@ -131,8 +131,47 @@ class UpworkProfileController extends Controller
      */
     public function show(UpworkProfile $upworkProfile)
     {
+        // The relation matches WorkHour rows by tracker == profile name. Never
+        // hydrate the whole set (a busy profile can carry ~1M rows) — aggregate
+        // in the database and only pull a bounded recent slice for the list.
+        $base = $upworkProfile->workHours();
+
+        $totals = $base->clone()
+            ->selectRaw('COUNT(*) as entries, COALESCE(SUM(hours), 0) as hours, COUNT(DISTINCT user_id) as people, MAX(date) as last_date')
+            ->first();
+
+        $recent = $upworkProfile->workHours()
+            ->with('user:id,name')
+            ->orderByDesc('date')
+            ->orderByDesc('id')
+            ->limit(20)
+            ->get(['id', 'user_id', 'date', 'hours'])
+            ->map(fn ($row) => [
+                'id' => $row->id,
+                'date' => $row->date instanceof \Carbon\Carbon
+                    ? $row->date->toDateString()
+                    : substr((string) $row->date, 0, 10),
+                'hours' => round((float) $row->hours, 2),
+                'user_name' => $row->user?->name,
+            ]);
+
         return Inertia::render('UpworkProfiles/Show', [
-            'profile' => $upworkProfile->load('workHours'),
+            'profile' => [
+                'id' => $upworkProfile->id,
+                'name' => $upworkProfile->name,
+                'email' => $upworkProfile->email,
+                'description' => $upworkProfile->description,
+                'is_active' => (bool) $upworkProfile->is_active,
+            ],
+            'stats' => [
+                'entries' => (int) ($totals->entries ?? 0),
+                'hours' => round((float) ($totals->hours ?? 0), 2),
+                'people' => (int) ($totals->people ?? 0),
+                'last_date' => $totals->last_date
+                    ? substr((string) $totals->last_date, 0, 10)
+                    : null,
+            ],
+            'recent' => $recent,
         ]);
     }
 

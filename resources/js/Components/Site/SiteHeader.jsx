@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from '@inertiajs/react';
 import SiteLogo from './SiteLogo';
 import ThemeToggle from './ThemeToggle';
@@ -61,18 +61,59 @@ function Nav({ url, label, className }) {
         : <a href={href} className={className}>{label}</a>;
 }
 
-// A top-level nav entry: a plain link, or a hover dropdown when it has children.
+// A top-level nav entry: a plain link, or a dropdown when it has children.
 function HeaderItem({ item }) {
     if (!item.children) {
         return <Nav url={item.url} label={item.label} className="text-sm font-medium text-[var(--muted)] transition hover:text-[var(--brand)]" />;
     }
+    return <HeaderDropdown item={item} />;
+}
+
+// A dropdown parent. The panel opens on hover (mouse), on focus-within (keyboard
+// Tab), AND on an explicit click/tap of the caret — the last is what makes it
+// reachable on a touchscreen ≥1024px, where there is no hover and the hamburger
+// is hidden. Escape and an outside click close it. When the parent also carries
+// its own `url` (e.g. Solutions → /solutions) the label is a real link and only
+// the caret toggles the panel, so the overview page is reachable too.
+const CARET = <path d="M6 9l6 6 6-6" />;
+
+function HeaderDropdown({ item }) {
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef(null);
+    const menuId = useId();
+    const hasUrl = item.url && safeHref(item.url) !== undefined;
+
+    useEffect(() => {
+        if (!open) return undefined;
+        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        const onDocClick = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+        document.addEventListener('keydown', onKey);
+        document.addEventListener('mousedown', onDocClick);
+        return () => {
+            document.removeEventListener('keydown', onKey);
+            document.removeEventListener('mousedown', onDocClick);
+        };
+    }, [open]);
+
+    const caretBtnCls = 'inline-flex items-center rounded p-0.5 text-[var(--muted)] transition hover:text-[var(--brand)]';
+    const caretSvg = <svg className={`h-4 w-4 opacity-60 transition group-hover:rotate-180 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">{CARET}</svg>;
+
     return (
-        <div className="group relative">
-            <button type="button" className="inline-flex items-center gap-1 text-sm font-medium text-[var(--muted)] transition hover:text-[var(--brand)]">
-                {item.label}
-                <svg className="h-4 w-4 opacity-60 transition group-hover:rotate-180" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg>
-            </button>
-            <div className="invisible absolute left-1/2 top-full z-50 -translate-x-1/2 pt-3 opacity-0 transition group-hover:visible group-hover:opacity-100">
+        <div ref={wrapRef} className="group relative" onMouseLeave={() => setOpen(false)}>
+            {hasUrl ? (
+                <span className="inline-flex items-center gap-1">
+                    <Nav url={item.url} label={item.label} className="text-sm font-medium text-[var(--muted)] transition hover:text-[var(--brand)]" />
+                    <button type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="true" aria-expanded={open} aria-controls={menuId} aria-label={`${item.label} menu`} className={caretBtnCls}>
+                        {caretSvg}
+                    </button>
+                </span>
+            ) : (
+                <button type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="true" aria-expanded={open} aria-controls={menuId} className="inline-flex items-center gap-1 text-sm font-medium text-[var(--muted)] transition hover:text-[var(--brand)]">
+                    {item.label}
+                    {caretSvg}
+                </button>
+            )}
+            <div id={menuId} className={`absolute left-1/2 top-full z-50 -translate-x-1/2 pt-3 transition group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 ${open ? 'visible opacity-100' : 'invisible opacity-0'}`}>
                 <div className="min-w-[230px] rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2 shadow-xl shadow-black/[0.04]">
                     {item.children.map((c, i) => (
                         <Nav key={i} url={c.url} label={c.label} className="block rounded-xl px-3 py-2 text-sm font-medium text-[var(--muted)] transition hover:bg-[var(--paper)] hover:text-[var(--brand)]" />
@@ -119,7 +160,9 @@ export default function SiteHeader({ nav = [], brand, isAuthed, mode = 'light', 
                             <div key={i}>
                                 {item.children ? (
                                     <>
-                                        <div className="px-1 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-[var(--subtle)]">{item.label}</div>
+                                        {item.url
+                                            ? <Nav url={item.url} label={item.label} className="block px-1 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-[var(--subtle)] transition hover:text-[var(--brand)]" />
+                                            : <div className="px-1 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-[var(--subtle)]">{item.label}</div>}
                                         {item.children.map((c, j) => <Nav key={j} url={c.url} label={c.label} className="block rounded-lg px-1 py-2 text-sm font-medium text-[var(--muted)]" />)}
                                     </>
                                 ) : (
@@ -128,7 +171,7 @@ export default function SiteHeader({ nav = [], brand, isAuthed, mode = 'light', 
                             </div>
                         ))}
                         <div className="mt-3 flex flex-col gap-2 border-t border-[var(--line)] pt-4">
-                            {!isAuthed && <Link href="/login" className="px-1 text-sm font-semibold text-[var(--muted)]">Sign in</Link>}
+                            {!isAuthed && <Link href="/login" className="px-1 py-2.5 text-sm font-semibold text-[var(--muted)]">Sign in</Link>}
                             <Nav url={cta.url} label={cta.label} className="btn-primary rounded-full px-5 py-2.5 text-center text-sm font-semibold" />
                         </div>
                     </div>

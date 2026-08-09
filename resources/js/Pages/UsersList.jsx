@@ -402,6 +402,7 @@ export default function UsersList({
 
     const removeDesignation = (designation) => {
         if (preview) return;
+        if (!window.confirm(`Remove the "${designation.name}" designation? Anyone currently assigned to it keeps their own designation.`)) return;
         router.delete(route('users.designations.destroy', designation.id), {
             data: { return_to: currentListUrl() },
             preserveScroll: true,

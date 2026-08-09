@@ -1103,7 +1103,7 @@ function IndividualSettings({ category, users, flagKey, defaultValues, editor })
                     return (
                         <div key={user.id} className="space-y-2 py-3">
                             <div className="flex items-center gap-3">
-                                <Toggle checked={enabled} onChange={setEnabled} disabled={isExempt} />
+                                <Toggle checked={enabled} onChange={setEnabled} disabled={isExempt} aria-label={user.name} />
                                 <span className="flex-1 text-sm text-muted">{user.name}</span>
                                 {isExempt && (
                                     <Badge

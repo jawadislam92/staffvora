@@ -71,7 +71,14 @@ window.addEventListener('vite:preloadError', () => {
 });
 
 createInertiaApp({
-    title: (title) => title ? `${title} - ${brandName}` : brandName,
+    // Idempotent: the marketing CMS `seo_title` already contains the brand (e.g.
+    // "Features — Staffvora", or "Staffvora — …" on the home page), so appending
+    // the brand again doubled it. A page that already names the brand is left
+    // alone; a bare title (the blog, and app pages) still gets the suffix.
+    title: (title) => {
+        if (!title) return brandName;
+        return title.includes(brandName) ? title : `${title} - ${brandName}`;
+    },
     resolve: (name) => resolvePageComponent(`./Pages/${name}.tsx`, import.meta.glob('./Pages/**/*.tsx'))
         .catch(() => resolvePageComponent(`./Pages/${name}.jsx`, import.meta.glob('./Pages/**/*.jsx'))),
     setup({ el, App, props }) {

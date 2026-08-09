@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Children, cloneElement, isValidElement, useId, useState } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { ArrowLeft, Camera, Check, ShieldCheck, UserRound, Users } from 'lucide-react';
 import Avatar from '@/Components/Avatar';
@@ -95,12 +95,12 @@ export default function UserForm({
                                 Choose photo
                                 <input type="file" accept="image/*" onChange={handleAvatar} className="hidden" />
                             </label>
-                            {form.errors.avatar && <p className="text-xs font-medium text-rose-600">{form.errors.avatar}</p>}
+                            {form.errors.avatar && <p role="alert" className="text-xs font-medium text-danger">{form.errors.avatar}</p>}
                         </div>
                     </div>
 
                     <div className="grid gap-5 md:grid-cols-2">
-                        <Field label="Full name" error={form.errors.name}>
+                        <Field label="Full name" required error={form.errors.name}>
                             <input
                                 value={form.data.name}
                                 onChange={(event) => form.setData('name', event.target.value)}
@@ -108,7 +108,7 @@ export default function UserForm({
                                 required
                             />
                         </Field>
-                        <Field label="Email address" error={form.errors.email}>
+                        <Field label="Email address" required error={form.errors.email}>
                             <input
                                 type="email"
                                 value={form.data.email}
@@ -119,6 +119,7 @@ export default function UserForm({
                         </Field>
                         <Field
                             label={editing ? 'New password' : 'Password'}
+                            required={!editing}
                             hint={editing ? 'Leave blank to keep the current password, or use at least 12 characters.' : 'Use at least 12 characters.'}
                             error={form.errors.password}
                         >
@@ -315,7 +316,7 @@ export default function UserForm({
                                 </div>
                             ))}
                         </div>
-                        {form.errors.permissions && <p className="px-5 pb-4 text-sm font-medium text-rose-600">{form.errors.permissions}</p>}
+                        {form.errors.permissions && <p role="alert" className="px-5 pb-4 text-sm font-medium text-danger">{form.errors.permissions}</p>}
                     </section>
 
                     <section className="rounded-lg border border-line bg-surface shadow-sm">
@@ -338,7 +339,7 @@ export default function UserForm({
                             </span>
                         </label>
                         {form.errors.include_in_slack_reports && (
-                            <p className="px-5 pb-4 text-sm font-medium text-rose-600">{form.errors.include_in_slack_reports}</p>
+                            <p role="alert" className="px-5 pb-4 text-sm font-medium text-danger">{form.errors.include_in_slack_reports}</p>
                         )}
                     </section>
 
@@ -376,7 +377,7 @@ export default function UserForm({
                 <button
                     type="submit"
                     disabled={form.processing}
-                    className="rounded-lg bg-accent px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-lg bg-accent px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                     {form.processing ? 'Saving...' : editing ? 'Save changes' : 'Create user'}
                 </button>
@@ -385,13 +386,40 @@ export default function UserForm({
     );
 }
 
-function Field({ label, hint = null, error = null, children }) {
+function Field({ label, hint = null, error = null, required = false, children }) {
+    const reactId = useId();
+    const errorId = `${reactId}-error`;
+    const hintId = `${reactId}-hint`;
+    const hasError = Boolean(error);
+    const showHint = !hasError && hint;
+
+    const describedBy =
+        [hasError ? errorId : null, showHint ? hintId : null].filter(Boolean).join(' ') || undefined;
+
+    // Wire the control to its error/hint text so screen readers announce the
+    // failure and can navigate to the offending field (audit W1).
+    let control = children;
+    const onlyChild = Children.count(children) === 1 ? Children.only(children) : null;
+    if (isValidElement(onlyChild)) {
+        const existing = onlyChild.props['aria-describedby'];
+        control = cloneElement(onlyChild, {
+            'aria-invalid': hasError ? true : onlyChild.props['aria-invalid'],
+            'aria-describedby': [existing, describedBy].filter(Boolean).join(' ') || undefined,
+        });
+    }
+
     return (
         <label className="block">
-            <span className="mb-1.5 block text-sm font-semibold text-body">{label}</span>
-            {children}
-            {hint && <span className="mt-1 block text-xs text-subtle">{hint}</span>}
-            {error && <span className="mt-1 block text-xs font-medium text-rose-600">{error}</span>}
+            <span className="mb-1.5 block text-sm font-semibold text-body">
+                {label}
+                {required && <span className="text-danger ml-0.5" aria-hidden="true">*</span>}
+            </span>
+            {control}
+            {hasError ? (
+                <span id={errorId} role="alert" className="mt-1 block text-xs font-medium text-danger">{error}</span>
+            ) : (
+                showHint && <span id={hintId} className="mt-1 block text-xs text-subtle">{hint}</span>
+            )}
         </label>
     );
 }

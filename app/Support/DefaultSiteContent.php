@@ -137,7 +137,7 @@ class DefaultSiteContent
                     self::b('hero', ['variant' => 'center', 'eyebrow' => 'Solutions', 'heading' => 'Built for the way', 'heading_highlight' => 'your team works.', 'subhead' => 'Whether you bill by the hour or run a 24/7 floor, Staffvora adapts to how your team operates.', ...$startCtas]),
                     self::b('feature_grid', ['heading' => 'Who it\'s for', 'subhead' => 'Pick the setup that matches your team.', 'features' => [
                         ['icon' => 'users', 'title' => 'Agencies & consultancies', 'text' => 'Track billable hours per client and turn them into clean, automatic reports.'],
-                        ['icon' => 'globe', 'title' => 'BPOs & call centers', 'text' => 'Shift attendance, live activity and workforce analytics across large, distributed floors.'],
+                        ['icon' => 'globe', 'title' => 'BPOs & call centres', 'text' => 'Shift attendance, live activity and workforce analytics across large, distributed floors.'],
                         ['icon' => 'desktop', 'title' => 'Software houses', 'text' => 'Per-project time, app & URL insight, and humane productivity metrics for dev teams.'],
                         ['icon' => 'clock', 'title' => 'Remote & hybrid teams', 'text' => 'Keep distributed teams aligned without anyone feeling watched.'],
                         ['icon' => 'chart', 'title' => 'Freelancers', 'text' => 'Simple, honest time tracking and client-ready timesheets.'],
@@ -163,10 +163,10 @@ class DefaultSiteContent
             ],
 
             'solutions/bpos' => [
-                'title' => 'For BPOs & call centers', 'sort' => 5, 'show_in_nav' => false,
-                'meta_description' => 'Workforce visibility for BPOs and call centers — shift attendance, live activity and analytics.',
+                'title' => 'For BPOs & call centres', 'sort' => 5, 'show_in_nav' => false,
+                'meta_description' => 'Workforce visibility for BPOs and call centres — shift attendance, live activity and analytics.',
                 'blocks' => [
-                    self::b('hero', ['variant' => 'center', 'eyebrow' => 'For BPOs & call centers', 'heading' => 'Workforce visibility', 'heading_highlight' => 'across every shift.', 'subhead' => 'Attendance, live activity and analytics for large, distributed floors — without the surveillance backlash.', ...$startCtas]),
+                    self::b('hero', ['variant' => 'center', 'eyebrow' => 'For BPOs & call centres', 'heading' => 'Workforce visibility', 'heading_highlight' => 'across every shift.', 'subhead' => 'Attendance, live activity and analytics for large, distributed floors — without the surveillance backlash.', ...$startCtas]),
                     self::b('feature_split', ['eyebrow' => 'Built for scale', 'heading' => 'See the whole floor at a glance', 'text' => 'Three-shift support around the clock, late-coming detection and a monthly attendance grid your HR team will love.', 'bullets' => ['Three-shift coverage', 'Late-coming detection', 'Monthly attendance grid', 'Live "currently tracking" view'], 'image_side' => 'left']),
                     self::b('feature_grid', ['heading' => 'What teams rely on', 'features' => [
                         ['icon' => 'calendar', 'title' => 'Shift attendance', 'text' => 'Clock in/out with breaks and overnight shifts that land on the right day.'],

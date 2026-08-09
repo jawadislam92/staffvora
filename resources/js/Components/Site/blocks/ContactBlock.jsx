@@ -1,13 +1,35 @@
 import { useForm } from '@inertiajs/react';
+import { useId } from 'react';
 
 const inputCls = 'w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-[var(--text)] placeholder-[var(--subtle)] focus:border-[var(--a)] focus:ring-1 focus:ring-[var(--a)]';
 
-function Field({ label, value, onChange, type = 'text', error, placeholder }) {
+// A labelled field. The label is programmatically associated (htmlFor/id), the
+// control carries a name + autocomplete so password managers and mobile browsers
+// can autofill, and any error is both announced (role=alert) and associated
+// (aria-describedby + aria-invalid).
+function Field({ label, value, onChange, type = 'text', error, placeholder, name, autoComplete, required = false, textarea = false, rows = 4 }) {
+    const id = useId();
+    const errorId = `${id}-error`;
+    const control = {
+        id,
+        name,
+        value,
+        required,
+        'aria-invalid': error ? 'true' : undefined,
+        'aria-describedby': error ? errorId : undefined,
+        onChange: (e) => onChange(e.target.value),
+        placeholder,
+        className: inputCls,
+    };
     return (
         <div>
-            <label className="mb-1 block text-sm font-medium text-[var(--brand)]">{label}</label>
-            <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={inputCls} />
-            {error && <p className="mt-1 text-xs text-rose-500">{error}</p>}
+            <label htmlFor={id} className="mb-1 block text-sm font-medium text-[var(--brand)]">
+                {label}{required && <span className="text-[var(--a)]" aria-hidden="true"> *</span>}
+            </label>
+            {textarea
+                ? <textarea {...control} rows={rows} />
+                : <input {...control} type={type} autoComplete={autoComplete} />}
+            {error && <p id={errorId} role="alert" className="mt-1 text-xs text-danger">{error}</p>}
         </div>
     );
 }
@@ -45,18 +67,14 @@ export default function ContactBlock({ data, brand }) {
                         <form onSubmit={submit} className="space-y-4">
                             <h3 className="text-xl font-bold text-[var(--brand)]">{data.form_heading || 'Send us a message'}</h3>
                             <div className="grid gap-4 sm:grid-cols-2">
-                                <Field label="Name" value={form.data.name} onChange={(v) => form.setData('name', v)} error={form.errors.name} />
-                                <Field label="Company" value={form.data.company} onChange={(v) => form.setData('company', v)} />
+                                <Field label="Name" name="name" autoComplete="name" required value={form.data.name} onChange={(v) => form.setData('name', v)} error={form.errors.name} />
+                                <Field label="Company" name="organization" autoComplete="organization" value={form.data.company} onChange={(v) => form.setData('company', v)} error={form.errors.company} />
                             </div>
                             <div className="grid gap-4 sm:grid-cols-2">
-                                <Field label="Work email" type="email" value={form.data.email} onChange={(v) => form.setData('email', v)} error={form.errors.email} />
-                                <Field label="Team size" value={form.data.team_size} onChange={(v) => form.setData('team_size', v)} placeholder="e.g. 10–50" />
+                                <Field label="Work email" name="email" type="email" autoComplete="email" required value={form.data.email} onChange={(v) => form.setData('email', v)} error={form.errors.email} />
+                                <Field label="Team size" name="team_size" value={form.data.team_size} onChange={(v) => form.setData('team_size', v)} error={form.errors.team_size} placeholder="e.g. 10–50" />
                             </div>
-                            <div>
-                                <label className="mb-1 block text-sm font-medium text-[var(--brand)]">Message</label>
-                                <textarea value={form.data.message} onChange={(e) => form.setData('message', e.target.value)} rows={4} className={inputCls} />
-                                {form.errors.message && <p className="mt-1 text-xs text-rose-500">{form.errors.message}</p>}
-                            </div>
+                            <Field label="Message" name="message" textarea required value={form.data.message} onChange={(v) => form.setData('message', v)} error={form.errors.message} />
                             <button type="submit" disabled={form.processing} className="btn-primary rounded-full px-6 py-3 text-sm font-semibold disabled:opacity-60">{form.processing ? 'Sending…' : 'Send message'}</button>
                         </form>
                     )}

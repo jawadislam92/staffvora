@@ -123,7 +123,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
         <AuthenticatedLayout user={auth.user}>
             <Head title={'Edit ' + clientTerm} />
             
-            <PageShell width="max-w-5xl">
+            <PageShell>
                 <PageHeader
                     eyebrow={clientTermPlural}
                     title={'Edit ' + clientTerm}
@@ -139,10 +139,10 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                 <div>
                                     <label className="block text-sm font-semibold text-muted mb-3">
                                         {clientTerm} Name
-                                        <span className="text-red-500 ml-1">*</span>
+                                        <span className="text-danger ml-1">*</span>
                                     </label>
                                     <div className="relative">
-                                        <div className="absolute left-0 inset-y-0 flex items-center pl-3 pointer-events-none text-purple-500">
+                                        <div className="absolute left-0 inset-y-0 flex items-center pl-3 pointer-events-none text-accent">
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                                             </svg>
@@ -152,12 +152,12 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                             placeholder={'Enter ' + clientTerm.toLowerCase() + ' name...'}
                                             value={form.data.name} 
                                             onChange={e => form.setData('name', e.target.value)} 
-                                            className="w-full pl-10 pr-4 py-3 border-2 border-line rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-body placeholder-slate-400"
+                                            className="w-full pl-10 pr-4 py-3 border-2 border-line rounded-lg focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all text-body placeholder-subtle"
                                             required 
                                         />
                                     </div>
                                     {form.errors.name && (
-                                        <div className="flex items-center mt-2 text-red-600 text-sm">
+                                        <div className="flex items-center mt-2 text-danger text-sm">
                                             <svg className="w-4 h-4 mr-1.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                                             </svg>
@@ -170,10 +170,10 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                 <div ref={workTypeRef} className="relative">
                                     <label className="block text-sm font-semibold text-muted mb-3">
                                         Work Type
-                                        <span className="text-red-500 ml-1">*</span>
+                                        <span className="text-danger ml-1">*</span>
                                     </label>
                                     <div className="relative">
-                                        <div className="absolute left-0 inset-y-0 flex items-center pl-3 pointer-events-none text-pink-500">
+                                        <div className="absolute left-0 inset-y-0 flex items-center pl-3 pointer-events-none text-accent">
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                             </svg>
@@ -187,7 +187,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                             setShowWorkTypeDropdown(true);
                                         }}
                                         onFocus={() => setShowWorkTypeDropdown(true)}
-                                        className="w-full pl-10 pr-4 py-3 border-2 border-line rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-body placeholder-slate-400"
+                                        className="w-full pl-10 pr-4 py-3 border-2 border-line rounded-lg focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all text-body placeholder-subtle"
                                         required
                                     />
                                     </div>
@@ -202,7 +202,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                                 >
                                                     <span className="font-medium">{value}</span>
                                                     {form.data.work_type === key && (
-                                                        <svg className="w-5 h-5 text-purple-500" fill="currentColor" viewBox="0 0 20 20">
+                                                        <svg className="w-5 h-5 text-accent" fill="currentColor" viewBox="0 0 20 20">
                                                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                                         </svg>
                                                     )}
@@ -211,7 +211,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                         </div>
                                     )}
                                     {form.errors.work_type && (
-                                        <div className="flex items-center mt-2 text-red-600 text-sm">
+                                        <div className="flex items-center mt-2 text-danger text-sm">
                                             <svg className="w-4 h-4 mr-1.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                                             </svg>
@@ -225,7 +225,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                     <div>
                                         <label className="block text-sm font-semibold text-muted mb-3">
                                             {profileTermPlural}
-                                            {isProfileRequired && <span className="text-red-500">*</span>}
+                                            {isProfileRequired && <span className="text-danger">*</span>}
                                             {!isProfileRequired && <span className="text-subtle font-normal ml-2">(optional)</span>}
                                         </label>
 
@@ -246,7 +246,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleProfileRemove(profile.id)}
-                                                                className="p-1 text-red-500 hover:text-red-600 transition-colors"
+                                                                className="p-1 text-danger hover:text-danger transition-colors"
                                                                 title="Remove profile"
                                                             >
                                                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -270,7 +270,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                                     setShowProfileDropdown(true);
                                                 }}
                                                 onFocus={() => setShowProfileDropdown(true)}
-                                                className="w-full px-4 py-3 border-2 border-line rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-body placeholder-slate-400"
+                                                className="w-full px-4 py-3 border-2 border-line rounded-lg focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all text-body placeholder-subtle"
                                             />
                                             {showProfileDropdown && filteredProfiles.length > 0 && (
                                                 <div ref={profileDropdownRef} className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-line bg-surface shadow-xl">
@@ -296,7 +296,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                                     </div>
                                                 </div>
                                             )}
-                                            {form.errors.upwork_profile_ids && <div className="text-red-500 text-sm mt-2">{form.errors.upwork_profile_ids}</div>}
+                                            {form.errors.upwork_profile_ids && <div className="text-danger text-sm mt-2">{form.errors.upwork_profile_ids}</div>}
                                         </div>
                                         
                                         <p className="text-subtle text-sm mt-2">
@@ -319,16 +319,16 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                         onChange={(newTags) => form.setData('tags', newTags)}
                                         placeholder={'Add tags to categorize this ' + clientTerm.toLowerCase() + '...'}
                                     />
-                                    {form.errors.tags && <div className="text-red-500 text-sm mt-2">{form.errors.tags}</div>}
+                                    {form.errors.tags && <div className="text-danger text-sm mt-2">{form.errors.tags}</div>}
                                     <p className="text-subtle text-sm mt-2">
                                         Add tags to help organize and search {clientTermPlural.toLowerCase()} (e.g., "Enterprise", "Startup", "Local")
                                     </p>
                                 </div>
 
                                 {/* Current Client Display */}
-                                <div className="rounded-lg border border-blue-200 bg-surface-2 p-5">
+                                <div className="rounded-lg border border-line bg-surface-2 p-5">
                                     <div className="flex items-center mb-4">
-                                        <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-xl flex items-center justify-center text-body font-bold text-xl mr-4 shadow-lg">
+                                        <div className="w-12 h-12 bg-accent rounded-xl flex items-center justify-center text-body font-bold text-xl mr-4 shadow-lg">
                                             {client.name.charAt(0).toUpperCase()}
                                         </div>
                                         <div>
@@ -340,7 +340,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                         <div>
                                             <p className="text-sm text-subtle mb-1">Current Work Type:</p>
-                                            <span className="inline-flex px-3 py-1 text-xs font-semibold bg-surface-2 text-accent rounded-md border border-blue-200">
+                                            <span className="inline-flex px-3 py-1 text-xs font-semibold bg-surface-2 text-accent rounded-md border border-line">
                                                 {workTypes?.[client.work_type] || client.work_type || 'Not set'}
                                             </span>
                                         </div>
@@ -351,12 +351,12 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                                 {/* Show multiple profiles if they exist */}
                                                 {client.upwork_profiles && client.upwork_profiles.length > 0 ? (
                                                     client.upwork_profiles.map((profile) => (
-                                                        <span key={profile.id} className="inline-flex px-3 py-1 text-xs font-semibold bg-surface-2 text-purple-800 rounded-md border border-purple-200">
+                                                        <span key={profile.id} className="inline-flex px-3 py-1 text-xs font-semibold bg-surface-2 text-accent rounded-md border border-line">
                                                             {profile.name}
                                                         </span>
                                                     ))
                                                 ) : client.upwork_profile ? (
-                                                    <span className="inline-flex px-3 py-1 text-xs font-semibold bg-surface-2 text-purple-800 rounded-md border border-purple-200">
+                                                    <span className="inline-flex px-3 py-1 text-xs font-semibold bg-surface-2 text-accent rounded-md border border-line">
                                                         {client.upwork_profile.name}
                                                     </span>
                                                 ) : (
@@ -375,7 +375,7 @@ export default function ClientEdit({ auth, client, upworkProfiles, workTypes, re
                                                 {client.tags.map((tag, index) => (
                                                     <span
                                                         key={index}
-                                                        className="inline-flex px-2 py-1 text-xs font-semibold bg-surface-2 text-emerald-800 rounded-md border border-emerald-300"
+                                                        className="inline-flex px-2 py-1 text-xs font-semibold bg-surface-2 text-success rounded-md border border-line"
                                                     >
                                                         {tag}
                                                     </span>

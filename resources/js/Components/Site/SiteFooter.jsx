@@ -9,7 +9,7 @@ import { safeHref } from './SiteHeader';
 const isAppRoute = (url) => ['/login', '/register', '/dashboard'].includes(url);
 const FLink = ({ url, label }) => {
     const href = safeHref(url);
-    const className = 'text-sm text-[var(--muted)] transition hover:text-[var(--brand)]';
+    const className = 'inline-flex min-h-[40px] items-center text-sm text-[var(--muted)] transition hover:text-[var(--brand)]';
 
     return href !== undefined && isAppRoute(href)
         ? <Link href={href} className={className}>{label}</Link>
@@ -39,7 +39,7 @@ export default function SiteFooter({ nav = [], brand }) {
                         <div className="mt-6 flex gap-2.5">
                             {SOCIALS.filter((s) => safeHref(socials[s.key]) !== undefined).map((s) => (
                                 <a key={s.key} href={safeHref(socials[s.key])} target="_blank" rel="noreferrer" aria-label={s.label}
-                                    className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--surface)] text-[var(--muted)] ring-1 ring-[var(--line)] transition hover:text-[var(--brand)]">
+                                    className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--surface)] text-[var(--muted)] ring-1 ring-[var(--line)] transition hover:text-[var(--brand)]">
                                     <svg className="h-[18px] w-[18px]" fill="currentColor" viewBox="0 0 24 24"><path d={s.d} /></svg>
                                 </a>
                             ))}
@@ -49,7 +49,7 @@ export default function SiteFooter({ nav = [], brand }) {
                     {nav.map((col, i) => (
                         <div key={i}>
                             <h4 className="text-sm font-semibold text-[var(--brand)]">{col.title}</h4>
-                            <ul className="mt-4 space-y-3">
+                            <ul className="mt-4 space-y-1">
                                 {(col.links || []).map((l, j) => <li key={j}><FLink url={l.url} label={l.label} /></li>)}
                             </ul>
                         </div>

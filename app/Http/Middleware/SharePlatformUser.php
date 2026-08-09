@@ -16,7 +16,20 @@ class SharePlatformUser
 {
     public function handle(Request $request, Closure $next)
     {
-        Inertia::share('platformUser', fn () => auth('platform')->user()?->only(['id', 'name', 'email', 'role']));
+        $operator = auth('platform')->user();
+
+        Inertia::share('platformUser', fn () => $operator?->only(['id', 'name', 'email', 'role']));
+
+        // The customer `web` user is always null on the platform host, so
+        // HandleInertiaRequests resolves `theme` to the workspace default (light)
+        // and every navigation would clobber the operator's choice back to light.
+        // Re-resolve it from the tt_theme cookie (set client-side by the operator
+        // theme switcher) so dark and black persist. Runs inside the platform
+        // group, AFTER the global share, so this value wins for operator pages.
+        if ($operator) {
+            $cookie = $request->cookie('tt_theme');
+            Inertia::share('theme', in_array($cookie, ['light', 'dark', 'black'], true) ? $cookie : 'light');
+        }
 
         return $next($request);
     }

@@ -73,6 +73,12 @@ class SiteContentSeeder extends Seeder
         'invoices your clients trust',
         'without the surveillance backlash',
         'Questions, a demo, or help getting set up',
+        // Launch-copy corrections (audit W5/W7/W8): these exact strings are the
+        // superseded wording, so a page still carrying one is safe to rewrite
+        // with the fixed copy on a normal (non-force) re-seed.
+        'Two editions',
+        'of Growth on every new workspace',
+        'Never ask anyone to disable their security software',
     ];
 
     public function run(): void
@@ -248,7 +254,7 @@ class SiteContentSeeder extends Seeder
                 $this->transparencySplit('right'),
                 $this->b('stats', ['stats' => [
                     ['value' => '2 seats', 'label' => 'free, with no card'],
-                    ['value' => '14 days', 'label' => 'of Growth on every new workspace'],
+                    ['value' => '14 days', 'label' => 'of the Growth plan on every new workspace'],
                     ['value' => '1 click', 'label' => 'to export any report as CSV'],
                 ]]),
                 $this->b('steps', ['heading' => 'Up and running the same afternoon', 'steps' => [
@@ -642,7 +648,7 @@ class SiteContentSeeder extends Seeder
                 $this->b('stats', ['stats' => [
                     ['value' => 'Remote-first', 'label' => 'how we work'],
                     ['value' => 'Pakistan', 'label' => 'where we are based'],
-                    ['value' => 'Two editions', 'label' => 'general and agency, one product'],
+                    ['value' => 'One product', 'label' => 'with an optional agency toolkit'],
                 ]]),
                 $this->cta('Come and try it', 'Start free and tell us what we got wrong — we will read it.'),
             ],
@@ -745,7 +751,7 @@ class SiteContentSeeder extends Seeder
                     .'<li>Sign in with the same Staffvora account and enter your workspace address when the app asks for a server.</li></ol>'
                     .'<h2>Honest status</h2>'
                     .'<p>The desktop tracker is a <strong>preview build</strong>. It is not yet code-signed on Windows or notarised on macOS, so your operating system or antivirus may warn you when you install it. We are working through signing before broad rollout.</p>'
-                    .'<p><strong>Never ask anyone to disable their security software to install Staffvora.</strong> If a machine blocks the installer, write to <a href="mailto:'.self::SUPPORT_EMAIL.'">'.self::SUPPORT_EMAIL.'</a> and we will help properly.</p>'
+                    .'<p><strong>We will never ask anyone to disable their security software to install Staffvora.</strong> If a machine blocks the installer, write to <a href="mailto:'.self::SUPPORT_EMAIL.'">'.self::SUPPORT_EMAIL.'</a> and we will help properly.</p>'
                     .'<h2>What the desktop app does on the machine</h2>'
                     .'<p>While tracking is running, and only when your workspace has enabled them, it captures periodic screenshots, keyboard and mouse counts, the active application, the window title and the website domain. It queues data while the connection is down and syncs when it returns. It stops when the person clocks out, and idle time pauses it automatically.</p>'
                     .'<h2>Requirements</h2>'

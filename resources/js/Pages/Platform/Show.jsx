@@ -283,7 +283,9 @@ export default function PlatformShow({ organization, subscription, plans, planIm
                     <KpiCard accent={4} icon={<CalendarClock size={18} />} label="Trial ends" value={org.trial_ends_at || '—'} />
                 </div>
 
-                <Tabs tabs={tabs} value={tab} onChange={setTab} />
+                <div className="max-w-full overflow-x-auto">
+                    <Tabs tabs={tabs} value={tab} onChange={setTab} />
+                </div>
 
                 {tab === 'overview' && (
                     <div className="space-y-4">

@@ -73,24 +73,25 @@ const ICONS = {
     staff: <Icon path={<><circle cx="9" cy="8" r="3.2" /><path d="M3 20a6 6 0 0 1 12 0" /><path d="M16 5.2a3.2 3.2 0 0 1 0 6M18 20a6 6 0 0 0-3-5.2" /></>} />,
 };
 
-export default function Dashboard({ stats, preview = false }) {
-    const data = preview ? DEV_SAMPLE : { stats: stats || {}, mrrTrend: [], plans: [], tenants: [] };
+export default function Dashboard({ stats, growthTrend, plans, tenants, preview = false }) {
+    const data = preview
+        ? { ...DEV_SAMPLE, growthTrend: DEV_SAMPLE.mrrTrend }
+        : { stats: stats || {}, growthTrend: growthTrend || [], plans: plans || [], tenants: tenants || [] };
     const s = data.stats || {};
     const d = s.deltas || {};
 
-    const hasTrend = Array.isArray(data.mrrTrend) && data.mrrTrend.length > 1;
+    const hasTrend = Array.isArray(data.growthTrend) && data.growthTrend.length > 1;
 
     // Cross-page color contract: orgs/people → slot 3 (blue), money → slot 5
     // (pink), activity/good-standing rate → slot 2 (green), trials/pending →
     // slot 4 (amber). Tenants and staff are both people/org counts, so both
-    // honestly wear slot 3. The MRR spark reuses the mrrTrend series the page
-    // already carries (preview-only today) — no new server work.
-    const mrrSpark = hasTrend ? data.mrrTrend.map((p) => p.value) : null;
+    // honestly wear slot 3. MRR carries no historical series yet, so it shows
+    // no sparkline rather than a fabricated one.
     const tiles = [
         { key: 'tenants', accent: 3, label: 'Tenants', value: fmtNum(s.tenants ?? 0), hint: 'Total organizations', icon: ICONS.tenants, delta: d.tenants },
-        { key: 'mrr', accent: 5, label: 'MRR', value: s.mrr != null ? fmtMoney(s.mrr) : '—', hint: 'Monthly recurring revenue', icon: ICONS.mrr, delta: d.mrr, spark: mrrSpark },
-        { key: 'active', accent: 2, label: 'Active tenants', value: s.active != null ? fmtNum(s.active) : '—', hint: 'Paying, in good standing', icon: ICONS.active, delta: d.active },
-        { key: 'trials', accent: 4, label: 'Trials', value: s.trials != null ? fmtNum(s.trials) : '—', hint: 'In trial period', icon: ICONS.trials, delta: d.trials },
+        { key: 'mrr', accent: 5, label: 'MRR', value: fmtMoney(s.mrr ?? 0), hint: 'Est. monthly run-rate (active tenants)', icon: ICONS.mrr, delta: d.mrr },
+        { key: 'active', accent: 2, label: 'Active tenants', value: fmtNum(s.active ?? 0), hint: 'Paying, in good standing', icon: ICONS.active, delta: d.active },
+        { key: 'trials', accent: 4, label: 'Trials', value: fmtNum(s.trials ?? 0), hint: 'In trial period', icon: ICONS.trials, delta: d.trials },
         { key: 'staff', accent: 3, label: 'Platform staff', value: fmtNum(s.staff ?? 0), hint: 'Operator portal seats', icon: ICONS.staff },
     ];
     const hasPlans = Array.isArray(data.plans) && data.plans.length > 0;
@@ -126,10 +127,10 @@ export default function Dashboard({ stats, preview = false }) {
                     {hasTrend && (
                         <Card
                             className="lg:col-span-2"
-                            title="Revenue trend"
-                            description="Monthly recurring revenue, last 6 months"
+                            title="Tenant growth"
+                            description="New organizations per month, last 6 months"
                         >
-                            <TrendChart data={data.mrrTrend} unit="" height={240} gradientFill glow />
+                            <TrendChart data={data.growthTrend} unit="" height={240} gradientFill glow />
                         </Card>
                     )}
                     {hasPlans && (

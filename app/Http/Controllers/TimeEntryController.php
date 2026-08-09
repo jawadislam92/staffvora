@@ -33,6 +33,24 @@ class TimeEntryController extends Controller
     private const MAX_RANGE_DAYS = 92;
 
     /**
+     * A tracking session only counts as "live" for the dashboard's running
+     * hours while it is genuinely heartbeating. Past this many minutes without
+     * a heartbeat it is treated as abandoned — the same threshold the
+     * monitoring:close-stale-sessions command uses to auto-close it — so an
+     * app that died six days ago stops contributing "time since midnight" to
+     * today's total forever (audit customer-app B2).
+     */
+    private const LIVE_SESSION_STALE_MINUTES = 15;
+
+    /**
+     * Hard ceiling (in seconds) on how much a single open session may add to a
+     * day's tracked hours. 18h mirrors the forgotten-clock-out cap used by
+     * EmployeeAttendanceController so the dashboard, attendance and timeline
+     * agree on the same ongoing session.
+     */
+    private const LIVE_SESSION_MAX_SECONDS = 18 * 3600;
+
+    /**
      * How many users' punches are hydrated at a time in teamActivity().
      *
      * calculateTimeStats() walks ONE user's ordered in/out/break sequence for
@@ -372,9 +390,26 @@ class TimeEntryController extends Controller
      */
     private function loadLiveSessions(array $userIds): Collection
     {
+        // Only sessions that are still heartbeating count as live. Without this
+        // bound an abandoned session (status still 'active', app long dead)
+        // contributes "however long today has been so far" to every day's total
+        // forever — the phantom-hours bug. A session with no heartbeat since
+        // this cutoff is one monitoring:close-stale-sessions would already
+        // close, so it must not read as live here either.
+        $liveCutoff = now()->subMinutes(self::LIVE_SESSION_STALE_MINUTES);
+
         return \App\Models\TrackingSession::query()
             ->whereIn('user_id', $userIds)
             ->where('status', \App\Models\TrackingSession::STATUS_ACTIVE)
+            ->where(function ($query) use ($liveCutoff) {
+                $query->where('last_heartbeat_at', '>=', $liveCutoff)
+                    ->orWhere(function ($q) use ($liveCutoff) {
+                        // Brand-new sessions set last_heartbeat_at = started_at,
+                        // but tolerate a null by falling back to started_at.
+                        $q->whereNull('last_heartbeat_at')
+                            ->where('started_at', '>=', $liveCutoff);
+                    });
+            })
             ->get(['user_id', 'started_at', 'total_seconds'])
             ->keyBy('user_id');
     }
@@ -489,9 +524,15 @@ class TimeEntryController extends Controller
         // pre-midnight hours don't inflate today. Capped at 16h.
         $live = $liveByUser?->get($employee->id);
         if ($live) {
+            // Count only the part of the session that lands on today's date, so
+            // a session that crossed midnight adds this-day time only (never the
+            // pre-midnight hours), and cap it at 18h so a still-open session can
+            // never inflate the day beyond the forgotten-clock-out ceiling used
+            // everywhere else. Stale/abandoned sessions are already excluded in
+            // loadLiveSessions(), so anything reaching here is genuinely live.
             $sinceMidnight = (int) $now->copy()->startOfDay()->diffInSeconds($now);
             $liveWall = (int) $live->started_at->diffInSeconds($now);
-            $liveSeconds = min(16 * 3600, $liveWall, max(0, $sinceMidnight));
+            $liveSeconds = min(self::LIVE_SESSION_MAX_SECONDS, $liveWall, max(0, $sinceMidnight));
             $stats['tracked_hours'] = round($stats['tracked_hours'] + $liveSeconds / 3600, 2);
         }
         $stats['is_live'] = (bool) $live;

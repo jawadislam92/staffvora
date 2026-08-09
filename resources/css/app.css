@@ -17,13 +17,16 @@
    only thing this can't catch (it must stay white on coloured buttons) — those
    are converted to `text-body` per-page. */
 :root, [data-theme="dark"] {
+    color-scheme: dark;
     --bg: #070b18;
     --surface: #0e1628;
     --surface-2: #131f38;
     --border: #1e2b45;
     --text: #eef2fb;
     --text-muted: #aeb9d0;
-    --text-subtle: #6b7793;
+    /* AA-compliant subtle text: 5.64:1 on surface, 5.13:1 on surface-2,
+       still clearly less prominent than --text-muted (9.15:1). */
+    --text-subtle: #8790a6;
     --accent: var(--brand-accent, #2563EB);
 
     /* Data-viz categorical slots (1 violet, 2 green, 3 blue, 4 amber, 5 pink).
@@ -46,13 +49,16 @@
     --c-gray-900: 17 24 39; --c-gray-950: 3 7 18;
 }
 [data-theme="light"] {
+    color-scheme: light;
     --bg: #f6f8fb;
     --surface: #ffffff;
     --surface-2: #f1f5f9;
     --border: #e2e8f0;
     --text: #0f172a;
     --text-muted: #475569;
-    --text-subtle: #94a3b8;
+    /* AA-compliant subtle text: 5.10:1 on white surface, 4.65:1 on surface-2,
+       still clearly less prominent than --text-muted (7.58:1). */
+    --text-subtle: #616f85;
     --accent: var(--brand-accent, #f97316);
 
     /* Data-viz categorical slots (1 violet, 2 green, 3 blue, 4 amber, 5 pink).
@@ -76,13 +82,16 @@
     --c-gray-900: 255 255 255; --c-gray-950: 243 244 246;
 }
 [data-theme="black"] {
+    color-scheme: dark;
     --bg: #000000;
     --surface: #0a0a0a;
     --surface-2: #161616;
     --border: #262626;
     --text: #fafafa;
     --text-muted: #a3a3a3;
-    --text-subtle: #6b6b6b;
+    /* AA-compliant subtle text: 5.73:1 on surface, 5.24:1 on surface-2,
+       still clearly less prominent than --text-muted (7.85:1). */
+    --text-subtle: #8a8a8a;
     --accent: var(--brand-accent, #f97316);
 
     /* Data-viz categorical slots — shares the dark set (validated against

@@ -8,7 +8,7 @@ import {
     SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import PlatformLayout from '@/Layouts/PlatformLayout';
+import PlatformLayout, { PlatformPageHeader } from '@/Layouts/PlatformLayout';
 import { SCHEMAS, BLOCK_TYPES, newBlock, blankItem } from '@/Components/Site/blockSchemas';
 
 const input = 'w-full rounded-lg border-line bg-surface-2 text-body text-sm focus:border-accent focus:ring-accent';
@@ -36,18 +36,19 @@ function ImageField({ value, onChange }) {
                 {busy ? 'Uploading…' : value ? 'Replace' : 'Upload'}
                 <input type="file" accept="image/*" className="hidden" onChange={(e) => upload(e.target.files?.[0])} />
             </label>
-            {value && <button type="button" onClick={() => onChange(null)} className="text-xs text-rose-400 hover:text-rose-300">Remove</button>}
+            {value && <button type="button" onClick={() => onChange(null)} className="text-xs font-medium text-danger hover:underline">Remove</button>}
         </div>
     );
 }
 
 /* ---------- one field, driven by schema ---------- */
 function Field({ field, value, onChange }) {
-    if (field.type === 'text') return <input className={input} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
-    if (field.type === 'textarea') return <textarea rows={2} className={input} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
-    if (field.type === 'html') return <textarea rows={6} className={`${input} font-mono text-xs`} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
+    const al = field.label || undefined;
+    if (field.type === 'text') return <input aria-label={al} className={input} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
+    if (field.type === 'textarea') return <textarea aria-label={al} rows={2} className={input} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
+    if (field.type === 'html') return <textarea aria-label={al} rows={6} className={`${input} font-mono text-xs`} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
     if (field.type === 'select') return (
-        <select className={input} value={value || field.options[0]} onChange={(e) => onChange(e.target.value)}>
+        <select aria-label={al} className={input} value={value || field.options[0]} onChange={(e) => onChange(e.target.value)}>
             {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
     );
@@ -56,8 +57,8 @@ function Field({ field, value, onChange }) {
         const v = value || {};
         return (
             <div className="grid grid-cols-2 gap-2">
-                <input className={input} placeholder="Button text" value={v.label || ''} onChange={(e) => onChange({ ...v, label: e.target.value })} />
-                <input className={input} placeholder="/register or https://…" value={v.url || ''} onChange={(e) => onChange({ ...v, url: e.target.value })} />
+                <input aria-label="Button text" className={input} placeholder="Button text" value={v.label || ''} onChange={(e) => onChange({ ...v, label: e.target.value })} />
+                <input aria-label="Button URL" className={input} placeholder="/register or https://…" value={v.url || ''} onChange={(e) => onChange({ ...v, url: e.target.value })} />
             </div>
         );
     }
@@ -67,8 +68,8 @@ function Field({ field, value, onChange }) {
             <div className="space-y-2">
                 {arr.map((s, i) => (
                     <div key={i} className="flex gap-2">
-                        <input className={input} value={s} onChange={(e) => { const n = [...arr]; n[i] = e.target.value; onChange(n); }} />
-                        <button type="button" onClick={() => onChange(arr.filter((_, j) => j !== i))} className="px-2 text-rose-400">✕</button>
+                        <input aria-label={`Item ${i + 1}`} className={input} value={s} onChange={(e) => { const n = [...arr]; n[i] = e.target.value; onChange(n); }} />
+                        <button type="button" aria-label="Remove item" onClick={() => onChange(arr.filter((_, j) => j !== i))} className="px-2 text-danger hover:underline">✕</button>
                     </div>
                 ))}
                 <button type="button" onClick={() => onChange([...arr, ''])} className="text-xs font-semibold text-accent">+ Add</button>
@@ -83,7 +84,7 @@ function Field({ field, value, onChange }) {
                     <div key={i} className="rounded-lg border border-line bg-surface p-3">
                         <div className="mb-2 flex items-center justify-between">
                             <span className="text-[11px] font-semibold uppercase text-subtle">Item {i + 1}</span>
-                            <button type="button" onClick={() => onChange(arr.filter((_, j) => j !== i))} className="text-xs text-rose-400">Remove</button>
+                            <button type="button" onClick={() => onChange(arr.filter((_, j) => j !== i))} className="text-xs font-medium text-danger hover:underline">Remove</button>
                         </div>
                         <div className="space-y-2">
                             {field.item.map((sub) => (
@@ -118,21 +119,21 @@ function BlockCard({ block, onChange, onDuplicate, onDelete }) {
                 <button type="button" onClick={() => setOpen((o) => !o)} className="flex-1 text-left text-sm font-semibold text-body">
                     {schema?.label || block.type}
                 </button>
-                <button type="button" onClick={onDuplicate} className="rounded p-1 text-subtle hover:text-body" title="Duplicate">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 012-2h10" /></svg>
+                <button type="button" onClick={onDuplicate} aria-label="Duplicate block" className="rounded p-1 text-subtle hover:text-body" title="Duplicate">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 012-2h10" /></svg>
                 </button>
-                <button type="button" onClick={onDelete} className="rounded p-1 text-subtle hover:text-rose-400" title="Delete">
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+                <button type="button" onClick={onDelete} aria-label="Delete block" className="rounded p-1 text-subtle hover:text-danger" title="Delete">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
                 </button>
-                <button type="button" onClick={() => setOpen((o) => !o)} className="rounded p-1 text-subtle hover:text-body">
-                    <svg className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg>
+                <button type="button" onClick={() => setOpen((o) => !o)} aria-label={open ? 'Collapse block' : 'Expand block'} aria-expanded={open} className="rounded p-1 text-subtle hover:text-body">
+                    <svg className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
                 </button>
             </div>
             {open && schema && (
                 <div className="space-y-3 border-t border-line p-4">
                     <div>
                         <span className={label}>Section background</span>
-                        <select className={input} value={block.data?._bg || ''} onChange={(e) => onChange({ ...block.data, _bg: e.target.value })}>
+                        <select aria-label="Section background" className={input} value={block.data?._bg || ''} onChange={(e) => onChange({ ...block.data, _bg: e.target.value })}>
                             <option value="">Default (none)</option>
                             <option value="muted">Muted</option>
                             <option value="soft">Soft tint</option>
@@ -178,9 +179,12 @@ export default function Editor({ page }) {
     const liveUrl = page.slug === 'home' ? '/' : `/${page.slug}`;
 
     return (
-        <PlatformLayout title={`Edit ${page.title}`} header={<h2 className="text-xl font-semibold text-white">Edit page — {page.title}</h2>}>
+        <PlatformLayout
+            title={`Edit ${page.title}`}
+            header={<PlatformPageHeader title={`Edit page — ${page.title}`} description="Arrange content blocks, then save a draft or publish to the live site." />}
+        >
             <Head title={`Edit ${page.title}`} />
-            <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
+            <div className="w-full max-w-4xl">
                 <div className="mb-4 flex items-center justify-between">
                     <Link href={route('platform.site.index')} className="text-sm text-muted hover:text-body">← All pages</Link>
                     <div className="flex items-center gap-2">
@@ -191,10 +195,10 @@ export default function Editor({ page }) {
                 </div>
 
                 <div className="mb-5 space-y-3 rounded-xl border border-line bg-surface p-4">
-                    <div><span className={label}>Page title (internal)</span><input className={input} value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+                    <div><label className={label} htmlFor="page-title">Page title (internal)</label><input id="page-title" className={input} value={title} onChange={(e) => setTitle(e.target.value)} /></div>
                     <div className="grid gap-3 sm:grid-cols-2">
-                        <div><span className={label}>SEO title</span><input className={input} value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} /></div>
-                        <div><span className={label}>SEO description</span><input className={input} value={metaDescription} onChange={(e) => setMetaDescription(e.target.value)} /></div>
+                        <div><label className={label} htmlFor="page-meta-title">SEO title</label><input id="page-meta-title" className={input} value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} /></div>
+                        <div><label className={label} htmlFor="page-meta-description">SEO description</label><input id="page-meta-description" className={input} value={metaDescription} onChange={(e) => setMetaDescription(e.target.value)} /></div>
                     </div>
                 </div>
 

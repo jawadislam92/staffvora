@@ -112,6 +112,14 @@ Route::domain(config('platform.host'))->group(function () {
     Route::post('/invite/{token}', [PlatformInvitationController::class, 'accept'])
         ->middleware('throttle:20,1')->name('platform.invite.accept');
 
+    // Operator password recovery (guest, platform guard) — throttled + neutral
+    // response, its own reset-token table so an operator and a customer who
+    // share an email can never overwrite each other's tokens.
+    Route::get('/forgot-password', [PlatformAuthController::class, 'showForgotPassword'])->name('platform.password.request');
+    Route::post('/forgot-password', [PlatformAuthController::class, 'sendResetLink'])->middleware('throttle:6,1')->name('platform.password.email');
+    Route::get('/reset-password/{token}', [PlatformAuthController::class, 'showResetPassword'])->middleware('throttle:20,1')->name('platform.password.reset');
+    Route::post('/reset-password', [PlatformAuthController::class, 'resetPassword'])->middleware('throttle:6,1')->name('platform.password.update');
+
     Route::middleware(['auth:platform', SharePlatformUser::class])->group(function () {
         Route::post('/logout', [PlatformAuthController::class, 'logout'])->name('platform.logout');
         Route::get('/', fn () => redirect()->route('platform.dashboard'));
