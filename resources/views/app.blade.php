@@ -19,13 +19,33 @@
         <link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png">
         <link rel="manifest" href="/manifest.json">
 
-        <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
-        <!-- Hanken Grotesk — marketing site brand face (scoped to .site-root) -->
+        {{--
+            Fonts load ASYNCHRONOUSLY and must stay that way.
+
+            A plain <link rel="stylesheet"> to a third-party font host is
+            RENDER-BLOCKING: the browser paints nothing until that request
+            finishes. `display=swap` does not help — it governs the font FILE,
+            not the stylesheet. So if fonts.googleapis.com is slow or filtered
+            on the visitor's network, the whole app hangs on a blank screen
+            until the browser gives up (observed: a ~1 minute sign-in from
+            Pakistan while the server itself answered in 40ms).
+
+            `rel=preload as=style` + onload swap keeps the fetch non-blocking;
+            the <noscript> keeps it working without JS. The page renders
+            immediately in the system stack and upgrades when the font lands.
+        --}}
+        <link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+        <link rel="preload" as="style" href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap"
+              onload="this.onload=null;this.rel='stylesheet'">
+        {{-- Hanken Grotesk — marketing site brand face (scoped to .site-root) --}}
+        <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap"
+              onload="this.onload=null;this.rel='stylesheet'">
+        <noscript>
+            <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet">
+            <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+        </noscript>
 
         <!-- Scripts -->
         @routes
