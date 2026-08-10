@@ -173,8 +173,7 @@ export default function TrendChart({
       <svg
         viewBox={`0 0 ${W} ${H}`}
         width="100%"
-        height="auto"
-        className="block"
+        className="block h-auto"
         role="img"
         aria-label={`Worked hours trend, peak ${fmt(peak.value)} on ${peak.label}`}
       >

@@ -272,7 +272,7 @@ export default function PlatformShow({ organization, subscription, plans, planIm
                         icon={<CircleDollarSign size={18} />}
                         label="You charge"
                         value={org.effective_price_cents != null ? money(org.effective_price_cents, org.currency) : '—'}
-                        sub={org.discount_percent ? `${org.discount_percent}% off list` : 'per month'}
+                        sub={org.discount_percent ? `per seat / mo · ${org.discount_percent}% off list` : 'per seat / month'}
                     />
                     <KpiCard
                         accent={3}
@@ -312,8 +312,11 @@ export default function PlatformShow({ organization, subscription, plans, planIm
                                             label="You charge"
                                             value={org.effective_price_cents != null ? (
                                                 <span>
-                                                    {money(org.effective_price_cents, org.currency)}/mo
+                                                    {money(org.effective_price_cents, org.currency)}/seat/mo
                                                     {org.discount_percent ? <span className="text-success"> · {org.discount_percent}% off</span> : null}
+                                                    {org.users > 0 && (
+                                                        <span className="text-muted"> · × {org.users} {org.users === 1 ? 'seat' : 'seats'} = {money(org.effective_price_cents * org.users, org.currency)}/mo</span>
+                                                    )}
                                                 </span>
                                             ) : '—'}
                                         />

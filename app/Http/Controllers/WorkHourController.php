@@ -1473,6 +1473,47 @@ class WorkHourController extends Controller
             });
         }
 
+        // HEADLINE KPIs + TREND — computed over the ENTIRE filtered set, not the
+        // page of rows the table happens to show. The strip used to be summed on
+        // the client from the current page, so "Total hours / People / Clients"
+        // changed as you paged and never matched the report they titled (a
+        // 90-day report could headline a single day's 57h next to an 811-page
+        // pager). Filters and the server-side search above are already applied to
+        // $query, so these inherit them.
+        //
+        // One bounded aggregate row (SUM + two COUNT DISTINCTs) over work_hours
+        // ALONE — no join, no model hydration — so it stays cheap on a tenant
+        // with hundreds of thousands of entries. Cloned BEFORE the grouping
+        // branch below mutates $query with its LEFT JOINs.
+        $summaryRow = (clone $query)
+            ->toBase()
+            ->selectRaw('COALESCE(SUM(work_hours.hours), 0) as total_hours, COUNT(DISTINCT work_hours.user_id) as people, COUNT(DISTINCT work_hours.client_id) as clients')
+            ->first();
+
+        $summary = [
+            'total_hours' => round((float) ($summaryRow->total_hours ?? 0), 2),
+            'people' => (int) ($summaryRow->people ?? 0),
+            'clients' => (int) ($summaryRow->clients ?? 0),
+        ];
+
+        // Daily trend across the whole filtered window — one row per calendar day
+        // (bounded by the window length), so the chart shows the real shape of
+        // the period instead of the few days that landed on the current page.
+        // substr(...,1,10) buckets a driver that persists "Y-m-d 00:00:00"
+        // (SQLite) and one that stores a bare DATE (MySQL prod) to the same key,
+        // so the grouping never depends on how the column is stored.
+        $trend = (clone $query)
+            ->toBase()
+            ->selectRaw('substr(work_hours.date, 1, 10) as day, SUM(work_hours.hours) as hours')
+            ->groupBy('day')
+            ->orderBy('day')
+            ->get()
+            ->map(fn ($r) => [
+                'day' => (string) $r->day,
+                'hours' => round((float) $r->hours, 2),
+            ])
+            ->all();
+
         // Merge identical entries (same person · date · client · work category ·
         // billable · work type · tracker · source) into one totalled row, so a
         // client logged three times in a day shows once with the summed hours
@@ -1581,6 +1622,12 @@ class WorkHourController extends Controller
         return Inertia::render('WorkHoursReport', [
             'search' => $search,
             'workHours' => $workHours,
+            // Whole-filtered-set headline figures + daily trend, so the KPI strip
+            // and chart are stable across pages (see the block above). Entries is
+            // read on the client from the paginator's own `total` (the grouped
+            // row count), which is already whole-set.
+            'summary' => $summary,
+            'trend' => $trend,
             'users' => $users,
             'filter' => $filter,
             'startDate' => $startDate,

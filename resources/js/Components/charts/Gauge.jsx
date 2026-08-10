@@ -132,8 +132,7 @@ export default function Gauge({
       <svg
         viewBox={`0 0 ${W} ${H}`}
         width={size}
-        height="auto"
-        className="block max-w-full"
+        className="block max-w-full h-auto"
         role="img"
         aria-label={`${label || "Gauge"}: ${Math.round(pct)}${unit}`}
       >

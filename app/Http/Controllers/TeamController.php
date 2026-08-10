@@ -97,7 +97,13 @@ class TeamController extends Controller
                 $seconds = 0;
             } else {
                 $fullyInside = $startTs >= $dayStartTs && $endTs <= $dayEndTs;
-                $seconds = $fullyInside ? (int) $row->total_seconds : min($overlap, 16 * 3600);
+                // 18h, the SHARED forgotten-clock-out ceiling used by every other
+                // surface (TimeEntryController::LIVE_SESSION_MAX_SECONDS for the
+                // dashboard summary, CalculatesTimeStats for attendance, and
+                // WorkHourController::OPEN_PUNCH_CAP_HOURS for the diary). This
+                // used to cap at 16h, so a genuinely-live long session read one
+                // figure here and another on the dashboard; they now agree.
+                $seconds = $fullyInside ? (int) $row->total_seconds : min($overlap, 18 * 3600);
             }
 
             $sessionsByUser[$row->user_id][] = [
@@ -163,8 +169,8 @@ class TeamController extends Controller
         // Seconds a session contributes to THIS day (already applied above, once
         // per session): a session fully inside the day keeps its idle-adjusted
         // total (accurate); one that straddles midnight (or is still running) is
-        // attributed by its wall-clock overlap with the day, capped at 16h to
-        // bound a forgotten session.
+        // attributed by its wall-clock overlap with the day, capped at 18h — the
+        // same forgotten-session ceiling every other surface uses.
         $rows = $users->map(function (User $u) use ($sessionsByUser, $topAppByUser, $activeNow, $manualHoursByUser) {
             $userSessions = $sessionsByUser[$u->id] ?? [];
             $live = $activeNow[$u->id] ?? null;

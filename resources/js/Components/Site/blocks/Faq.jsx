@@ -1,16 +1,18 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 function Item({ q, a }) {
     const [open, setOpen] = useState(false);
+    const panelId = useId();
+    const btnId = useId();
     return (
         <div className="px-6">
-            <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-4 py-5 text-left">
+            <button type="button" id={btnId} aria-expanded={open} aria-controls={panelId} onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-4 py-5 text-left">
                 <span className="text-base font-bold text-[var(--brand)]">{q}</span>
                 <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition ${open ? 'text-white' : 'text-[var(--a)]'}`} style={open ? { background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' } : { background: 'color-mix(in srgb, var(--a) 14%, var(--surface))' }}>
                     <svg className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg>
                 </span>
             </button>
-            <div className={`grid transition-all duration-200 ${open ? 'grid-rows-[1fr] pb-5 opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+            <div id={panelId} role="region" aria-labelledby={btnId} className={`grid transition-all duration-200 ${open ? 'grid-rows-[1fr] pb-5 opacity-100' : 'grid-rows-[0fr] opacity-0 invisible'}`}>
                 <div className="overflow-hidden"><p className="pr-10 text-[15px] leading-relaxed text-[var(--muted)]">{a}</p></div>
             </div>
         </div>

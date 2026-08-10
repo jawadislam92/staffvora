@@ -114,6 +114,15 @@
 }
 html { background-color: var(--bg); color: var(--text); }
 
+/* Global keyboard-focus ring. One branded, token-driven indicator so focus
+   contrast is controlled in every app theme (light / dark / black) and on the
+   marketing site's own accent — instead of leaving it to the UA default, whose
+   contrast is uncontrolled against the violet gradient and dark canvas. Uses
+   :focus-visible, so it appears for keyboard/AT users but not on mouse click;
+   components that opt out with `focus-visible:outline-none` keep their own ring. */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.site-root :focus-visible { outline-color: var(--a); }
+
 /* Marketing site type — public pages render in Hanken Grotesk (the brand face),
    scoped to `.site-root` so the dark app keeps its own font. Palette vars
    (--a, --brand, --paper, …) are set inline on .site-root from config/brand.php

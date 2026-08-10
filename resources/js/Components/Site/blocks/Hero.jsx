@@ -21,7 +21,7 @@ function HeroCollage() {
             <div className="absolute -bottom-8 left-0 h-56 w-56 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, var(--pink), transparent 70%)', opacity: 0.75 }} />
 
             {/* main dashboard card */}
-            <div className="absolute left-1/2 top-1/2 w-[88%] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 shadow-2xl ring-1 ring-black/5 backdrop-blur">
+            <div className="absolute left-1/2 top-1/2 w-[88%] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 shadow-2xl ring-1 ring-[var(--line)] backdrop-blur">
                 <div className="mb-4 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <span className="h-7 w-7 rounded-lg" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' }} />
@@ -50,7 +50,7 @@ function HeroCollage() {
             </div>
 
             {/* floating "focus" card */}
-            <div className="absolute -left-2 top-4 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3.5 shadow-xl ring-1 ring-black/5">
+            <div className="absolute -left-2 top-4 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3.5 shadow-xl ring-1 ring-[var(--line)]">
                 <div className="flex items-center gap-2.5">
                     <span className="flex h-9 w-9 items-center justify-center rounded-full text-white" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' }}>
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg>
@@ -63,7 +63,7 @@ function HeroCollage() {
             </div>
 
             {/* floating "clock-in" card */}
-            <div className="absolute -right-3 bottom-6 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3.5 shadow-xl ring-1 ring-black/5">
+            <div className="absolute -right-3 bottom-6 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3.5 shadow-xl ring-1 ring-[var(--line)]">
                 <div className="flex items-center gap-2.5">
                     <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-[var(--mint)] text-[var(--a)] font-bold">A
                         <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-[var(--surface)] bg-emerald-500" />
@@ -102,7 +102,7 @@ export default function Hero({ data }) {
                             <span className="block" style={{ background: 'linear-gradient(120deg,var(--g-from),var(--g-to))', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>{data.heading_highlight}</span>
                         )}
                     </h1>
-                    {data.subhead && <p className={`mt-6 text-lg leading-relaxed text-[var(--muted)] ${center ? 'mx-auto max-w-2xl' : 'mx-auto max-w-xl lg:mx-0'}`}>{data.subhead}</p>}
+                    {data.subhead && <p className={`mt-6 text-lg leading-relaxed text-[var(--muted)] ${center ? 'mx-auto max-w-3xl' : 'mx-auto max-w-xl lg:mx-0'}`}>{data.subhead}</p>}
                     {(data.primary_cta?.label || data.secondary_cta?.label) && (
                         <div className={`mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row ${center ? '' : 'lg:justify-start'}`}>
                             <Cta cta={data.primary_cta} variant="primary" />

@@ -139,7 +139,7 @@ export default function PlatformIndex({ organizations, pagination, filters, plan
                             <Input
                                 id="tenant-search"
                                 type="search"
-                                placeholder="Name or slug…"
+                                placeholder="Name, slug or owner email…"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                             />
@@ -159,7 +159,7 @@ export default function PlatformIndex({ organizations, pagination, filters, plan
                                 {(data.planOptions || []).map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
                             </Select>
                         </Field>
-                        <div className="text-sm text-subtle sm:ml-auto sm:pb-2.5">
+                        <div className="text-sm text-muted sm:ml-auto sm:pb-2.5">
                             {page.total} matching
                         </div>
                     </div>
@@ -178,8 +178,8 @@ export default function PlatformIndex({ organizations, pagination, filters, plan
                                     <Th>Organization</Th>
                                     <Th>Status</Th>
                                     <Th>Plan</Th>
-                                    <Th>Users</Th>
-                                    <Th>Trial ends</Th>
+                                    <Th className="text-right">Users</Th>
+                                    <Th className="text-right">Trial ends</Th>
                                     <Th className="text-right">Actions</Th>
                                 </Tr>
                             </THead>
@@ -193,7 +193,7 @@ export default function PlatformIndex({ organizations, pagination, filters, plan
                                             >
                                                 {org.name}
                                             </Link>
-                                            <div className="text-xs text-subtle">{org.slug}</div>
+                                            <div className="text-xs text-muted">{org.slug}</div>
                                         </Td>
                                         <Td>
                                             <Badge tone={STATUS_TONE[org.status] || 'neutral'} dot>
@@ -205,11 +205,11 @@ export default function PlatformIndex({ organizations, pagination, filters, plan
                                                 ? <Badge tone="accent">{org.plan}</Badge>
                                                 : <span className="text-subtle">—</span>}
                                         </Td>
-                                        <Td className="tabular-nums">
+                                        <Td className="text-right tabular-nums">
                                             {org.users}
-                                            <span className="text-subtle"> / {org.seat_limit ?? '∞'}</span>
+                                            <span className="text-muted"> / {org.seat_limit ?? '∞'}</span>
                                         </Td>
-                                        <Td className="text-muted tabular-nums">{org.trial_ends_at || '—'}</Td>
+                                        <Td className="text-right text-muted tabular-nums">{org.trial_ends_at || '—'}</Td>
                                         <Td>
                                             <div className="flex items-center justify-end gap-2">
                                                 <Button size="sm" variant="ghost" onClick={() => askImpersonate(org)}>View as</Button>

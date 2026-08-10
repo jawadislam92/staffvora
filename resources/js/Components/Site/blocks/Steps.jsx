@@ -13,7 +13,7 @@ export default function Steps({ data }) {
                                 {s.n || i + 1}
                             </div>
                             <h3 className="mt-5 text-lg font-bold text-[var(--brand)]">{s.title}</h3>
-                            <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-[var(--muted)]">{s.text}</p>
+                            <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-[var(--muted)]">{s.text}</p>
                         </div>
                     ))}
                 </div>

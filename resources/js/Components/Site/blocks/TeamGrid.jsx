@@ -10,7 +10,7 @@ export default function TeamGrid({ data }) {
                     {members.map((m, i) => (
                         <div key={i} className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 text-center shadow-sm">
                             {m.avatar_url
-                                ? <img src={m.avatar_url} alt="" className="mx-auto h-20 w-20 rounded-full object-cover" />
+                                ? <img src={m.avatar_url} alt={m.name || ''} className="mx-auto h-20 w-20 rounded-full object-cover" />
                                 : <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full text-2xl font-bold text-white" style={{ background: 'linear-gradient(135deg,var(--g-from),var(--g-to))' }}>{(m.name || '?').charAt(0)}</span>}
                             <div className="mt-4 text-base font-bold text-[var(--brand)]">{m.name}</div>
                             <div className="text-sm text-[var(--subtle)]">{m.role}</div>

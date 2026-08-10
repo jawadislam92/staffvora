@@ -79,7 +79,15 @@ class PlatformController extends Controller
 
         if (! empty($filters['q'])) {
             $term = '%'.str_replace(['%', '_'], ['\%', '\_'], trim($filters['q'])).'%';
-            $query->where(fn ($q) => $q->where('name', 'like', $term)->orWhere('slug', 'like', $term));
+            $query->where(fn ($q) => $q
+                ->where('name', 'like', $term)
+                ->orWhere('slug', 'like', $term)
+                // A support ticket usually carries the customer's EMAIL, not the
+                // workspace name — so let the operator find a tenant by its
+                // owner's email too. A subquery on the indexed users.email column
+                // (not a join) keeps the cross-tenant list bounded and bypasses
+                // the org scope the same way the plan filter's subquery does.
+                ->orWhereIn('owner_user_id', DB::table('users')->where('email', 'like', $term)->select('id')));
         }
 
         if (! empty($filters['status'])) {
@@ -110,7 +118,12 @@ class PlatformController extends Controller
                 'plan' => $o->subscription?->plan?->name,
                 'users' => $o->users_count,
                 'seat_limit' => $o->seatLimit(),
-                'trial_ends_at' => $o->trial_ends_at?->toDateString(),
+                // Only surface a trial-end date for tenants that ARE trialing.
+                // Every org carries a `trial_ends_at` (it is set at signup and
+                // never cleared on conversion), so emitting it unconditionally
+                // made Active tenants read as expiring trials — three false
+                // positives out of three in the audit.
+                'trial_ends_at' => $o->status === Organization::STATUS_TRIAL ? $o->trial_ends_at?->toDateString() : null,
                 'created_at' => $o->created_at?->toDateString(),
             ])->values(),
             'pagination' => [

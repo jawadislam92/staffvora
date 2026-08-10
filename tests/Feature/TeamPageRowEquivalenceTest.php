@@ -32,7 +32,7 @@ use Tests\TestCase;
  *   fully inside the day   -> the session's own idle-adjusted total_seconds
  *   straddling the day     -> wall-clock overlap with the day
  *   still running          -> the same rules, measured to "now"
- *   spanning the whole day -> the 16h cap
+ *   spanning the whole day -> the 18h cap
  *   under a minute         -> dropped as a deletion crumb, unless still active
  *
  * plus the client-name join, the 'Unassigned' fallback, the manual-hours
@@ -172,13 +172,21 @@ class TeamPageRowEquivalenceTest extends TestCase
         $this->assertSame(['name' => 'Owl Corp', 'total_seconds' => 7200], $row['top_client']);
     }
 
-    public function test_a_session_spanning_the_whole_day_is_capped_at_sixteen_hours(): void
+    public function test_a_session_spanning_the_whole_day_is_capped_at_eighteen_hours(): void
     {
         $worker = $this->worker('Forgot Fred');
 
         // Started the previous evening and not stopped until the following
-        // morning: the overlap is the entire day, which the cap bounds at 16h so
-        // one forgotten session cannot report 24 hours of work.
+        // morning: the overlap is the entire day, which the cap bounds so one
+        // forgotten session cannot report 24 hours of work.
+        //
+        // 18h — NOT 16h — is the shared forgotten-clock-out convention: the
+        // dashboard summary (TimeEntryController::LIVE_SESSION_MAX_SECONDS),
+        // the attendance state machine (CalculatesTimeStats) and the work-diary
+        // gap-fill (WorkHourController::OPEN_PUNCH_CAP_HOURS) all cap an open
+        // span at 18h. The team page used to disagree at 16h, so a genuinely
+        // long live session read one number here and another on the dashboard;
+        // this pins them to the same ceiling.
         $this->trackSession($worker, [
             'started_at' => $this->at('2026-06-14 20:00:00'),
             'stopped_at' => $this->at('2026-06-16 06:00:00'),
@@ -188,7 +196,7 @@ class TeamPageRowEquivalenceTest extends TestCase
 
         $row = $this->row($this->teamPage()['rows'], $worker);
 
-        $this->assertSame(16 * 3600, $row['tracked_seconds']);
+        $this->assertSame(18 * 3600, $row['tracked_seconds']);
         $this->assertSame('Unassigned', $row['top_client']['name']);
     }
 

@@ -4,6 +4,7 @@ import { TraditionalPagination } from '../Components/Pagination';
 import { Head, Link, router } from '@inertiajs/react';
 import { CalendarDays, Clock, ListChecks, Users, Briefcase } from 'lucide-react';
 import { timeFormat } from '../helpers';
+import { formatHours } from '@/Utils/timeUtils';
 import { exportRowsToCsv } from '@/Utils/csvExport';
 import SearchableMultiSelect from '../Components/Filters/SearchableMultiSelect';
 import {
@@ -204,6 +205,8 @@ const DEV_SAMPLE = {
 export default function WorkHoursReport({
     auth,
     workHours,
+    summary = null,
+    trend = null,
     users = [],
     flash,
     filter = DEFAULT_DATE_FILTER,
@@ -588,16 +591,25 @@ export default function WorkHoursReport({
         );
     }) || [];
 
-    // Calculate statistics
-    const totalHours = filteredData.reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
-    const totalEntries = filteredData.length;
-    const uniqueUsers = new Set(filteredData.map(entry => entry.user?.name).filter(Boolean)).size;
-    const uniqueClientsCount = new Set(filteredData.map(entry => entry.client?.name).filter(Boolean)).size;
+    // Headline statistics — computed by the server over the WHOLE filtered set
+    // (WorkHourController::report `summary`), so they stay put as you page
+    // instead of re-summing whichever rows the current page happens to hold.
+    // Entries is the paginator's own grouped-row total, also whole-set. Preview
+    // mode has no server props, so it falls back to the local sample rows.
+    const totalHours = summary ? Number(summary.total_hours || 0) : filteredData.reduce((sum, entry) => sum + Number(entry.hours || 0), 0);
+    const totalEntries = summary ? Number(effectiveWorkHours?.total ?? filteredData.length) : filteredData.length;
+    const uniqueUsers = summary ? Number(summary.people || 0) : new Set(filteredData.map(entry => entry.user?.name).filter(Boolean)).size;
+    const uniqueClientsCount = summary ? Number(summary.clients || 0) : new Set(filteredData.map(entry => entry.client?.name).filter(Boolean)).size;
 
-    // Trend series — total hours per day across the rows currently shown. Derived
-    // straight from the report data; when nothing is derivable, TrendChart falls
+    // Trend series — total hours per day across the WHOLE filtered window, from
+    // the server (`trend`), so the chart shows the real shape of the period and
+    // not just the days that fell on the current page. Preview mode derives it
+    // from the local sample rows. When nothing is derivable, TrendChart falls
     // back to its own empty state (we never synthesize points).
     const trendSeries = useMemo(() => {
+        if (Array.isArray(trend)) {
+            return trend.map((point) => ({ label: shortDate(point.day), value: Number(point.hours) }));
+        }
         const byDate = new Map();
         filteredData.forEach((entry) => {
             const day = String(entry.date || '').slice(0, 10);
@@ -607,7 +619,7 @@ export default function WorkHoursReport({
         return Array.from(byDate.entries())
             .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
             .map(([day, hours]) => ({ label: shortDate(day), value: Number(hours.toFixed(2)) }));
-    }, [filteredData]);
+    }, [trend, filteredData]);
 
     const trendAvg = trendSeries.length > 1
         ? Number((trendSeries.reduce((s, p) => s + p.value, 0) / trendSeries.length).toFixed(1))
@@ -660,8 +672,8 @@ export default function WorkHoursReport({
                     side). Value-only: the props carry no per-KPI series, so no
                     spark is invented (the trend chart below carries the shape). */}
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                    <KpiCard accent={1} icon={<Clock size={18} />} label="Total hours" value={timeFormat(totalHours.toFixed(2))} sub="Across the rows shown" />
-                    <KpiCard accent={2} icon={<ListChecks size={18} />} label="Entries" value={totalEntries} sub="Grouped rows on this page" />
+                    <KpiCard accent={1} icon={<Clock size={18} />} label="Total hours" value={formatHours(totalHours)} sub="Across all matching entries" />
+                    <KpiCard accent={2} icon={<ListChecks size={18} />} label="Entries" value={totalEntries} sub="Grouped rows in this view" />
                     <KpiCard accent={3} icon={<Users size={18} />} label="People" value={uniqueUsers} sub="Distinct team members" />
                     <KpiCard accent={5} icon={<Briefcase size={18} />} label="Clients" value={uniqueClientsCount} sub="Distinct clients" />
                 </div>
@@ -671,7 +683,7 @@ export default function WorkHoursReport({
                     header={(
                         <CardHeader
                             title="Hours trend"
-                            description="Total hours per day across the entries shown below."
+                            description="Total hours per day across the filtered range."
                         />
                     )}
                 >
@@ -964,7 +976,7 @@ export default function WorkHoursReport({
                                             )}
                                         </Td>
                                         <Td className="text-right">
-                                            <span className="font-semibold tabular-nums text-success">{timeFormat(entry.hours)}</span>
+                                            <span className="font-semibold tabular-nums text-success">{formatHours(entry.hours)}</span>
                                             {entry.entry_count > 1 && (
                                                 <Badge tone="neutral" className="ml-1.5" title={`${entry.entry_count} entries merged into this row`}>
                                                     ×{entry.entry_count}
@@ -981,8 +993,10 @@ export default function WorkHoursReport({
                             </TBody>
                             <tfoot className="border-t border-line bg-surface-2/40">
                                 <tr>
-                                    <td colSpan="6" className="px-4 py-3 text-right font-semibold text-body">Total</td>
-                                    <td className="px-4 py-3 text-right text-base font-bold tabular-nums text-success">{timeFormat(totalHours.toFixed(2))}</td>
+                                    {/* Whole-report total (every page, not just the
+                                        rows above), matching the Total hours KPI. */}
+                                    <td colSpan="6" className="px-4 py-3 text-right font-semibold text-body">Report total</td>
+                                    <td className="px-4 py-3 text-right text-base font-bold tabular-nums text-success">{formatHours(totalHours)}</td>
                                     <td></td>
                                 </tr>
                             </tfoot>

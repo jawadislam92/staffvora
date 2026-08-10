@@ -22,12 +22,18 @@ import { RankedBars } from '@/Components/charts';
 
 const cx = (...a) => a.filter(Boolean).join(' ');
 
+// Seconds → "7h 18m" / "45m" / "3h" / "0m". This mirrors the EXACT contract of
+// the shared `formatHours` (Utils/timeUtils) that the Dashboard and the Work
+// Hours Report render through, so the same value never reads as "7h 05m" here
+// while showing "7h 18m" or "07:18" elsewhere. Team works in seconds (incl. a
+// live-ticking counter) so it floors to the whole minute rather than rounding.
 function fmtHm(seconds) {
-    const s = Math.max(0, Math.floor(seconds || 0));
+    const s = Math.max(0, Math.floor(Number(seconds) || 0));
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
     if (h === 0) return `${m}m`;
-    return `${h}h ${String(m).padStart(2, '0')}m`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
 }
 
 let DISPLAY = { timezone: 'Asia/Karachi', format: '12' };
